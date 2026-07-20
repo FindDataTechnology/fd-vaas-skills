@@ -1,0 +1,13 @@
+{
+  "name": "byted-ark-seedream-skill",
+  "version": "1.0.0",
+  "description": "豆包 Seedream AI 图像生成 Skill for Agent Plan",
+  "main": "scripts/seedream-wrapper.js",
+  "scripts": {
+    "test": "node scripts/seedream-wrapper.js help"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -19,6 +19,13 @@ Thumbs.db
 *.swp
 *.swo
 
+# Project specific
+remotion-app/
+demands/
+downloads/
+demand.md
+goal.md
+
 # Temp
 tmp/
 temp/

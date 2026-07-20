@@ -1,0 +1,26 @@
+{
+  "skill_name": "fd-vaas-video-creator",
+  "evals": [
+    {
+      "id": 1,
+      "name": "chinese-core-no-visual",
+      "prompt": "帮我把下面这段文案做成竖屏口播视频,要带逐字同步字幕,准备发抖音。画面不用找素材,纯色背景就行。文案:为什么坚持的人越来越少?不是困难变多了,而是诱惑变多了。真正的高手不是不会分心,而是学会了拒绝。",
+      "expected_output": "一个 1080x1920 竖屏 mp4:中文男/女声配音朗读文案,内嵌 TikTok 风逐字高亮字幕,字幕与语音同步,时长约 15-25 秒。同时可附带 .srt。核心链路 TTS->whisper->Remotion 渲染跑通。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "chinese-seedream-images",
+      "prompt": "用这段文案做个竖屏口播视频发抖音,要逐字字幕,画面用 AI 生成图片轮播。文案:三件事决定你十年的样子:读什么书、跟什么人、花多少时间在屏幕上。",
+      "expected_output": "1080x1920 竖屏 mp4:中文配音 + 逐字字幕 + AI 生成的图片作轮播背景(静音),字幕同步。覆盖 seedream 视觉路径与图片轮播渲染。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "english-male-voice",
+      "prompt": "Make a short vertical voiceover video with auto subtitles from this script: 'The best time to plant a tree was 20 years ago. The second best time is now.' Use a male English voice and TikTok-style subtitles.",
+      "expected_output": "1080x1920 竖屏 mp4:英文男声(en-US-Davis 或同类)配音 + 逐字高亮字幕,字幕与英文语音对齐。覆盖英文 TTS 音色推断与 whisper 英文转写。",
+      "files": []
+    }
+  ]
+}
