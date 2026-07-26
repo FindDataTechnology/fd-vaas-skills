@@ -5,27 +5,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What VAAS is
 
 VAAS is a content-creation + multi-platform distribution workspace. The goal: take a content
-demand, generate a **variable-type resource** (deck, document, screen-recording video, images),
-then **publish it automatically to different social-media accounts** — and ideally produce a
-*different* resource variant per platform/account. It is an orchestration layer over two halves:
+demand, generate a **variable-type resource** (deck, document, screen-recording video, images, or a
+Remotion-rendered voiceover video), then **publish it automatically to different social-media
+accounts** — and ideally produce a *different* resource variant per platform/account. It is an
+orchestration layer over two halves:
 
 1. **Creation skills** (this repo's `.claude/skills/` + `.agents/skills/`) — turn a demand into an asset file.
 2. **Distribution engine** — `social-auto-upload/`, a vendored upstream project that uploads assets to social platforms via browser automation.
 
-There is **no VAAS application code yet** — the workspace is a staging area wiring skills to a
-distribution CLI. When the user says "make a resource and post it", the intended flow is:
-*creation skill produces a file → `sau` CLI uploads it to one or more `account_name`s.*
+There is **no monolithic VAAS application** — the workspace wires skills to a distribution CLI. But
+the **mainline is now wired end-to-end** via the `fd-vaas-*` skills (no glue code to write by hand):
+
+```
+demand / 文案
+  → /fd-vaas-brainstorm-koubo   (optional: 选题 + 脚本大纲 planning)
+  → /fd-vaas-video-creator      (文案 → 口播视频 .mp4 + .srt;
+                                 uses byted-ark-tts + Remotion,
+                                 optionally byted-ark-seedance/seedream for visuals)
+  → /fd-vaas-publish            (mp4 → 多平台发布; delegates to `sau`)
+```
+
+When the user says "make a resource and post it", the flow is:
+*creation skill produces a file → `fd-vaas-publish` (or `sau` directly) uploads it to one or more `account_name`s.*
 
 ## Repository shape — read this first
 
-- The VAAS root is **not a git repository**. The only git repo is `social-auto-upload/`, which is a
-  **vendored clone of `dreammis/social-auto-upload`** (origin: `https://github.com/dreammis/social-auto-upload.git`).
-  Treat `social-auto-upload/` as a third-party dependency: prefer its own `social-auto-upload/CLAUDE.md`
-  and `docs/` for its internals, and avoid editing it unless the task is specifically about that project.
-- `git` commands run at the VAAS root will fail; `cd` into `social-auto-upload/` first.
+- The VAAS root **is a git repository** (remote: `github.com/FindDataOfficial/VAAS`). `social-auto-upload/`
+  is a **vendored clone of `dreammis/social-auto-upload`** (origin: `https://github.com/dreammis/social-auto-upload.git`)
+  with its own git history — treat it as a nested third-party dependency, not a submodule: prefer its own
+  `social-auto-upload/CLAUDE.md` and `docs/` for its internals, and avoid editing it unless the task is
+  specifically about that project.
 - Skills live in two places:
-  - `.claude/skills/` — project-scoped Claude Code skills: `cap`, `officecli`, and `ppt-master`
-    (a symlink to `../../.agents/skills/ppt-master`).
+  - `.claude/skills/` — project-scoped Claude Code skills: `cap`, `officecli`, `ppt-master` (a symlink to
+    `../../.agents/skills/ppt-master`), the `byted-ark-*` VolcEngine media skills (seedance / seedream / tts),
+    the `remotion-*` authoring skills (7 of them), and the `fd-vaas-*` mainline skills
+    (brainstorm-koubo, video-creator, publish).
   - `.agents/skills/ppt-master/` — the source of truth for the ppt-master skill (large SKILL.md + `workflows/`, `templates/`, `scripts/`, `references/`).
   - `social-auto-upload/skills/{douyin,kuaishou,xiaohongshu,bilibili}-upload/` — per-platform upload skills shipped by the upstream project.
 
@@ -38,11 +52,36 @@ distribution CLI. When the user says "make a resource and post it", the intended
 | `ppt-master` | SVG-deck → exported `.pptx` (multi-role pipeline: strategist → executor → QC) | `/ppt-master` skill | source at `.agents/skills/ppt-master/` |
 | `officecli` | `.docx` / `.xlsx` / `.pptx` create+edit (L1 read → L2 DOM → L3 XML) | `/officecli` skill | `~/.local/bin/officecli` (global) |
 | `cap` | screen recording / screenshots → `.mp4`/`.gif` + shareable upload link | `/cap` skill | `~/.local/bin/cap` (global) |
+| `byted-ark-tts` | text → natural speech audio + word-level timestamps (seed-tts-2.0) | `/byted-ark-tts-skill` skill | scripts at `.claude/skills/byted-ark-tts-skill/` |
+| `byted-ark-seedance` | text/image → AI video (豆包 Seedance, VolcEngine Agent Plan) | `/byted-ark-seedance-skill` skill | scripts at `.claude/skills/byted-ark-seedance-skill/` |
+| `byted-ark-seedream` | text → AI image (豆包 Seedream, VolcEngine Agent Plan) | `/byted-ark-seedream-skill` skill | scripts at `.claude/skills/byted-ark-seedream-skill/` |
+| `fd-vaas-brainstorm-koubo` | 口播选题矩阵 + 脚本框架 + 差异化角度 + 完整大纲 | `/fd-vaas-brainstorm-koubo` skill | pure-prompt skill at `.claude/skills/fd-vaas-brainstorm-koubo/` |
+| `fd-vaas-video-creator` | 文案 → 口播视频 `.mp4` + `.srt` (TTS + 逐字字幕 + Remotion 渲染) | `/fd-vaas-video-creator` skill | scripts at `.claude/skills/fd-vaas-video-creator/scripts/`; outputs to `downloads/fd-videos/<slug>/` |
+| `fd-vaas-publish` | one video → posts on many platforms (orchestrates `sau`) | `/fd-vaas-publish` skill | `publish.mjs` at `.claude/skills/fd-vaas-publish/scripts/` |
+| `remotion-*` (7 skills) | scaffold / compose / render Remotion videos | `/remotion-create` etc. | skills at `.claude/skills/remotion-*`; project at `remotion-app/` |
 
 Each skill's `SKILL.md` is the authoritative contract — read it before driving the tool. `officecli`
 and `cap` are external CLIs (run `<cmd> --help` / `cap guide` instead of guessing flags). `ppt-master`
 is a repo-specific workflow with a strict serial pipeline and `MUST`/`GATE` rules — do not treat it
 as a generic code scaffold.
+
+### VAAS mainline (the wired demand → post flow)
+
+The `fd-vaas-*` skills are the mainline — they chain a demand all the way to a published post:
+
+1. **`/fd-vaas-brainstorm-koubo`** (optional) — given a 赛道/主题, produces a 选题矩阵 (热点/痛点/争议/干货/人设),
+   recommended 脚本框架 (黄金三秒 / SCQA / PREP / 故事钩子 / 清单体), 差异化角度, and an optional full 大纲.
+2. **`/fd-vaas-video-creator`** — turns a 文案 into a finished 口播视频. Pipeline:
+   `new-task → TTS (seed-tts-2.0, returns audio + official word-level timestamps) → fix-tts-timings
+   (corrects fake Latin-token endMs) → preflight → Remotion render → <slug>.mp4 (+ .srt)`.
+   Every artifact lands in `downloads/fd-videos/<slug>/`, managed by `task.json`. Visual layer can be
+   existing assets, a seedance video, a seedream image, or a ppt master tape. **Must run `fix-tts-timings`**
+   or subtitles flash and desync.
+3. **`/fd-vaas-publish`** — one video → many platforms. **Only orchestrates**: reads per-platform
+   preferences (accounts, tags, `BILIBILI_TID`, `TENCENT_SHORT_TITLE`, `YOUTUBE_VISIBILITY`, schedule)
+   from `.env` once, assembles the correct `sau upload-video` per platform, shells out, and writes results
+   back to `task.json`'s `distribution[]`. **Delegates all upload / cookie / browser work to `sau`** — never
+   re-implements it. Use `publish.mjs --dry-run` to preview.
 
 ### Distribution engine (`social-auto-upload/`)
 
@@ -87,6 +126,23 @@ sau douyin upload-video --account <name> --file … --schedule "2026-03-24 21:30
 If `sau` is not on PATH, run `python sau_cli.py <platform> <action> …` directly (no install needed).
 `--debug`, `--headless`, `--headed` are independent dimensions; default is headless.
 
+### Mainline (`fd-vaas-*`) — run from `VAAS/`
+
+```bash
+# 1. (optional) brainstorm topics + script outline for a 赛道
+#    /fd-vaas-brainstorm-koubo <赛道>
+
+# 2. 文案 → 口播视频 (one-shot: TTS → fix-tts-timings → preflight → render)
+SKILL=/Users/chengsishi/VAAS/.claude/skills/fd-vaas-video-creator/scripts
+node $SKILL/new-task.mjs    --slug <slug> --script /path/to/script.txt [--width 1920 --height 1080]
+node $SKILL/task-render.mjs --slug <slug> [--voice <id>] [--composition VoiceoverVideo]
+# → downloads/fd-videos/<slug>/<slug>.mp4 (+ .srt)
+
+# 3. one video → many platforms (reads .env; --dry-run to preview the sau commands)
+SKILL=/Users/chengsishi/VAAS/.claude/skills/fd-vaas-publish/scripts
+node $SKILL/publish.mjs --slug <slug> --title "…" [--platforms douyin,xiaohongshu,bilibili] [--tags a,b] [--schedule "2026-07-20 21:30"]
+```
+
 ### Tests
 
 Tests are stdlib `unittest` (runnable via `unittest` or `pytest`) and live in
@@ -122,19 +178,20 @@ historical web deps file; `pyproject.toml` is the mainline install entry.
   real terminal (QR may render incomplete; fall back to `qrcode.png`).
 - **Config**: `social-auto-upload/conf.py` (copy of `conf.example.py`) holds `BASE_DIR`,
   `LOCAL_CHROME_PATH`, `LOCAL_CHROME_HEADLESS`, `DEBUG_MODE`, and `YT_PROXY`. `XHS_SERVER` is
-  legacy xhs-only.
+  legacy xhs-only. The `fd-vaas-*` skills read their own preferences from the project-root `.env`
+  (see `.env.example`); per-task overrides go in `downloads/fd-videos/<slug>/.publish.env`.
 - **Network / proxy gotchas** (this environment): the local HTTP proxy is `127.0.0.1:7892`
   (fallback `7890`) — set `http_proxy` (NOT `https_proxy`) for general use. But `patchright`'s
   chromium does **not** read the system proxy: for YouTube set `YT_PROXY` in `conf.py`, and the
   Playwright/patchright browser install itself needs `https_proxy` set explicitly to reach
   `cdn.playwright.dev`. Some hosts (`officecli.ai`, `raw.githubusercontent.com`) fail TLS through
   the proxy — bypass with `env -u http_proxy -u https_proxy`.
-- **Creation → distribution handoff**: creation skills emit concrete files (`.mp4`, `.pptx`, images).
-  The distribution layer only consumes files + metadata — there is no shared in-repo glue code yet.
-  When wiring a demand-to-post flow, the asset path produced by a creation skill is what you pass to
-  `sau <platform> upload-video --file <path>`. PPTX decks are not directly uploadable as video; `cap`
-  or `ppt-master`'s export/render step is the bridge when a deck must become a publishable video.
-
+- **Creation → distribution handoff**: the `fd-vaas-*` mainline now wires this end-to-end
+  (`fd-vaas-video-creator` produces `downloads/fd-videos/<slug>/<slug>.mp4`; `fd-vaas-publish` ships it).
+  For ad-hoc uploads the asset path a creation skill produces is what you pass to
+  `sau <platform> upload-video --file <path>`. PPTX decks are not directly uploadable as video; `cap`,
+  `fd-vaas-video-creator`, or `ppt-master`'s export/render step is the bridge when a deck must become a
+  publishable video.
 
 # image generate
-use skill byted-ark-seedance-skill
+use skill `byted-ark-seedream-skill` for images, `byted-ark-seedance-skill` for video.
