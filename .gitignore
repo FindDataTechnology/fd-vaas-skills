@@ -25,7 +25,11 @@ demands/
 downloads/
 demand.md
 
+# Browser profiles & runtime state (logged-in sessions - NEVER commit)
+.profiles/
+
 # Temp
 tmp/
 temp/
+tmp-*.txt
 *.log

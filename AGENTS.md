@@ -1,0 +1,178 @@
+# AGENTS.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What VAAS is
+
+VAAS - **Variable Asset Authoring & Syndication.** Take a content demand, generate a
+**variable-type resource** (deck, document, screen-recording video, AI image/video, or a
+Remotion-rendered voiceover video), then **publish it automatically to different social-media
+accounts** - ideally producing a *different* variant per platform. It is an orchestration layer
+over two halves:
+
+1. **Creation skills** (`.agents/skills/`) - turn a demand into an asset file.
+2. **Distribution** - the two publish skills ship the asset to platforms. `fd-vaas-publish-videos`
+   ships a video to 6 video platforms; `fd-vaas-publish-docs` ships an article to 9 图文 platforms.
+   Each platform's upload logic is built into the skill at `scripts/platforms/<platform>.{mjs,py}`
+   - **macOS** runs ego-browser (`.mjs`, reuses the user's Chrome login, no cookies), **Windows**
+   runs patchright (`.py`, stealth Playwright with a persistent profile). There is **no `sau` and
+   no `social-auto-upload/` anymore** - that stack has been removed.
+
+There is **no monolithic VAAS application** - the workspace wires skills together. The **mainline is
+wired end-to-end** via the `fd-vaas-*` skills (no glue code to write by hand):
+
+```
+demand / 文案
+  -> /fd-vaas-brainstorm-koubo    (optional: 选题 + 脚本大纲 planning)
+  -> /fd-vaas-video-creator       (文案 -> 口播视频 .mp4 + .srt;  built-in TTS/Seedream/Seedance generators;
+                                   OR 录屏/网页操作视频 via ego-browser + cap)
+  -> /fd-vaas-publish-videos       (.mp4 -> 6 video platforms;  ego-browser macOS / patchright Windows)
+  -> /fd-vaas-publish-docs         (article -> 9 图文 platforms;  ego-browser instruction-driven)
+```
+
+When the user says "make a resource and post it", the flow is:
+*creation skill produces a file -> the matching publish skill uploads it to one or more platforms
+via its built-in `scripts/platforms/<platform>.{mjs,py}` uploaders.*
+
+## Repository shape - read this first
+
+- The VAAS root **is a git repository** (remote: `github.com/FindDataTechnology/fd-vaas-skills`).
+- **Skills source of truth = `.agents/skills/`** (tracked in git, 21 skills). `.claude/skills/`
+  holds **symlinks** to a subset of them so Claude Code can invoke them as `/<name>`. Skills not
+  symlinked there are still usable by pointing Claude at their `.agents/skills/<name>/SKILL.md`.
+- **`social-auto-upload/` is gone.** Distribution is built into the publish skills (ego-browser +
+  patchright). Do not reference `sau`, `sau_cli.py`, cookie files, or `account_name` - they no
+  longer exist.
+- **Gitignored**: `remotion-app/`, `downloads/`, `demands/`, `demand.md`, `.env`, `tmp/`.
+- **`scripts/` (root)** holds the multi-provider media bridge: `litellm-bridge.py`,
+  `_volcengine_{tts,image,video}.py`, `requirements.txt`, `pyproject.toml`.
+
+## Skills (`.agents/skills/` - the source of truth)
+
+| Skill | Produces | Type | Entry |
+|---|---|---|---|
+| `ppt-master` | SVG deck -> exported `.pptx` (strategist -> executor -> QC pipeline) | repo workflow | `/ppt-master` · `.agents/skills/ppt-master/` |
+| `officecli` | `.docx`/`.xlsx`/`.pptx` create+edit (L1 read -> L2 DOM -> L3 XML) | external CLI | `/officecli` · `~/.local/bin/officecli` |
+| `cap` | screen recording / screenshots -> `.mp4`/`.gif` + shareable link | external CLI | `/cap` · `~/.local/bin/cap` |
+| `ego-browser` | browser automation (isolated agent space, reuses Chrome login) | repo skill | `ego-browser` CLI · `.agents/skills/ego-browser/` |
+| `fd-browser-record` | drive a page in ego-browser **and** record it with cap | repo skill | `/fd-browser-record` |
+| `fd-cover-image` | brand cover images (横/竖) via Remotion, aligned to design system | repo skill | `/fd-cover-image` |
+| `fd-coding-bore-tunnel` | expose a local port via bore.pub | repo skill | `/bore-tunnel` |
+| `fd-coding-cloudflare-tunnel` | expose a local port via Cloudflare Tunnel (HTTPS) | repo skill | `/cf-tunnel` |
+| `fd-coding-wifi-tunnel` | share a local service over LAN/WiFi | repo skill | `/wifi-tunnel` |
+| `fd-vaas-brainstorm-koubo` | 选题矩阵 + 脚本框架 + 差异化角度 + 大纲 | repo skill (prompt) | `/fd-vaas-brainstorm-koubo` |
+| `fd-vaas-video-creator` | 文案 -> 口播视频 `.mp4`+`.srt` (TTS+字幕+Remotion), **or** 录屏视频; **built-in TTS/Seedream/Seedance generators** | repo skill | `/fd-vaas-video-creator` |
+| `fd-vaas-publish-videos` | one video -> 6 video platforms (dual-runtime upload built-in) | repo skill | `/fd-vaas-publish-videos` |
+| `fd-vaas-publish-docs` | one article -> 9 图文 platforms (ego-browser instruction-driven) | repo skill | `/fd-vaas-publish-docs` |
+| `fd-vaas-dashboard` | content dashboard: lists generated articles + videos | repo skill | `/dashboard` |
+| `fd-vaas-dashboard-sharing` | share the dashboard (tunnel) | repo skill | `/share-dashboard` |
+| `remotion-*` (7) | scaffold / compose / caption / render Remotion videos | repo skills | `/remotion-create` etc. · `.agents/skills/remotion-*` |
+
+Each skill's `SKILL.md` is the authoritative contract - read it before driving the tool. `officecli`
+and `cap` are external CLIs (run `<cmd> --help` / `cap guide` instead of guessing flags).
+
+## The two distribution mainlines
+
+### `fd-vaas-publish-videos` - video -> 6 platforms
+
+One video = one `publish.mjs` call -> per-platform preferences + per-platform upload script. All 6
+platforms are built in; each has **two runtimes** under `scripts/platforms/`:
+
+| Platform | Script(s) | Key technical challenge |
+|---|---|---|
+| `douyin` | `douyin.mjs` / `douyin.py` | standard DOM |
+| `xiaohongshu` | `xiaohongshu.mjs` / `xiaohongshu.py` | title ≤ 20 字; tag ≤ 10 |
+| `bilibili` | `bilibili.mjs` / `bilibili.py` | **micro-app shadow DOM**; needs `--tid`; `--cover` not `--thumb` |
+| `kuaishou` | `kuaishou.mjs` / `kuaishou.py` | **React Joyride overlay** + off-screen publish btn; tag ≤ **4** |
+| `weixin` (视频号) | `weixin.mjs` / `weixin.py` | **Wujie shadow DOM** + HTTP server + DataTransfer; auto-publishes |
+| `youtube` | `youtube.mjs` / `youtube.py` | **Polymer dialog** + 4-step flow; `--visibility`; "not for kids" mandatory |
+
+`publish.mjs` dispatches by `process.platform`: macOS -> `.mjs` (ego-browser), Windows -> `.py`
+(patchright). Per-platform deep dives in `references/<platform>.md`; quirks in
+`references/platform-quirks.md`.
+
+**Caveat:** the Windows/patchright (`.py`) path is **not yet verified end-to-end on a real logged-in
+session** (especially `weixin`/`bilibili`). Run `--dry-run` first; on Windows, prefer confirming the
+flow reaches the upload page before trusting a real publish.
+
+### `fd-vaas-publish-docs` - article -> 9 图文 platforms
+
+Platforms: 知乎(zhihu)、微信公众号(weixin)、小红书(xiaohongshu)、雪球(xueqiu)、东方财富号(eastmoney)、
+同花顺财经号(tonghuashun)、今日头条(toutiao)、百家号(baijiahao)、微博(weibo).
+
+This skill is **instruction-driven**: `publish.mjs` only does prep (per-platform 文案/字数/标签/封面
+adaptation) and post-publish recording. The actual browser automation is ego-browser driven by
+heredoc code in `references/<platform>.md`. **Selectors are page-structure inferences, mostly
+unverified on a real logged-in session** - before first publish on any platform, run the
+`references/probe.md` `snapshotText` flow to verify selectors, then drive.
+
+**Must get user confirmation before publishing** (cannot undo). The `_DOC_TAGS` env suffix keeps
+article tags from colliding with the video skill's `<PLATFORM>_TAGS`.
+
+## Common commands
+
+### Video mainline - run from `VAAS/`
+
+```bash
+SKILL_V=.agents/skills/fd-vaas-video-creator/scripts
+SKILL_P=.agents/skills/fd-vaas-publish-videos/scripts
+
+# 1. (optional) brainstorm topics + script outline
+#    /fd-vaas-brainstorm-koubo <赛道>
+
+# 2. 文案 -> 口播视频 (new-task -> TTS -> fix-tts-timings -> preflight -> Remotion render)
+node $SKILL_V/new-task.mjs    --slug <slug> --script /path/to/script.txt [--width 1920 --height 1080]
+node $SKILL_V/task-render.mjs --slug <slug> [--voice <id>] [--composition VoiceoverVideo]
+# -> downloads/fd-videos/<slug>/<slug>.mp4 (+ .srt)
+
+# 3. one video -> many platforms (reads .env; --dry-run to preview the upload commands)
+node $SKILL_P/publish.mjs --slug <slug> --title "…" \
+  [--platforms douyin,xiaohongshu,bilibili,kuaishou,weixin,youtube] [--tags a,b] \
+  [--schedule "2026-07-20 21:30"]
+
+# single-platform ad-hoc upload (debugging)
+node $SKILL_P/platforms/douyin.mjs --file <mp4> --title "…" --desc "…" --tags a,b
+```
+
+### Article mainline - run from `VAAS/`
+
+```bash
+SKILL_D=.agents/skills/fd-vaas-publish-docs/scripts
+node $SKILL_D/publish.mjs --slug <slug> \
+  [--platforms zhihu,weixin,xiaohongshu,xueqiu,eastmoney,tonghuashun,toutiao,baijiahao,weibo] \
+  --dry-run     # preview; REMOVE --dry-run only after user confirms publish
+```
+
+## Architecture notes that span files
+
+- **Login model**: macOS - ego-browser inherits the user's Chrome login state (login once in a real
+  browser, reuse thereafter; no cookie files). Windows - patchright `launch_persistent_context` stores
+  login in `VAAS/.profiles/<platform>/`. Each platform's session is independent - multi-platform
+  concurrency OK, same-platform must be serial.
+- **Close the ego task window after publish** - do not leave it for the user to close. For douyin's
+  manual-publish path, wait for the user to confirm "发布完成" before running the `completeTaskSpace`
+  cleanup.
+- **Metadata convention**: video = `title + desc + tags`; article = `title + content + tags`. Pass
+  `--schedule "YYYY-MM-DD HH:MM"` for timed publish (omitted = immediate); only some platforms support it.
+- **Config**: the `fd-vaas-*` skills read preferences from the project-root `.env` (see
+  `.env.example`). Two namespaces coexist:
+  - **Video**: `PLATFORMS`, `TAGS`, `<PLATFORM>_TAGS`, `BILIBILI_TID`, `TENCENT_SHORT_TITLE`,
+    `YOUTUBE_VISIBILITY`, `SCHEDULE`, `HEADLESS`.
+  - **Docs**: `PLATFORMS_DOCS`, `DOC_TAGS`, `<PLATFORM>_DOC_TAGS`, `DOC_SCHEDULE`, `DOC_HEADLESS`.
+  - Per-task overrides go in `downloads/fd-videos/<slug>/.publish.env` (video) or
+    `downloads/fd-docs/<slug>/.publish.env` (docs). Priority: `CLI --flag > <task>/.publish.env > <VAAS>/.env > built-in default`.
+- **Generators are built into `fd-vaas-video-creator`** at `scripts/generators/`:
+  `tts-wrapper.js`, `seedream-wrapper.js`, `seedance-wrapper.js` (+ `*.js` impls). Multi-provider
+  switching is handled by the root `scripts/litellm-bridge.py` (set `*_PROVIDER` in `.env`; `volcengine`
+  direct keeps advanced features like TTS word-level timestamps).
+- **`fix-tts-timings` is mandatory** - seed-tts-2.0 returns fake `endMs` for Latin tokens (English
+  names, URLs); skip it and subtitles flash/desync.
+- **Network / proxy** (this environment): local HTTP proxy `127.0.0.1:7892` (fallback `7890`) - set
+  `http_proxy` (NOT `https_proxy`) for general use. Some hosts (`officecli.ai`,
+  `raw.githubusercontent.com`) fail TLS through the proxy - bypass with `env -u http_proxy -u https_proxy <cmd>`.
+- **Creation -> distribution handoff**: the `fd-vaas-*` mainline wires this end-to-end
+  (`fd-vaas-video-creator` produces `downloads/fd-videos/<slug>/<slug>.mp4`; `fd-vaas-publish-videos`
+  ships it). For ad-hoc uploads, pass the asset path a creation skill produces to
+  `node .agents/skills/fd-vaas-publish-videos/scripts/platforms/<platform>.mjs --file <path> …`
+  (or let `publish.mjs` route it). PPTX decks are not directly uploadable as video - `cap`,
+  `fd-vaas-video-creator`, or `ppt-master`'s export/render step is the bridge when a deck must become a video.

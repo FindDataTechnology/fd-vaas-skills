@@ -1,0 +1,24 @@
+=== bore-tunnel Eval Result ===
+Date: 2026-07-12 20:05 CST
+Task: Expose port 8891 (stock_indicators_dashboard) via bore.pub
+
+Steps:
+1. Killed existing bore process for port 8891: `pkill -f "bore local 8891"`
+2. Verified dashboard service is running on port 8891 (PID 32334)
+3. Started bore tunnel: `nohup bore local 8891 --to bore.pub > /tmp/bore-8891.log 2>&1 &`
+4. Verified single clean process running
+
+Tunnel Log:
+  2026-07-12T12:05:24.183516Z INFO bore_cli::client: connected to server remote_port=42899
+  2026-07-12T12:05:24.183636Z INFO bore_cli::client: listening at bore.pub:42899
+
+Process verified:
+  chengsishi  50882  0.0  0.1  bore local 8891 --to bore.pub
+
+Public URL: http://bore.pub:42899
+
+Commands run:
+  pkill -f "bore local 8891"   # kill existing
+  nohup bore local 8891 --to bore.pub > /tmp/bore-8891.log 2>&1 &
+  ps aux | grep "bore local" | grep -v grep
+  cat /tmp/bore-8891.log

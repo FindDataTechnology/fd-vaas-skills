@@ -1,0 +1,17 @@
+{
+  "skill_name": "fd-coding-bore-tunnel",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我在 8891 端口跑了一个股票指标 dashboard 服务（http://localhost:8891），想用 bore 把它暴露到外网让同事能访问。帮我启动隧道并告诉我访问地址。",
+      "expected_output": "bore tunnel started successfully, public URL http://bore.pub:{port} returned",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "之前启动的 bore tunnel 不知道还在不在跑，帮我检查一下 8891 端口的隧道状态。如果还在跑就告诉我地址，如果挂了就重新启动。",
+      "expected_output": "Bore tunnel process checked, process status reported, public URL provided if running",
+      "files": []
+    }
+  ]
+}

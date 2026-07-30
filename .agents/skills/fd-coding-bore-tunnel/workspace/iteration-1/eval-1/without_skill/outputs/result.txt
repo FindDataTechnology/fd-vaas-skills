@@ -1,0 +1,25 @@
+Task: Expose port 8891 dashboard via bore tunnel
+
+Steps & Results:
+
+1. Checked existing processes:
+   - lsof -ti :8891 → PID 32334 (the dashboard Python process itself, not bore)
+   - ps aux | grep bore → no existing bore process
+   - Conclusion: no bore process to kill
+
+2. Started bore tunnel:
+   - Command: nohup bore local 8891 --to bore.pub > /tmp/bore_8891.log 2>&1 &
+   - PID: 50625
+
+3. Verified tunnel:
+   - bore logs at /tmp/bore_8891.log:
+     2026-07-12T12:05:17.605142Z INFO bore_cli::client: connected to server remote_port=4579
+     2026-07-12T12:05:17.605237Z INFO bore_cli::client: listening at bore.pub:4579
+   - Process confirmed running (PID 50625)
+
+4. Public URL:
+   http://bore.pub:4579
+
+Note: Your colleague can access the dashboard at http://bore.pub:4579.
+The URL will change each time the tunnel is restarted.
+To stop the tunnel: kill 50625

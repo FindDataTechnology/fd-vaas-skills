@@ -1,0 +1,17 @@
+{
+  "eval_id": 1,
+  "eval_name": "start-bore-tunnel",
+  "prompt": "我在 8891 端口跑了一个股票指标 dashboard 服务（http://localhost:8891），想用 bore 把它暴露到外网让同事能访问。帮我启动隧道并告诉我访问地址。",
+  "assertions": [
+    {
+      "name": "tunnel-started",
+      "description": "Bore tunnel process is running for port 8891",
+      "assertion_type": "exact"
+    },
+    {
+      "name": "public-url-returned",
+      "description": "The public URL (bore.pub:PORT) is displayed in the output",
+      "assertion_type": "exact"
+    }
+  ]
+}

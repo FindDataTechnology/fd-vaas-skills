@@ -1,0 +1,12 @@
+[project]
+name = "vaas-litellm-bridge"
+version = "0.1.0"
+description = "LiteLLM bridge for VAAS — unified TTS / image / video generation"
+requires-python = ">=3.9"
+dependencies = [
+    "litellm>=1.81.0",
+    "python-dotenv>=1.0.0",
+]
+
+[tool.black]
+line-length = 100

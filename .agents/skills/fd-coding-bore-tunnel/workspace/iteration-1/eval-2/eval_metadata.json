@@ -1,0 +1,17 @@
+{
+  "eval_id": 2,
+  "eval_name": "check-bore-status",
+  "prompt": "之前启动的 bore tunnel 不知道还在不在跑，帮我检查一下 8891 端口的隧道状态。如果还在跑就告诉我地址，如果挂了就重新启动。",
+  "assertions": [
+    {
+      "name": "tunnel-status-checked",
+      "description": "Agent checked bore process status using ps or similar command",
+      "assertion_type": "exact"
+    },
+    {
+      "name": "url-or-restart-action",
+      "description": "If running: public URL provided; if not running: tunnel was restarted",
+      "assertion_type": "exact"
+    }
+  ]
+}

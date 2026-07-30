@@ -1,0 +1,32 @@
+Task: Check bore tunnel status for port 8891
+Date: 2026-07-12 12:05
+
+=== Action Taken ===
+
+1. Checked running processes (ps aux | grep "bore local")
+2. Checked tunnel logs (cat /tmp/bore-8891.log)
+
+=== Result ===
+
+Tunnel status: RUNNING
+Process PID: 50405
+Log file: /tmp/bore-8891.log
+
+Tunnel connected at: bore.pub:2333
+Public URL: http://bore.pub:2333
+
+This URL exposes the local service running on port 8891.
+
+=== Command Output ===
+
+$ ps aux | grep "bore local" | grep -v grep
+chengsishi 50405 2.3 0.1 ... bore local 8891 --to bore.pub
+chengsishi 50404 1.0 0.0 ... /bin/zsh -c nohup bore local 8891 --to bore.pub > /tmp/bore-8891.log ...
+
+$ cat /tmp/bore-8891.log
+2026-07-12T12:05:12.321744Z INFO bore_cli::client: connected to server remote_port=2333
+2026-07-12T12:05:12.322315Z INFO bore_cli::client: listening at bore.pub:2333
+
+=== Conclusion ===
+
+Tunnel is healthy. No restart needed.

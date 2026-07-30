@@ -1,0 +1,4 @@
+# Windows 上传链路依赖（macOS 走 ego-browser，不需要这些）
+# 安装：pip install -r scripts/platforms/requirements.txt
+#       patchright install chromium   # 下载 stealth chromium
+patchright>=1.40
