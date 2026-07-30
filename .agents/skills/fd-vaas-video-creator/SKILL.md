@@ -188,8 +188,8 @@ console.log('✅ task.json updated (status=rendered, type=screen-recording)');
 
 ### 4. 后续流程(和口播视频一致)
 
-- 加封面:用 `fd-cover-image` 生成封面图,或用 `embed-poster.mjs` 嵌进 mp4
-- 发布:走 `fd-vaas-publish`,和口播视频一样按 slug 找到 mp4
+- 加封面:用 `scripts/generate-covers.mjs --slug <name> --title "..."` 一键生成 6 平台统一公司风格封面(横/竖/YouTube/视频号共 4 张,自动回写 task.json render.covers),或用 `embed-poster.mjs` 嵌进 mp4;发布时 publish.mjs 发现没封面会自动补全
+- 发布:走 `fd-vaas-publish-videos`,和口播视频一样按 slug 找到 mp4
 
 ## 主流程(口播视频 · 推荐:一键 pipeline)
 

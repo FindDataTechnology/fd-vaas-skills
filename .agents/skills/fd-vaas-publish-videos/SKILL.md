@@ -42,12 +42,14 @@ compatibility: macOS=Node.js 18+ + ego-browser; Windows=Python 3.10+ + patchrigh
     ↓
 1. 拟定发布文案（标题 + 描述/笔记 + 各平台标签）
     ↓ 用 .env 预设 + 本次内容生成差异化文案
-2. 生成各平台封面（用 fd-cover-image，Remotion 方案）
+2. 生成各平台封面（**publish.mjs 自动生成**，无需手动跑）
     - 抖音：横封面 1920×1080 + 竖封面 1080×1440
     - 小红书：竖封面 1080×1440
     - B站：横封面 1920×1080
     - YouTube：横封面 1280×720
-    ↓ 用 Remotion 生成，不要用 AI 生图（文字会乱码）
+    - 视频号：1080×1260
+    ↓ 用 Remotion BrandCover 模板生成，公司风格统一，无 AI 文字乱码
+    ↓ 先预览确认可跑 `--cover-only` 单生成封面；加 `--no-cover` 跳过
 3. 输出「发布确认清单」给用户
     - 各平台标题、描述、标签
     - 各平台封面预览图
@@ -123,6 +125,8 @@ node $SKILL/youtube.mjs --file video.mp4 --title "Title" --desc "Description" --
 | `--tags` | ❌ | 逗号分隔标签，不给用 .env 的 `TAGS` 或平台专属 `XXX_TAGS` |
 | `--schedule` | ❌ | `YYYY-MM-DD HH:MM`，不给立即发（仅 douyin/kuaishou 支持） |
 | `--dry-run` | ❌ | 只打印命令不执行 |
+| `--no-cover` | ❌ | 跳过封面生成与上传，用平台默认封面 |
+| `--cover-only` | ❌ | 只跑封面生成（4 张 + 回写 task.json），不执行发布（给预览确认用） |
 
 ## 平台差异化参数路由
 
@@ -130,7 +134,7 @@ publish.mjs 按平台差异组装不同的 CLI 参数：
 
 | 平台 | 封面参数 | 标签字段 | 特殊参数 | 标签上限 |
 |---|---|---|---|---|
-| 抖音 | `--cover-horizontal` (+竖封面内部处理) | `--tags` | `--schedule` | 10 |
+| 抖音 | `--cover-horizontal` + `--cover-vertical`（**自动传两张**） | `--tags` | `--schedule` | 10 |
 | 小红书 | `--cover` | `--tags` | 标题 ≤ 20 字 | 10 |
 | B站 | `--cover` | `--tags` | `--tid` (分区) | - |
 | 快手 | `--cover` | `--tags` | - | **4**（不是5！） |

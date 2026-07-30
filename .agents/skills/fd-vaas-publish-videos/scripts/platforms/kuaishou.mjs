@@ -70,6 +70,8 @@ console.log(`📱 快手发布
 
 const escapedFile = absFile.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 const escapedDesc = fullDesc.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/`/g, '\\`');
+const absCover = cover && fs.existsSync(cover) ? path.resolve(cover) : '';
+const escapedCover = absCover ? absCover.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
 
 const egoScript = `
 (async () => {
@@ -130,21 +132,52 @@ await js(\`(() => {
 })()\`);
 await wait(2);
 
-// 设置封面（点击默认封面区域打开 Ant Design Modal）
-cliLog('🖼️ 设置封面...');
-await js(\`document.querySelector('._default-cover')?.click()\`);
-await wait(2);
-
-// 在模态框中确认选帧
-const coverResult = await js(\`(() => {
-  const modal = document.querySelector('.ant-modal-body');
-  if (!modal) return 'no modal';
-  const confirmBtn = modal.querySelector('.ant-btn-primary');
-  if (confirmBtn) { confirmBtn.click(); return 'cover confirmed'; }
-  return 'no confirm btn';
-})()\`);
-cliLog('封面: ' + coverResult);
-await wait(2);
+// 设置封面（上传自定义封面图）
+${absCover ? `
+cliLog('🖼️ 上传封面...');
+try {
+  // 点击封面区域打开 modal（多选择器兜底）
+  let coverOpen = await js(\`(() => {
+    const sels = ['._default-cover', '[class*="cover-default"]', '[class*="default-cover"]', '[class*="cover-card"]', '[class*="video-cover"]', '[class*="cover"] img'];
+    for (const s of sels) {
+      const el = document.querySelector(s);
+      if (el && el.getClientRects && el.getClientRects().length) { el.click(); return 'clicked ' + s; }
+    }
+    return 'no cover area found';
+  })()\`);
+  cliLog('封面区域: ' + coverOpen);
+  await wait(2);
+  // modal 里找"上传"tab（切换到上传自定义封面，而非选帧）
+  await js(\`(() => {
+    const modal = document.querySelector('.ant-modal-body') || document.querySelector('[class*="modal-body"]') || document.querySelector('[role="dialog"]');
+    if (!modal) return 'no modal';
+    const tabs = modal.querySelectorAll('[class*="tab"], .ant-tabs-tab, [role="tab"], div, span');
+    for (const t of tabs) {
+      const tx = (t.textContent || '').trim();
+      if ((tx === '上传' || tx === '上传封面' || tx === '自定义') && t.getClientRects && t.getClientRects().length) { t.click(); return 'tab: ' + tx; }
+    }
+    return 'no upload tab (may direct upload)';
+  })()\`);
+  await wait(1);
+  // 上传封面图
+  await uploadFile('input[type="file"][accept*="image"]', '${escapedCover}');
+  await wait(3);
+  // 确认封面
+  let coverConfirm = await js(\`(() => {
+    const modal = document.querySelector('.ant-modal-body') || document.querySelector('[class*="modal-body"]');
+    if (!modal) return 'no modal for confirm';
+    const btns = modal.querySelectorAll('.ant-btn-primary, button[class*="primary"], button[class*="confirm"]');
+    for (const b of btns) { if (!b.disabled && b.getClientRects && b.getClientRects().length) { b.click(); return 'confirmed'; } }
+    return 'no confirm btn';
+  })()\`);
+  cliLog('封面确认: ' + coverConfirm);
+  await wait(2);
+} catch (e) {
+  cliLog('⚠️ 封面上传失败: ' + e.message + '，请手动设置封面');
+}
+` : `
+cliLog('⏭️ 未提供封面，跳过');
+`}
 
 // 点击发布（多候选 + 滚动 + JS 点击兜底，按钮可能在视口外）
 cliLog('🚀 点击发布...');
@@ -202,6 +235,24 @@ try {
     throw new Error('未找到发布按钮' + (r && r.text ? ': ' + r.text : ''));
   }
   cliLog('✅ 已点击发布按钮: ' + r.text + ' (' + r.match + ')');
+  await wait(2);
+  // 处理可能的二次确认弹窗
+  let confirmResult = await js(\`(() => {
+    const modals = document.querySelectorAll('.ant-modal-confirm, .ant-modal-body, [class*="modal-body"], [role="dialog"]');
+    for (const modal of modals) {
+      if (!modal.getClientRects || !modal.getClientRects().length) continue;
+      const btns = modal.querySelectorAll('.ant-btn-primary, button[class*="primary"], button[class*="confirm"], [class*="ok"]');
+      for (const b of btns) {
+        if (!b.disabled && b.getClientRects && b.getClientRects().length) {
+          const t = (b.textContent || '').trim();
+          if (t.includes('确认') || t.includes('发布') || t.includes('确定') || t === 'OK') { b.click(); return 'confirm: ' + t; }
+        }
+      }
+    }
+    return 'no confirm modal';
+  })()\`);
+  cliLog('二次确认: ' + confirmResult);
+  await wait(3);
 } catch (e) {
   cliLog('⚠️ 发布按钮点击失败: ' + e.message);
   cliLog('请在浏览器中手动点击「发布」按钮完成发布');
@@ -216,7 +267,8 @@ const success = url.includes('status=2') || (url.includes('manage') && url.inclu
 cliLog(success ? '✅ 发布成功！' : '⚠️ 请检查发布状态');
 
 await captureScreenshot();
-await completeTaskSpace('${taskSpace}', { keep: false });
+cliLog('发布流程完成，请确认发布状态（如未发布，手动点 div.publish-button）');
+await handOffTaskSpace();
 })();
 `;
 

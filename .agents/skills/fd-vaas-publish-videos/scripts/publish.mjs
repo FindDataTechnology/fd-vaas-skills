@@ -46,11 +46,14 @@ const cliPlatforms = getArg("--platforms");
 const cliTags = getArg("--tags");
 const cliSchedule = getArg("--schedule");
 const dryRun = hasArg("--dry-run");
+const noCover = hasArg("--no-cover");
+const coverOnly = hasArg("--cover-only");
 
 if (!slug || !cliTitle) {
   console.error(
     "Usage: --slug <name> --title \"...\" [--desc \"...\"] [--note \"...\"] \\\n" +
-    "        [--platforms douyin,xhs,...] [--tags a,b,c] [--schedule 'YYYY-MM-DD HH:MM'] [--dry-run]",
+    "        [--platforms douyin,xhs,...] [--tags a,b,c] [--schedule 'YYYY-MM-DD HH:MM']\n" +
+    "        [--dry-run] [--no-cover] [--cover-only]",
   );
   process.exit(1);
 }
@@ -80,7 +83,7 @@ if (!fs.existsSync(manifestPath)) {
   console.error(`❌ task.json not found: ${manifestPath}. Run new-task.mjs + task-render.mjs first.`);
   process.exit(1);
 }
-const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+let manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 
 // Config: project-root .env (shared with TTS/seedream/etc.) < task-local .publish.env
 const rootEnv = loadEnv(path.join(VAAS, ".env"));
@@ -141,14 +144,24 @@ function getCliType(p) {
   return null;
 }
 
+// ─── 封面解析:按平台从 render.covers 取,fallback 到 render.poster ──
+// keys 按优先级传;'poster' 是特殊键,读 render.poster。文件不存在就跳到下一个候选。
+function pickCover(keys) {
+  const covers = manifest.render?.covers;
+  for (const k of keys) {
+    const rel = k === "poster" ? manifest.render?.poster : covers?.[k];
+    if (rel) {
+      const f = path.join(TASK_DIR, rel);
+      if (fs.existsSync(f)) return f;
+    }
+  }
+  return null;
+}
+
 // ─── build command per platform ───────────────────────
 function buildCommand(p) {
   const cfg = platformConfig(p);
   const body = truncate(cliDesc ?? cliNote ?? "", cfg.descMax);
-  const cover = manifest.render?.poster
-    ? path.join(TASK_DIR, manifest.render.poster)
-    : null;
-  const hasCover = cover && fs.existsSync(cover);
 
   const cliType = getCliType(p);
   
@@ -163,16 +176,27 @@ function buildCommand(p) {
   if (body) argv.push("--desc", body);
   if (cfg.tags) argv.push("--tags", cfg.tags);
   
-  if (hasCover) {
-    if (p === 'douyin') {
-      argv.push("--cover-horizontal", cover);
-    } else if (p === 'bilibili') {
-      argv.push("--cover", cover);
-    } else if (p === 'youtube') {
-      argv.push("--thumbnail", cover);
-    } else {
-      argv.push("--cover", cover);
-    }
+  // 封面按平台挑对应画幅:douyin 横+竖;B站/YouTube 横;小红书/快手/视频号 竖
+  if (p === 'douyin') {
+    const ch = pickCover(['douyin_h', 'bilibili', 'poster']);
+    const cv = pickCover(['douyin_v', 'xiaohongshu', 'kuaishou', 'weixin']);
+    if (ch) argv.push("--cover-horizontal", ch);
+    if (cv) argv.push("--cover-vertical", cv);
+  } else if (p === 'bilibili') {
+    const c = pickCover(['bilibili', 'douyin_h', 'poster']);
+    if (c) argv.push("--cover", c);
+  } else if (p === 'xiaohongshu') {
+    const c = pickCover(['xiaohongshu', 'douyin_v']);
+    if (c) argv.push("--cover", c);
+  } else if (p === 'kuaishou') {
+    const c = pickCover(['kuaishou', 'douyin_v']);
+    if (c) argv.push("--cover", c);
+  } else if (p === 'weixin') {
+    const c = pickCover(['weixin', 'douyin_v']);
+    if (c) argv.push("--cover", c);
+  } else if (p === 'youtube') {
+    const c = pickCover(['youtube', 'douyin_h', 'poster']);
+    if (c) argv.push("--thumbnail", c);
   }
   
   if (schedule && (p === 'douyin' || p === 'kuaishou')) {
@@ -190,6 +214,37 @@ function buildCommand(p) {
   }
   
   return { cmd: RUNTIME, args: argv, cwd: VAAS, account: ACCOUNT_LABEL, cliType: IS_WIN ? 'py' : 'new' };
+}
+
+// ─── 封面:缺了就自动用公司风格模板补一套(发布时自动补全) ──
+const GENERATE_COVERS = path.join(
+  VAAS, ".agents", "skills", "fd-vaas-video-creator", "scripts", "generate-covers.mjs",
+);
+const hasCovers = !!manifest.render?.covers && Object.keys(manifest.render.covers).length > 0;
+
+if (coverOnly) {
+  // 只生成封面,不发布(渲染后预览确认用)
+  console.log("🎨 仅生成封面,不发布 …\n");
+  const r = spawnSync("node", [GENERATE_COVERS, "--slug", slug, "--title", cliTitle], {
+    cwd: VAAS, stdio: "inherit",
+  });
+  process.exit(r.status === 0 ? 0 : 1);
+}
+
+if (!hasCovers && !noCover) {
+  console.log("🖼️  未检测到封面(task.json 无 render.covers),自动生成公司风格统一封面 …\n");
+  const r = spawnSync("node", [GENERATE_COVERS, "--slug", slug, "--title", cliTitle], {
+    cwd: VAAS, stdio: "inherit",
+  });
+  if (r.status !== 0) {
+    console.error("❌ 封面自动生成失败,终止发布。可加 --no-cover 跳过封面继续发布。");
+    process.exit(1);
+  }
+  // 重新加载 manifest 拿到刚写入的 covers
+  manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  console.log();
+} else if (noCover) {
+  console.log("🚫 已加 --no-cover,本次发布不上传封面\n");
 }
 
 // ─── run ──────────────────────────────────────────────

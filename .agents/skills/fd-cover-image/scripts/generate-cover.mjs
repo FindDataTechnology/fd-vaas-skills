@@ -122,7 +122,8 @@ const res = spawnSync(
     "--image-format", imgFormat,
     ...(imgFormat === "jpeg" ? ["--jpeg-quality", "95"] : []),
     "--props", JSON.stringify(props),
-    ...(sizeArg ? ["--width", String(width), "--height", String(height)] : []),
+    "--width", String(width),
+    "--height", String(height),
   ],
   {
     cwd: REMOTION_APP,

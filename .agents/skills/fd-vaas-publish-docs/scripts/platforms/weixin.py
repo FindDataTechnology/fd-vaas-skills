@@ -20,6 +20,16 @@ from browser_utils import (  # noqa: E402
 
 HOME = "https://mp.weixin.qq.com/"
 
+
+def logged_in(b):
+    # URL 含 /cgi-bin/ 或页面出现「新的创作」(登录后首页才有)都算已登录
+    if "/cgi-bin/" in b.page.url:
+        return True
+    try:
+        return "新的创作" in b.page.locator("body").inner_text(timeout=2000)
+    except Exception:
+        return False
+
 ap = argparse.ArgumentParser(description="微信公众号图文 (patchright)")
 ap.add_argument("--title", required=True)
 ap.add_argument("--body-file", required=True)
@@ -53,12 +63,14 @@ cli_log(f"""
 
 with Browser(profile, headless=args.headless) as b:
     cli_log("🌐 打开公众号后台...")
-    if not login_or_wait(b, HOME, lambda: "/cgi-bin/" in b.page.url, timeout=300, hint="用微信扫码登录公众号后台"):
+    if not login_or_wait(b, HOME, lambda: logged_in(b), timeout=120, hint="用微信扫码登录公众号后台"):
         cli_log("❌ 登录超时,退出")
         sys.exit(1)
     cli_log("✅ 已登录后台")
 
-    click_by_text(b, "图文消息", "新建图文入口")
+    click_by_text(b, "新的创作", "新建图文入口")
+    wait(1.5)
+    click_by_text(b, "文章", "新建图文")
     wait(5)
 
     if args.dry_run:
