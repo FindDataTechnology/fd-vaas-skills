@@ -316,10 +316,14 @@ sau douyin upload-video --account <name> \
 ## 关键注意点(踩过的坑)
 
 - **必跑 fix-tts-timings**:seed-tts-2.0 对 Latin token(英文名、URL、`Star、`)返回的 endMs 是假的(30-45ms),真实读音藏在 gap 里。修正规则见 `references/tts-timings-quirk.md`。
-- **时长永远以配音为准**:别用文案字数估。用 captions 最后 `endMs` 或 ffprobe。`preflight.mjs` 强制体检。
+- **时长永远以配音为准**:别用文案字数估。**用 ffprobe 实测音频时长**,不要用 captions 最后 `endMs`——seed-tts 音频尾部常有 1~1.5s 静音没被 caption 覆盖,`lastEndMs` < 实测时长,用它算帧会 preflight drift>0.5s 失败。帧数 = `ceil(audio_sec * fps) + 小余量`,保证 `frames/fps >= audio` 且 drift<0.5s。`preflight.mjs` 强制体检。
 - **画面静音**:配音是唯一音轨。背景视频原声被丢弃。
 - **一支视频一个 slug 一个目录**:不许 `-v2`/`-final`/`-fixed` 后缀。修改用 history.md 记账。
 - **字幕来自 TTS 官方,不用 ASR**:比 whisper 精度更高、更快、不依赖 1.5GB 模型下载。
+- **硬编码场景 composition 不能缩短 durationInFrames**:带固定 Sequence(如片头/CTA 用 `durationInFrames - N`)的 composition,传小于 N 的 props.durationInFrames 会让该场景算负值,Remotion 报 `durationInFrames must be positive, but got -X`。音频比原设计短时,**新建 composition** 按 captions 逐字时间戳重排场景边界,别改原 composition(历史视频可能重渲染)。
+- **theme.ts COLORS 字段必须和场景用法一致**:场景里 `COLORS.textMuted` 之类若 theme.ts 没定义 -> `undefined` -> `color: undefined` 让文字回退浏览器默认**黑色**,深色背景上看不清。新增/改场景前先 `grep -oE 'COLORS\.\w+' src/scenes*.tsx | sort -u` 对照 `theme.ts`,缺的字段补上或改用已定义别名(`muted`/`bg0` 等)。
+- **JSX 文本里裸 `>` 非法**:注释/说明文字里的 `->`(hyphen+大于号)会让 esbuild 报 `The character ">" is not valid inside a JSX element`。用中文箭头 `->` 或 `&gt;` 转义。重写场景时别把原文件的 `->` 误打成 `->`。
+- **场景边界与口播对齐**:渲染前从 `captions.json` 逐字时间戳提取口播段落起止帧(写脚本匹配每段首字 token 的 startMs),映射到各 `<Sequence from= durationInFrames=>`,画面切换才和口播内容同步。`task-render.mjs` 只用 captions endMs 算总帧数,场景内部分段要自己提取对齐。
 
 ### 视频拼接 · 音频质量约束(硬性)
 

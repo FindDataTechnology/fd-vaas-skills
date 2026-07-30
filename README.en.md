@@ -20,8 +20,8 @@ creation skill produces a file  ->  a publish skill uploads it to one or more ac
 Two **mainlines** wire this end-to-end via the `fd-vaas-*` skills (no glue code to write):
 
 ```
-Video: demand -> /fd-vaas-brainstorm-koubo -> /fd-vaas-video-creator -> /fd-vaas-publish-videos -> video platforms
-Article: article -> /fd-vaas-publish-docs -> article platforms
+Video: demand -> /fd-vaas-brainstorm -> /fd-vaas-video-creator -> /fd-vaas-publish-videos -> video platforms
+Article: topic -> /fd-vaas-brainstorm (图文 mode) -> article -> /fd-vaas-publish-docs -> article platforms
 ```
 
 ---
@@ -74,7 +74,7 @@ The `fd-vaas-*` skills are the wired demand-to-publish pipeline.
 
 ### Video mainline ("make a video and post it")
 
-1. **`/fd-vaas-brainstorm-koubo`** *(optional)* - given a niche/topic, returns a topic matrix (hot/pain/controversy/dry-good/persona), a recommended script framework (golden-3-sec / SCQA / PREP / story-hook / listicle), a differentiation angle, and an optional full outline.
+1. **`/fd-vaas-brainstorm`** *(optional)* - given a niche/topic, returns a topic matrix (hot/pain/controversy/dry-good/persona) in 口播 (voiceover) or 图文 (article) mode: a script framework or article draft (Markdown + plain-text versions), a differentiation angle, and an optional full outline. Built-in compliance: voiceover scripts must not name other platforms or drive traffic off-platform.
 2. **`/fd-vaas-video-creator`** - turns a script into a finished video. Two video types:
    - **Voiceover video**: `new-task -> TTS (seed-tts-2.0, returns audio + official word-level timestamps) -> fix-tts-timings (corrects fake Latin-token endMs) -> preflight -> Remotion render -> <slug>.mp4 (+ .srt)`. **Must run `fix-tts-timings` or subtitles desync.**
    - **Screen-recording video**: open the target page in ego-browser, record with cap during the operation, produce an mp4 (optional mic narration).
@@ -118,7 +118,7 @@ VAAS/
 │   ├── fd-browser-record/              # screen/page recording
 │   ├── fd-cover-image/                 # Remotion brand cover images
 │   ├── fd-coding-{bore,cloudflare,wifi}-tunnel/   # tunnels / LAN sharing
-│   ├── fd-vaas-brainstorm-koubo/        # topic + script brainstorm
+│   ├── fd-vaas-brainstorm/              # voiceover + article brainstorm
 │   ├── fd-vaas-video-creator/          # script -> voiceover video (.mp4 + .srt); built-in TTS/Seedream/Seedance
 │   │   └── scripts/generators/         #   tts-wrapper.js / seedream-wrapper.js / seedance-wrapper.js
 │   ├── fd-vaas-publish-videos/         # video multi-platform publish (ego-browser .mjs + patchright .py)
@@ -217,7 +217,7 @@ Skills are **checked into this repo** (source in `.agents/skills/`; `.claude/ski
 - `/ego-browser` - browser automation (open pages, fill forms, click, scrape, log in).
 - `/fd-browser-record` - open a page + record/screenshot.
 - `/fd-cover-image` - generate brand cover images (horizontal/vertical) via Remotion.
-- `/fd-vaas-brainstorm-koubo` - topic matrix + script outline.
+- `/fd-vaas-brainstorm` - voiceover + article topic matrix, script outline / article draft (dual versions).
 - `/fd-vaas-video-creator` - script -> voiceover video (`.mp4` + `.srt`), or screen-recording video.
 - `/fd-vaas-publish-videos` - one video -> multi-platform (6 video platforms).
 - `/fd-vaas-publish-docs` - one article -> multi-platform (9 article platforms).
@@ -241,7 +241,7 @@ Skills are **checked into this repo** (source in `.agents/skills/`; `.claude/ski
 | `fd-coding-bore-tunnel` | bore.pub tunnel | repo skill | `/bore-tunnel` |
 | `fd-coding-cloudflare-tunnel` | Cloudflare Tunnel (HTTPS) | repo skill | `/cf-tunnel` |
 | `fd-coding-wifi-tunnel` | share a local service over LAN/WiFi | repo skill | `/wifi-tunnel` |
-| `fd-vaas-brainstorm-koubo` | topic matrix + script framework + angle + outline | repo skill (prompt) | `/fd-vaas-brainstorm-koubo` |
+| `fd-vaas-brainstorm` | voiceover topic matrix + script outline / article draft (Markdown + plain-text) + angle | repo skill (prompt) | `/fd-vaas-brainstorm` |
 | `fd-vaas-video-creator` | script -> voiceover `.mp4`+`.srt`; or screen recording; built-in TTS/Seedream/Seedance | repo skill | `/fd-vaas-video-creator` |
 | `fd-vaas-publish-videos` | one video -> 6 video platforms (ego-browser .mjs + patchright .py) | repo skill | `/fd-vaas-publish-videos` |
 | `fd-vaas-publish-docs` | one article -> 9 article platforms (ego-browser instruction-driven) | repo skill | `/fd-vaas-publish-docs` |

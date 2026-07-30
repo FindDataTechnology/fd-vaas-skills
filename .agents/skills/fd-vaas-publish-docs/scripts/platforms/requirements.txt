@@ -1,0 +1,4 @@
+# fd-vaas-publish-docs patchright 运行时依赖
+# 安装:pip install -r requirements.txt && patchright install chromium
+# macOS 上 patchright install chromium 走 https_proxy=http://127.0.0.1:7892(见 memory)
+patchright>=1.40

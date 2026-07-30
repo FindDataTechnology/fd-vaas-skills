@@ -1,6 +1,6 @@
 ---
 name: fd-vaas-publish-docs
-description: 把一篇文章/图文一键分发到主流图文平台(知乎、微信公众号、小红书、雪球、东方财富号、同花顺财经号、今日头条、百家号、微博)。**只做编排 -- 平台差异化文案/字数/标签/封面 + 内容适配 + 发布记录;浏览器自动化全部用 ego-browser,由本 skill 的 references/<platform>.md heredoc 驱动**。触发场景:用户说"把这篇文章发到知乎/公众号/雪球/东财/同花顺/小红书"、"多平台发图文"、"分发这篇文章"、"把这篇图文发出去"、"publish the article/doc"、"post this article to...",或者刚写好一篇 `downloads/fd-docs/<slug>/` 里的文章、要走下一步分发时。**发布前必须让用户确认**(发出去撤不回来);各平台浏览器选择器多为页面结构推断、未在登录态下实机验证,**首次发布前必须用 `references/probe.md` 的 snapshotText 流程核对选择器再驱动**。不要用本 skill 做文档写作本身。
+description: 把一篇文章/图文一键分发到主流图文平台(知乎、微信公众号、小红书、雪球、东方财富号、同花顺财经号、今日头条、百家号、微博)。**只做编排 -- 平台差异化文案/字数/标签/封面 + 内容适配 + 发布记录**。两条浏览器运行时:**默认 ego-browser**(由 references/<platform>.md heredoc 驱动,复用 Chrome 登录态);**`--runtime patchright`**(scripts/platforms/<p>.py,stealth Playwright,独立 profile,跨平台 macOS/Windows)。触发场景:用户说"把这篇文章发到知乎/公众号/雪球/东财/同花顺/小红书"、"多平台发图文"、"分发这篇文章"、"把这篇图文发出去"、"publish the article/doc"、"post this article to...",或者刚写好一篇 `downloads/fd-docs/<slug>/` 里的文章、要走下一步分发时。**发布前必须让用户确认**(发出去撤不回来);各平台浏览器选择器多为页面结构推断、未在登录态下实机验证,**首次发布前必须用 `references/probe.md` 或 `scripts/platforms/probe.py` 核对选择器再驱动**。不要用本 skill 做文档写作本身。
 compatibility: Node.js 18+;ego-browser 已装(`which ego-browser`);目标平台在 ego-browser 继承的 Chrome 登录态里已登录(没登录走 references 里各平台的 handoff 扫码);文档已写好(`downloads/fd-docs/<slug>/article.md` + `meta.json`,或 CLI 直传 `--title --body`)。
 ---
 
@@ -105,7 +105,7 @@ $EDITOR .env   # 改 PLATFORMS_DOCS 和各平台 XXX_DOC_TAGS
 ### 第一步:出适配后的发布计划(必跑)
 
 ```bash
-SKILL=/Users/chengsishi/VAAS/.claude/skills/fd-vaas-publish-docs/scripts
+SKILL=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-publish-docs/scripts
 
 # 读 task dir,出每个平台适配后的标题/正文/标签/封面 + 要 export 的环境变量
 node $SKILL/publish.mjs --slug finddata-open-data --plan
@@ -157,6 +157,44 @@ node $SKILL/publish.mjs --slug finddata-open-data --record --platforms zhihu,wei
 ```
 
 会 append 到 `meta.json` 的 `distribution[]` + `history.md`。
+
+## patchright 运行时(`--runtime patchright`)
+
+默认 `--runtime ego`:本 skill 只 plan/record,浏览器自动化由你按 `references/<platform>.md` 的 heredoc 用 ego-browser 手跑(复用 Chrome 登录态)。
+
+`--runtime patchright`:plan 写 `.adapted/<p>/` 后,`publish.mjs` 逐平台 `spawnSync('python3', ['platforms/<p>.py', ...])`,用 **patchright(stealth Playwright)** 自动开浏览器、登录、填表、传封面、点发布。跨平台(macOS/Windows 都行),是 ego-browser 没有 Windows 版时的替代链路,也可在本机 macOS 直接跑。
+
+```bash
+# 单平台发布(推荐先单平台打通)
+node $SKILL/publish.mjs --slug <name> --runtime patchright --platforms zhihu
+
+# 多平台串行(同账号别并发)
+node $SKILL/publish.mjs --slug <name> --runtime patchright --platforms zhihu,weixin,xiaohongshu
+
+# 调试:--headless=false(默认就 headed,首次登录要看);--auto-publish 跳过确认门(慎用)
+```
+
+**文件**:
+- `scripts/platforms/lib/browser_utils.py` -- patchright sync API 封装(Browser 持久 context、login_or_wait 轮询登录、paste_text 剪贴板灌正文、confirm_gate 发布前确认门、publish_and_verify)
+- `scripts/platforms/<platform>.py` × 9 -- 每平台发文流程,CLI 统一:`--title --body-file --tags --cover --summary --dry-run --auto-publish --headless --markdown --confirm-file --preview`
+- `scripts/platforms/probe.py` -- 选择器核对(打开编辑器 dump 可交互元素 + file input + iframe),8 个未验证平台首次必跑
+- `scripts/platforms/requirements.txt` -- `patchright`
+
+**登录态**:patchright 用**独立持久 profile** `VAAS/.profiles/<platform>/`,**不复用 Chrome 登录态**(和 ego-browser 的关键差异)。每平台首次发布要在 patchright 浏览器窗口里扫码/登录一次,profile 存下来后续复用。`login_or_wait` 轮询 URL 检测登录完成(无 stdin 依赖)。
+
+**发布确认门(非交互)**:`.py` 默认半自动 -- 填完一切 + 截图存 `.adapted/<p>/preview.png` + 等 sentinel 文件 `/tmp/vaas-doc-<platform>.go` 出现才点发布。Claude 在后台跑脚本,看到「等待确认」后问你,你说「确认发布」-> Claude `touch /tmp/vaas-doc-<p>.go` 放行。`--auto-publish` 跳过此门(仅你明确要求时加,对应「违反流程直接发=事故」)。
+
+**正文灌入**:`paste_text` 优先剪贴板粘贴(瞬时、保留换行;知乎专栏还能渲染 markdown -> `--markdown` 走 `body.md`,其余平台走 `body.txt` = mdToPlain 去符号但**保留代码块**),失败回退 `execCommand('insertText')` -> 逐行 `typeText`。
+
+**选择器验证状态**(见各 `references/<platform>.md` 底部):
+- ✅ 已验证:zhihu、xiaohongshu、toutiao、baijiahao、weibo(2026-07-29/30)、eastmoney(部分,需财经号)
+- ⚠️ 待 probe:weixin、xueqiu、tonghuashun -- 首次发布前**必须**跑 `probe.py <platform>` 核对选择器再改 `.py`
+
+**安装**:
+```bash
+pip install -r scripts/platforms/requirements.txt
+patchright install chromium   # macOS 走 https_proxy=http://127.0.0.1:7892(见 memory)
+```
 
 ## 平台差异化默认(为什么值得外化)
 

@@ -75,6 +75,7 @@ const escapedDesc = desc.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 const tagsJson = JSON.stringify(tags);
 
 const egoScript = `
+(async () => {
 await useOrCreateTaskSpace('${taskSpace}');
 
 cliLog('🌐 打开小红书发布页...');
@@ -96,7 +97,8 @@ if (/\\/login\\b/.test(info.url)) {
 ${dryRun ? `
 cliLog('🔍 dry-run 模式');
 await captureScreenshot();
-await handOffTaskSpace('dry-run: 页面已打开');
+cliLog('dry-run: 页面已打开');
+await handOffTaskSpace();
 return;
 ` : ''}
 
@@ -107,7 +109,7 @@ cliLog('等待上传完成...');
 
 // 等上传完成
 for (let i = 0; i < 90; i++) {
-  const done = await js(String.raw\\\`(()=>{const p=document.querySelector('input.upload-input');if(p){const n=p.parentElement&&p.parentElement.querySelector('.preview-new');if(n&&/上传成功|分辨率|重新上传|编辑封面|已上传|已选择|100%/.test(n.innerText))return true}return !!document.querySelector('input[placeholder*="填写标题"]')})()\\\`);
+  const done = await js(String.raw\`(()=>{const p=document.querySelector('input.upload-input');if(p){const n=p.parentElement&&p.parentElement.querySelector('.preview-new');if(n&&/上传成功|分辨率|重新上传|编辑封面|已上传|已选择|100%/.test(n.innerText))return true}return !!document.querySelector('input[placeholder*="填写标题"]')})()\`);
   if (done) break;
   await wait(2);
 }
@@ -148,9 +150,67 @@ for (const t of tags.slice(0, 10)) {
 }
 ` : ''}
 
-// 发布
+// 发布（多候选 + 滚动 + JS 点击兜底）
 cliLog('🚀 点击发布...');
-await click('xpath=//button[normalize-space(text())="发布"]');
+try {
+  const publishResult = await js(\`(async () => {
+  window.scrollTo(0, document.body.scrollHeight);
+  await new Promise(r => setTimeout(r, 500));
+  const candidates = ['发布', '发布笔记', '发布视频'];
+  const isVisible = (el) => {
+    if (!el || !el.getClientRects) return false;
+    const rects = el.getClientRects();
+    if (!rects.length) return false;
+    const rect = rects[0];
+    if (rect.width === 0 || rect.height === 0) return false;
+    const s = getComputedStyle(el);
+    if (s.visibility === 'hidden' || s.display === 'none' || s.opacity === '0' || s.pointerEvents === 'none') return false;
+    return true;
+  };
+  const doClick = (el) => { el.scrollIntoView({ block: 'center' }); el.click(); };
+  const findIn = (root) => {
+    const sels = ['button', '[role="button"]', 'a', 'div'];
+    for (const sel of sels) {
+      for (const el of root.querySelectorAll(sel)) {
+        if (!isVisible(el)) continue;
+        const t = (el.textContent || '').trim();
+        if (candidates.includes(t)) { doClick(el); return { clicked: true, text: t, match: 'exact' }; }
+      }
+    }
+    for (const sel of sels) {
+      for (const el of root.querySelectorAll(sel)) {
+        if (!isVisible(el)) continue;
+        const t = (el.textContent || '').trim();
+        if (t.length > 0 && t.length <= 20 && candidates.some(c => t.includes(c))) { doClick(el); return { clicked: true, text: t, match: 'contains' }; }
+      }
+    }
+    return null;
+  };
+  let result = findIn(document);
+  if (!result) {
+    const hosts = document.querySelectorAll('micro-app, wujie-app');
+    for (const h of hosts) { if (h.shadowRoot) { result = findIn(h.shadowRoot); if (result) break; } }
+  }
+  if (!result) {
+    const xp = '//button[normalize-space(text())="发布"]';
+    const it = document.evaluate(xp, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+    const node = it.singleNodeValue;
+    if (node && isVisible(node)) { doClick(node); result = { clicked: true, text: (node.textContent || '').trim(), match: 'xpath' }; }
+  }
+  return JSON.stringify(result || { clicked: false });
+})()\`);
+  let r;
+  try { r = typeof publishResult === 'string' ? JSON.parse(publishResult) : publishResult; } catch (pe) { r = {}; }
+  if (!r || !r.clicked) {
+    throw new Error('未找到发布按钮' + (r && r.text ? ': ' + r.text : ''));
+  }
+  cliLog('✅ 已点击发布按钮: ' + r.text + ' (' + r.match + ')');
+} catch (e) {
+  cliLog('⚠️ 发布按钮点击失败: ' + e.message);
+  cliLog('请在浏览器中手动点击「发布」按钮完成发布');
+  await handOffTaskSpace();
+  return;
+}
 await wait(3);
 
 // 验证发布
@@ -165,6 +225,7 @@ for (let i = 0; i < 30; i++) {
 
 await captureScreenshot();
 await completeTaskSpace('${taskSpace}', { keep: false });
+})();
 `;
 
 console.log('🚀 启动 ego-browser...\n');

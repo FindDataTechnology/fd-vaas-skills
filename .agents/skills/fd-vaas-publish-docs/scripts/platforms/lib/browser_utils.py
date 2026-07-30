@@ -51,6 +51,11 @@ class Browser:
         if self.proxy:
             kwargs["proxy"] = {"server": self.proxy}
         self.context = self.pw.chromium.launch_persistent_context(**kwargs)
+        # 授予剪贴板权限:paste_text 用 navigator.clipboard.writeText 灌正文(快、保留换行、知乎可渲染 markdown)
+        try:
+            self.context.grant_permissions(["clipboard-read", "clipboard-write"])
+        except Exception:
+            pass
         self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
         return self
 
@@ -313,7 +318,247 @@ def screenshot_confirm(b, prompt, path=None):
     handoff(prompt)
 
 
+# ─── 非交互(Claude 后台运行)用的等待原语 ──────────────────
+def wait_until(predicate, timeout=300, poll=3, hint=""):
+    """轮询 predicate() 直到返回 True 或超时。无 stdin 依赖,适配 Claude 非交互 Bash。"""
+    start = time.time()
+    last_log = 0
+    while time.time() - start < timeout:
+        try:
+            if predicate():
+                return True
+        except Exception:
+            pass
+        elapsed = int(time.time() - start)
+        if hint and elapsed - last_log >= 30:
+            cli_log(f"⏳  {hint} ({elapsed}s)")
+            last_log = elapsed
+        wait(poll)
+    return False
+
+
+def wait_for_file(path, timeout=600, poll=2, hint=""):
+    """轮询直到 path 文件出现(Claude touch 它来放行),出现后删除。无 stdin 依赖。"""
+    start = time.time()
+    last_log = 0
+    while time.time() - start < timeout:
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+            return True
+        elapsed = int(time.time() - start)
+        if hint and elapsed - last_log >= 30:
+            cli_log(f"⏳  {hint} ({elapsed}s) - 放行: touch {path}")
+            last_log = elapsed
+        wait(poll)
+    return False
+
+
+def login_or_wait(b, editor_url, check_fn, timeout=300, hint="请在浏览器扫码登录"):
+    """打开编辑器;若 check_fn() 返回 False,提示并轮询等待登录完成,再重新打开编辑器。"""
+    b.goto(editor_url, then_wait=4)
+    if check_fn():
+        return True
+    cli_log(f"⚠️  未登录,{hint}")
+    ok = wait_until(check_fn, timeout=timeout, poll=3, hint=hint)
+    if ok:
+        b.goto(editor_url, then_wait=4)
+    return ok and check_fn()
+
+
+def confirm_gate(b, confirm_file, screenshot_path=None, hint="确认发布", timeout=7200):
+    """发布前确认门:截图(可选存路径给 Claude 读取)-> 轮询等待 confirm_file 出现 -> 放行。
+
+    无 stdin 依赖:Claude 在后台跑该脚本,看到「等待确认」后问你,你说确认 -> Claude touch confirm_file。
+    """
+    if screenshot_path:
+        try:
+            b.screenshot(screenshot_path)
+            cli_log(f"📸  预览截图已存: {screenshot_path}")
+        except Exception:
+            cli_log("⚠️  截图失败,请直接看浏览器窗口")
+    cli_log(f"⏸️  等待你确认 {hint}:touch {confirm_file}")
+    if not wait_for_file(confirm_file, timeout=timeout, poll=2, hint=f"等待确认 {hint}"):
+        cli_log(f"⚠️  确认超时({timeout}s),未发布")
+        return False
+    cli_log(f"▶  收到放行信号,继续 {hint}")
+    return True
+
+
 # ─── profile 目录 ───────────────────────────────────────
 def default_profile_dir(platform, vaas_root=None):
     vaas = vaas_root or os.environ.get("VAAS_ROOT") or os.path.expanduser("~/VAAS")
     return os.path.join(vaas, ".profiles", platform)
+
+
+# ─── 正文灌入(剪贴板粘贴优先)────────────────────────────
+def _mod_key():
+    """macOS 用 Meta,Windows/Linux 用 Control。"""
+    import sys
+    return "Meta" if sys.platform == "darwin" else "Control"
+
+
+def paste_text(b, text, editor_selector=None, select_all_first=True, label="正文"):
+    """把 text 灌进当前页面 contenteditable 编辑器。
+
+    优先剪贴板粘贴(瞬时、保留换行;知乎专栏还能渲染 markdown);
+    失败回退 execCommand('insertText');再失败回退逐行 typeText(慢但兜底)。
+    """
+    mod = _mod_key()
+    # 1) 聚焦编辑器
+    if editor_selector:
+        try:
+            b.page.locator(editor_selector).first.click(timeout=8000)
+            wait(0.3)
+        except Exception as e:
+            cli_log(f"⚠️  {label}: 聚焦编辑器失败 {e}")
+    if select_all_first:
+        try:
+            b.page.keyboard.press(f"{mod}+a")
+            wait(0.1)
+        except Exception:
+            pass
+    # 2) 写剪贴板
+    ok = False
+    try:
+        b.page.evaluate("(t)=>navigator.clipboard.writeText(t)", text)
+        ok = True
+    except Exception as e:
+        cli_log(f"⚠️  {label}: clipboard.writeText 失败,尝试 pbcopy: {e}")
+    if not ok and _mod_key() == "Meta":
+        try:
+            import subprocess
+            subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
+            ok = True
+        except Exception as e:
+            cli_log(f"⚠️  {label}: pbcopy 失败: {e}")
+    # 3) 粘贴
+    if ok:
+        try:
+            b.page.keyboard.press(f"{mod}+v")
+            wait(1.2)
+            cli_log(f"✅  {label}: 已粘贴({len(text)} 字)")
+            return "paste"
+        except Exception as e:
+            cli_log(f"⚠️  {label}: 粘贴失败,回退 insertText: {e}")
+    # 4) 回退:execCommand insertText
+    try:
+        js = """
+        ([sel, val]) => {
+          const el = sel ? document.querySelector(sel) : document.activeElement;
+          if (!el) return 'no-el';
+          el.focus();
+          document.execCommand('selectAll', false, null);
+          document.execCommand('insertText', false, val);
+          return 'insertText';
+        }
+        """
+        r = b.eval(js, [editor_selector, text])
+        if r and r != "no-el":
+            cli_log(f"✅  {label}: insertText({len(text)} 字)")
+            return r
+    except Exception as e:
+        cli_log(f"⚠️  {label}: insertText 失败,回退 typeText: {e}")
+    # 5) 最后兜底:逐行 typeText
+    try:
+        for line in text.split("\n")[:300]:
+            if line.strip():
+                b.page.keyboard.type(line, delay=5)
+            b.page.keyboard.press("Enter")
+        cli_log(f"✅  {label}: typeText 逐行({len(text)} 字)")
+        return "typeText"
+    except Exception as e:
+        cli_log(f"❌  {label}: 全部灌入方式失败: {e}")
+        return "failed"
+
+
+def fill_title(b, selector, title, label="标题"):
+    """填标题:点击 -> 全选删 -> 填值(普通 input/textarea 用 fill,contenteditable 用 paste)。"""
+    try:
+        loc = b.page.locator(selector).first
+        loc.click(timeout=10000)
+        wait(0.3)
+        # 先试 fill(普通 input/textarea)
+        try:
+            loc.fill(title)
+            cli_log(f"✅  {label}: {title[:40]}")
+            return True
+        except Exception:
+            pass
+        # contenteditable:全选删 -> 粘贴
+        mod = _mod_key()
+        b.page.keyboard.press(f"{mod}+a")
+        b.page.keyboard.press("Delete")
+        return paste_text(b, title, editor_selector=selector, select_all_first=False, label=label) != "failed"
+    except Exception as e:
+        cli_log(f"⚠️  {label} 填写失败: {e}")
+        return False
+
+
+def upload_images(b, selector, paths, label="上传图片"):
+    """给 input[type=file] 设置一张或多张图。paths 可为 str 或 list。"""
+    if isinstance(paths, str):
+        paths = [paths]
+    paths = [p for p in paths if p and os.path.exists(p)]
+    if not paths:
+        cli_log(f"⚠️  {label}: 无有效图片路径")
+        return False
+    try:
+        b.page.locator(selector).first.set_input_files(paths)
+        cli_log(f"✅  {label}: {len(paths)} 张")
+        return True
+    except Exception as e:
+        cli_log(f"⚠️  {label} 失败: {e}")
+        return False
+
+
+def readback(b, selector, n=80, label="正文读回"):
+    """读 contenteditable 编辑器前 n 字,确认正文落位。"""
+    try:
+        js = """
+        (sel) => {
+          const el = document.querySelector(sel)
+            || document.querySelector('iframe')?.contentDocument?.querySelector('[contenteditable="true"]');
+          return (el?.innerText || '').slice(0, 80);
+        }
+        """
+        r = b.eval(js, selector)
+        cli_log(f"📋  {label}: {r}")
+        return r
+    except Exception as e:
+        cli_log(f"⚠️  {label} 失败: {e}")
+        return ""
+
+
+def publish_and_verify(b, click_texts, url_pattern, label="发布", timeout=30, auto_publish=False,
+                       confirm_file=None, screenshot_path=None):
+    """点发布按钮(文本匹配)并按 URL 正则验证。
+
+    confirm_file 给定(Claude 非交互后台):用 confirm_gate 截图+等 sentinel 放行。
+    confirm_file 为 None(TTY):用 screenshot_confirm(input 回车)。
+    auto_publish=True:跳过确认门直接点。"""
+    if not auto_publish:
+        if confirm_file:
+            if not confirm_gate(b, confirm_file, screenshot_path=screenshot_path, hint=label):
+                return False, b.page.url
+        else:
+            screenshot_confirm(b, f"检查标题/正文/封面/标签无误后,回复或回车继续点「{label}」;或自己在浏览器点发布后回车")
+    ok = click_by_text(b, click_texts, label, exact=False)
+    if not ok:
+        cli_log(f"⚠️  未找到「{label}」按钮,请在浏览器手动点击")
+        if confirm_file:
+            cli_log(f"⏸️  手动点完后 touch {confirm_file} 让脚本继续验证")
+            wait_for_file(confirm_file, timeout=300, hint="等待手动发布")
+        else:
+            handoff(f"请在浏览器手动点「{label}」,完成后回车继续")
+    # 验证 URL
+    for _ in range(timeout):
+        wait(1)
+        url = b.page.url
+        if url_pattern.search(url):
+            cli_log(f"✅  {label} 成功: {url}")
+            return True, url
+    cli_log(f"⚠️  {label} 未在 {timeout}s 内确认成功(当前 URL: {b.page.url})")
+    return False, b.page.url

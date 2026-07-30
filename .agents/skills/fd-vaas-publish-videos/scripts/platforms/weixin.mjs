@@ -81,26 +81,26 @@ const egoScript = `
   // 等待 wujie-app shadow DOM 加载
   cliLog('⏳ 等待 Wujie 微前端加载...');
   for (let i = 0; i < 15; i++) {
-    const ready = await js(\\\`!!document.querySelector('wujie-app')?.shadowRoot?.querySelector('input[type="file"]')\\\`);
+    const ready = await js(\`!!document.querySelector('wujie-app')?.shadowRoot?.querySelector('input[type="file"]')\`);
     if (ready) { cliLog('✅ Wujie 已加载'); break; }
     await wait(2);
   }
 
   // 检查是否需要登录
-  const needsLogin = await js(\\\`(() => {
+  const needsLogin = await js(\`(() => {
     const sr = document.querySelector('wujie-app')?.shadowRoot;
     if (!sr) return true;
     // 如果有登录二维码或登录按钮，说明未登录
     const text = sr.textContent || '';
     return text.includes('扫码登录') || text.includes('二维码') || !sr.querySelector('input[type="file"]');
-  })()\\\`);
+  })()\`);
 
   if (needsLogin) {
     cliLog('⚠️ 需要登录视频号');
     cliLog('   请切换到 ego-browser 窗口，用微信扫码登录');
     for (let i = 0; i < 60; i++) {
       await wait(3);
-      const loggedIn = await js(\\\`!!document.querySelector('wujie-app')?.shadowRoot?.querySelector('input[type="file"]')\\\`);
+      const loggedIn = await js(\`!!document.querySelector('wujie-app')?.shadowRoot?.querySelector('input[type="file"]')\`);
       if (loggedIn) { cliLog('✅ 登录成功！'); break; }
     }
   }
@@ -108,7 +108,8 @@ const egoScript = `
   ${dryRun ? `
   cliLog('🔍 dry-run 模式，仅打开页面');
   await captureScreenshot();
-  await handOffTaskSpace('dry-run: 页面已打开');
+  cliLog('dry-run: 页面已打开');
+  await handOffTaskSpace();
   return;
   ` : ''}
 
@@ -123,7 +124,7 @@ const egoScript = `
   await wait(1);
 
   cliLog('📤 通过 fetch + DataTransfer 上传视频...');
-  const uploadResult = await js(String.raw\\\`(() => {
+  const uploadResult = await js(String.raw\`(() => {
     return fetch('http://localhost:${PORT}/video.mp4')
       .then(r => r.blob())
       .then(blob => {
@@ -140,7 +141,7 @@ const egoScript = `
         return 'file set: count=' + input.files.length + ', size=' + input.files[0].size;
       })
       .catch(e => 'error: ' + e.message);
-  })()\\\`);
+  })()\`);
   cliLog('上传结果: ' + uploadResult);
 
   server.close();
@@ -150,13 +151,13 @@ const egoScript = `
   cliLog('⏳ 等待视频上传完成...');
   for (let i = 0; i < 30; i++) {
     await wait(10);
-    const status = await js(\\\`(() => {
+    const status = await js(\`(() => {
       const sr = document.querySelector('wujie-app')?.shadowRoot;
       const form = sr?.querySelector('.form');
       const text = form?.textContent?.trim() || '';
       const uploading = text.includes('文件上传中');
       return { uploading, text: text.slice(0, 40) };
-    })()\\\`);
+    })()\`);
     if (!status.uploading) {
       cliLog('✅ 视频上传完成！');
       break;
@@ -167,7 +168,7 @@ const egoScript = `
   // 填写描述
   ${desc ? `
   cliLog('📝 填写描述...');
-  await js(\\\`(() => {
+  await js(\`(() => {
     const sr = document.querySelector('wujie-app')?.shadowRoot;
     const editor = sr?.querySelector('.input-editor');
     if (!editor) return 'no editor';
@@ -176,24 +177,70 @@ const egoScript = `
     document.execCommand('delete', false, null);
     document.execCommand('insertText', false, '${escapedDesc}');
     return 'desc filled: ' + editor.textContent.trim().slice(0, 40);
-  })()\\\`);
+  })()\`);
   await wait(2);
   ` : ''}
 
-  // 点击发表
+  // 点击发表（多候选 + 滚动 + JS 点击兜底）
   cliLog('🚀 点击发表按钮...');
-  const publishResult = await js(\\\`(() => {
-    const sr = document.querySelector('wujie-app')?.shadowRoot;
-    const btns = sr?.querySelectorAll('.weui-desktop-btn_primary');
-    for (const btn of btns) {
-      if (btn.textContent?.trim() === '发表' && !btn.disabled) {
-        btn.click();
-        return 'clicked 发表';
+  try {
+    const publishResult = await js(\`(async () => {
+  window.scrollTo(0, document.body.scrollHeight);
+  await new Promise(r => setTimeout(r, 500));
+  const candidates = ['发表', '发表视频', '发布'];
+  const isVisible = (el) => {
+    if (!el || !el.getClientRects) return false;
+    const rects = el.getClientRects();
+    if (!rects.length) return false;
+    const rect = rects[0];
+    if (rect.width === 0 || rect.height === 0) return false;
+    const s = getComputedStyle(el);
+    if (s.visibility === 'hidden' || s.display === 'none' || s.opacity === '0' || s.pointerEvents === 'none') return false;
+    return true;
+  };
+  const doClick = (el) => { el.scrollIntoView({ block: 'center' }); el.click(); };
+  const findIn = (root) => {
+    const sels = ['button', '[role="button"]', 'a', 'div'];
+    for (const sel of sels) {
+      for (const el of root.querySelectorAll(sel)) {
+        if (!isVisible(el)) continue;
+        const t = (el.textContent || '').trim();
+        if (candidates.includes(t)) { doClick(el); return { clicked: true, text: t, match: 'exact' }; }
       }
     }
-    return 'no publish btn';
-  })()\\\`);
-  cliLog('发表: ' + publishResult);
+    for (const sel of sels) {
+      for (const el of root.querySelectorAll(sel)) {
+        if (!isVisible(el)) continue;
+        const t = (el.textContent || '').trim();
+        if (t.length > 0 && t.length <= 20 && candidates.some(c => t.includes(c))) { doClick(el); return { clicked: true, text: t, match: 'contains' }; }
+      }
+    }
+    return null;
+  };
+  let result = null;
+  const sr = document.querySelector('wujie-app')?.shadowRoot;
+  if (sr) result = findIn(sr);
+  if (!result) result = findIn(document);
+  if (!result && sr) {
+    const btns = sr.querySelectorAll('.weui-desktop-btn_primary');
+    for (const btn of btns) {
+      if (btn.textContent && btn.textContent.trim() === '发表' && !btn.disabled) { doClick(btn); result = { clicked: true, text: '发表', match: 'class' }; break; }
+    }
+  }
+  return JSON.stringify(result || { clicked: false });
+})()\`);
+    let r;
+    try { r = typeof publishResult === 'string' ? JSON.parse(publishResult) : publishResult; } catch (pe) { r = {}; }
+    if (!r || !r.clicked) {
+      throw new Error('未找到发表按钮' + (r && r.text ? ': ' + r.text : ''));
+    }
+    cliLog('✅ 已点击发表按钮: ' + r.text + ' (' + r.match + ')');
+  } catch (e) {
+    cliLog('⚠️ 发表按钮点击失败: ' + e.message);
+    cliLog('请在浏览器中手动点击「发表」按钮完成发布');
+    await handOffTaskSpace();
+    return;
+  }
   await wait(5);
 
   // 验证

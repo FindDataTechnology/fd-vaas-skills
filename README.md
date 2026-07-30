@@ -22,8 +22,8 @@ VAAS 是架在两半之上的一个**编排层**，自身没有应用代码：
 两条已接好的**主线**通过 `fd-vaas-*` 技能把这个流程端到端串起来（无需手写胶水代码）：
 
 ```
-视频主线： 需求 -> /fd-vaas-brainstorm-koubo -> /fd-vaas-video-creator -> /fd-vaas-publish-videos -> 视频平台
-图文主线： 文章 -> /fd-vaas-publish-docs -> 图文平台
+视频主线： 需求 -> /fd-vaas-brainstorm -> /fd-vaas-video-creator -> /fd-vaas-publish-videos -> 视频平台
+图文主线： 选题 -> /fd-vaas-brainstorm(图文模式) -> 文章 -> /fd-vaas-publish-docs -> 图文平台
 ```
 
 ---
@@ -76,7 +76,7 @@ VAAS 是架在两半之上的一个**编排层**，自身没有应用代码：
 
 ### 视频主线（「做一支视频并发布」）
 
-1. **`/fd-vaas-brainstorm-koubo`** *（可选）*--给定赛道/主题，返回选题矩阵（热点/痛点/争议/干货/人设）、推荐脚本框架（黄金三秒 / SCQA / PREP / 故事钩子 / 清单体）、差异化角度，以及可选的完整大纲。
+1. **`/fd-vaas-brainstorm`** *（可选）*--给定赛道/主题，按口播 / 图文模式返回选题矩阵（热点/痛点/争议/干货/人设）、脚本框架或图文草稿（Markdown 版 + 纯文本简洁版）、差异化角度，以及可选的完整大纲。内置合规红线：口播稿不出现其他平台名、不引流站外。
 2. **`/fd-vaas-video-creator`**--把文案变成成片。支持两种视频类型：
    - **口播视频**：`new-task -> TTS（seed-tts-2.0，返回音频 + 官方逐字时间戳）-> fix-tts-timings（修正 Latin token 的假 endMs）-> preflight -> Remotion 渲染 -> <slug>.mp4（+ .srt）`。**必须跑 `fix-tts-timings`，否则字幕错位。**
    - **录屏/网页操作视频**：用 ego-browser 打开目标页面操作，过程中用 cap 录屏，产出 mp4（可配麦克风解说）。
@@ -120,7 +120,7 @@ VAAS/
 │   ├── fd-browser-record/              # 录屏/网页操作视频
 │   ├── fd-cover-image/                 # Remotion 品牌封面图
 │   ├── fd-coding-{bore,cloudflare,wifi}-tunnel/   # 内网穿透 / 局域网分享
-│   ├── fd-vaas-brainstorm-koubo/        # 口播选题 + 脚本大纲
+│   ├── fd-vaas-brainstorm/              # 口播 + 图文选题 / 脚本 / 草稿
 │   ├── fd-vaas-video-creator/          # 文案 -> 口播视频（.mp4 + .srt）；内置 TTS/Seedream/Seedance 生成器
 │   │   └── scripts/generators/         #   tts-wrapper.js / seedream-wrapper.js / seedance-wrapper.js
 │   ├── fd-vaas-publish-videos/         # 视频多平台发布（ego-browser .mjs + patchright .py 双运行时）
@@ -219,7 +219,7 @@ npx remotion render      # 把视频渲染成文件
 - `/ego-browser`--浏览器自动化（开页、填表、点击、抓数据、登录）。
 - `/fd-browser-record`--开网页 + 录屏 / 截图。
 - `/fd-cover-image`--用 Remotion 生成品牌封面图（横/竖）。
-- `/fd-vaas-brainstorm-koubo`--口播选题矩阵 + 脚本大纲。
+- `/fd-vaas-brainstorm`--口播 + 图文选题矩阵、脚本大纲 / 图文草稿（Markdown + 纯文本双版本）。
 - `/fd-vaas-video-creator`--文案 -> 口播视频（`.mp4` + `.srt`），或录屏视频。
 - `/fd-vaas-publish-videos`--一支视频 -> 多平台发布（6 个视频平台）。
 - `/fd-vaas-publish-docs`--一篇文章 -> 多平台发布（9 个图文平台）。
@@ -243,7 +243,7 @@ npx remotion render      # 把视频渲染成文件
 | `fd-coding-bore-tunnel` | bore.pub 内网穿透 | 仓库技能 | `/bore-tunnel` |
 | `fd-coding-cloudflare-tunnel` | Cloudflare Tunnel（HTTPS）内网穿透 | 仓库技能 | `/cf-tunnel` |
 | `fd-coding-wifi-tunnel` | 局域网 / WiFi 分享本地服务 | 仓库技能 | `/wifi-tunnel` |
-| `fd-vaas-brainstorm-koubo` | 选题矩阵 + 脚本框架 + 差异化角度 + 大纲 | 仓库技能（纯提示词） | `/fd-vaas-brainstorm-koubo` |
+| `fd-vaas-brainstorm` | 口播选题矩阵 + 脚本大纲 / 图文草稿（Markdown + 纯文本双版本）+ 差异化角度 | 仓库技能（纯提示词） | `/fd-vaas-brainstorm` |
 | `fd-vaas-video-creator` | 文案 -> 口播视频 `.mp4`+`.srt`；或录屏视频；内置 TTS/Seedream/Seedance | 仓库技能 | `/fd-vaas-video-creator` |
 | `fd-vaas-publish-videos` | 一支视频 -> 6 个视频平台（ego-browser .mjs + patchright .py 双运行时） | 仓库技能 | `/fd-vaas-publish-videos` |
 | `fd-vaas-publish-docs` | 一篇文章 -> 9 个图文平台（ego-browser 指令驱动） | 仓库技能 | `/fd-vaas-publish-docs` |

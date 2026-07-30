@@ -79,6 +79,7 @@ const escapedThumb = absThumbnail.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 const escapedVis = visibility.replace(/'/g, "\\'");
 
 const egoScript = `
+(async () => {
 await useOrCreateTaskSpace('${taskSpace}');
 
 cliLog('🌐 打开 YouTube Studio 上传页...');
@@ -86,16 +87,16 @@ await gotoAndWait('https://studio.youtube.com/videos/upload');
 await wait(5);
 
 // 检查登录
-const loginCheck = await js(\\\`(() => {
+const loginCheck = await js(\`(() => {
   const text = document.body.innerText.slice(0, 500);
   return text.includes('Sign in') || text.includes('sign in') || text.includes('登录');
-})()\\\`);
+})()\`);
 if (loginCheck) {
   cliLog('⚠️ 需要登录 Google 账号');
   cliLog('   请切换到 ego-browser 窗口完成登录（可能需要 2FA）');
   for (let i = 0; i < 100; i++) {
     await wait(3);
-    const stillLogin = await js(\\\`document.body.innerText.includes('Sign in')\\\`);
+    const stillLogin = await js(\`document.body.innerText.includes('Sign in')\`);
     if (!stillLogin) { cliLog('✅ 登录成功！'); break; }
   }
 }
@@ -103,7 +104,8 @@ if (loginCheck) {
 ${dryRun ? `
 cliLog('🔍 dry-run 模式');
 await captureScreenshot();
-await handOffTaskSpace('dry-run: 页面已打开');
+cliLog('dry-run: 页面已打开');
+await handOffTaskSpace();
 return;
 ` : ''}
 
@@ -116,14 +118,14 @@ await wait(30);
 // 等待上传对话框出现
 cliLog('⏳ 等待上传对话框...');
 for (let i = 0; i < 15; i++) {
-  const hasDialog = await js(\\\`!!document.querySelector('ytcp-uploads-dialog')\\\`);
+  const hasDialog = await js(\`!!document.querySelector('ytcp-uploads-dialog')\`);
   if (hasDialog) break;
   await wait(3);
 }
 
 // ⚠️ 强制打开 Polymer 对话框
 cliLog('🔓 强制打开 Polymer 对话框...');
-await js(\\\`(() => {
+await js(\`(() => {
   const dialog = document.querySelector('ytcp-uploads-dialog');
   if (!dialog) return 'no dialog';
   const paper = dialog.querySelector('tp-yt-paper-dialog');
@@ -133,12 +135,12 @@ await js(\\\`(() => {
     paper.setAttribute('opened', '');
   }
   return 'forced open';
-})()\\\`);
+})()\`);
 await wait(2);
 
 // 填写标题（contenteditable #textbox，用 execCommand）
 cliLog('📝 填写标题...');
-await js(\\\`(() => {
+await js(\`(() => {
   const textbox = document.querySelector('#textbox');
   if (!textbox) return 'no textbox';
   textbox.focus();
@@ -146,13 +148,13 @@ await js(\\\`(() => {
   document.execCommand('delete', false, null);
   document.execCommand('insertText', false, '${escapedTitle}');
   return 'title set';
-})()\\\`);
+})()\`);
 await wait(1);
 
 // 填写描述（第二个 #textbox）
 ${desc ? `
 cliLog('📝 填写描述...');
-await js(\\\`(() => {
+await js(\`(() => {
   const textboxes = document.querySelectorAll('#textbox[contenteditable]');
   if (textboxes.length >= 2) {
     textboxes[1].focus();
@@ -162,13 +164,13 @@ await js(\\\`(() => {
     return 'desc set';
   }
   return 'no desc textbox';
-})()\\\`);
+})()\`);
 await wait(1);
 ` : ''}
 
 // ⚠️ 选择 "No, it's not made for kids"（必答！否则 Next 禁用）
 cliLog('👶 选择 "Not made for kids"...');
-await js(\\\`(() => {
+await js(\`(() => {
   const radios = document.querySelectorAll('tp-yt-paper-radio-button');
   for (const r of radios) {
     if (r.textContent?.includes('No') && r.textContent?.includes('kids')) {
@@ -177,13 +179,13 @@ await js(\\\`(() => {
     }
   }
   return 'not found';
-})()\\\`);
+})()\`);
 await wait(1);
 
 // 上传缩略图（可选）
 ${absThumbnail ? `
 cliLog('🖼️ 上传缩略图...');
-await js(\\\`document.querySelector('#thumbnail [class*="upload"]')?.click()\\\`);
+await js(\`document.querySelector('#thumbnail [class*="upload"]')?.click()\`);
 await wait(1);
 try {
   await uploadFile('input[type="file"][accept*="image"]', '${escapedThumb}');
@@ -197,23 +199,23 @@ try {
 // 点击 Next 3 次（Details -> Video elements -> Checks -> Visibility）
 cliLog('➡️ 导航到 Visibility 步骤...');
 for (let i = 0; i < 3; i++) {
-  await js(\\\`(() => {
+  await js(\`(() => {
     // 先找 ytcp-button 含 "Next"
     const btns = document.querySelectorAll('ytcp-button, #next-button');
     for (const b of btns) {
       if (b.textContent?.trim() === 'Next' && !b.hasAttribute('disabled') && !b.disabled) {
         b.click();
-        return 'next ' + (${i}+1);
+        return 'next ' + (\${i}+1);
       }
     }
     return 'no next (may be processing)';
-  })()\\\`);
+  })()\`);
   await wait(5);  // Checks 步骤需要等待处理
 }
 
 // 选择可见性
 cliLog('👁️ 选择可见性: ${escapedVis}...');
-await js(\\\`(() => {
+await js(\`(() => {
   const radios = document.querySelectorAll('tp-yt-paper-radio-button');
   for (const r of radios) {
     if (r.textContent?.includes('${escapedVis}')) {
@@ -222,26 +224,70 @@ await js(\\\`(() => {
     }
   }
   return 'not found';
-})()\\\`);
+})()\`);
 await wait(1);
 
-// 点击 Publish
+// 点击 Publish（多候选 + 滚动 + JS 点击兜底）
 cliLog('🚀 点击 Publish...');
-await js(\\\`(() => {
-  const btn = document.querySelector('#done-button');
-  if (btn && !btn.hasAttribute('disabled')) {
-    btn.click();
-    return 'published via #done-button';
+try {
+  const publishResult = await js(\`(async () => {
+  window.scrollTo(0, document.body.scrollHeight);
+  await new Promise(r => setTimeout(r, 500));
+  const candidates = ['Publish', 'Save', '发布'];
+  const isVisible = (el) => {
+    if (!el || !el.getClientRects) return false;
+    const rects = el.getClientRects();
+    if (!rects.length) return false;
+    const rect = rects[0];
+    if (rect.width === 0 || rect.height === 0) return false;
+    const s = getComputedStyle(el);
+    if (s.visibility === 'hidden' || s.display === 'none' || s.opacity === '0' || s.pointerEvents === 'none') return false;
+    return true;
+  };
+  const doClick = (el) => { el.scrollIntoView({ block: 'center' }); el.click(); };
+  const findIn = (root) => {
+    const sels = ['button', '[role="button"]', 'a', 'div'];
+    for (const sel of sels) {
+      for (const el of root.querySelectorAll(sel)) {
+        if (!isVisible(el)) continue;
+        const t = (el.textContent || '').trim();
+        if (candidates.includes(t)) { doClick(el); return { clicked: true, text: t, match: 'exact' }; }
+      }
+    }
+    for (const sel of sels) {
+      for (const el of root.querySelectorAll(sel)) {
+        if (!isVisible(el)) continue;
+        const t = (el.textContent || '').trim();
+        if (t.length > 0 && t.length <= 20 && candidates.some(c => t.includes(c))) { doClick(el); return { clicked: true, text: t, match: 'contains' }; }
+      }
+    }
+    return null;
+  };
+  let result = findIn(document);
+  if (!result) {
+    const btn = document.querySelector('#done-button');
+    if (btn && isVisible(btn) && !btn.hasAttribute('disabled') && !btn.disabled) { doClick(btn); result = { clicked: true, text: 'Publish', match: 'id' }; }
   }
-  const btns = document.querySelectorAll('ytcp-button');
-  for (const b of btns) {
-    if (b.textContent?.trim() === 'Publish') {
-      b.click();
-      return 'published via ytcp-button';
+  if (!result) {
+    const btns = document.querySelectorAll('ytcp-button');
+    for (const b of btns) {
+      if (b.textContent && b.textContent.trim() === 'Publish' && !b.hasAttribute('disabled') && !b.disabled) { doClick(b); result = { clicked: true, text: 'Publish', match: 'ytcp' }; break; }
     }
   }
-  return 'no publish btn';
-})()\\\`);
+  return JSON.stringify(result || { clicked: false });
+})()\`);
+  let r;
+  try { r = typeof publishResult === 'string' ? JSON.parse(publishResult) : publishResult; } catch (pe) { r = {}; }
+  if (!r || !r.clicked) {
+    throw new Error('未找到 Publish 按钮' + (r && r.text ? ': ' + r.text : ''));
+  }
+  cliLog('✅ 已点击 Publish 按钮: ' + r.text + ' (' + r.match + ')');
+} catch (e) {
+  cliLog('⚠️ Publish 按钮点击失败: ' + e.message);
+  cliLog('请在浏览器中手动点击「Publish」按钮完成发布');
+  await handOffTaskSpace();
+  return;
+}
 await wait(5);
 
 // 验证
@@ -251,6 +297,7 @@ cliLog(success ? '✅ 发布成功！' : '⚠️ 请检查发布状态');
 
 await captureScreenshot();
 await completeTaskSpace('${taskSpace}', { keep: false });
+})();
 `;
 
 console.log('🚀 启动 ego-browser...\n');

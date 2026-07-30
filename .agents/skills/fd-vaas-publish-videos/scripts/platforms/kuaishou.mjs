@@ -72,6 +72,7 @@ const escapedFile = absFile.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 const escapedDesc = fullDesc.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/`/g, '\\`');
 
 const egoScript = `
+(async () => {
 await useOrCreateTaskSpace('${taskSpace}');
 
 cliLog('🌐 打开快手创作者平台...');
@@ -79,33 +80,34 @@ await gotoAndWait('https://cp.kuaishou.com/article/publish/video');
 await wait(5);
 
 // 检查登录
-const loginCheck = await js(\\\`(() => {
+const loginCheck = await js(\`(() => {
   const text = document.body.innerText.slice(0, 500);
   return text.includes('扫码登录') || text.includes('密码登录');
-})()\\\`);
+})()\`);
 if (loginCheck) {
   cliLog('⚠️ 需要登录快手');
   cliLog('   请切换到 ego-browser 窗口扫码登录');
   for (let i = 0; i < 60; i++) {
     await wait(3);
-    const stillLogin = await js(\\\`document.body.innerText.includes('扫码登录')\\\`);
+    const stillLogin = await js(\`document.body.innerText.includes('扫码登录')\`);
     if (!stillLogin) { cliLog('✅ 登录成功！'); break; }
   }
 }
 
 // ⚠️ 移除 React Joyride 遮罩（关键！否则拦截所有点击）
 cliLog('🧹 移除 React Joyride 遮罩...');
-await js(\\\`(() => {
+await js(\`(() => {
   const overlays = document.querySelectorAll('[class*="react-joyride"], [class*="joyride"]');
   overlays.forEach(el => el.remove());
   return 'removed ' + overlays.length + ' joyride elements';
-})()\\\`);
+})()\`);
 await wait(1);
 
 ${dryRun ? `
 cliLog('🔍 dry-run 模式');
 await captureScreenshot();
-await handOffTaskSpace('dry-run: 页面已打开');
+cliLog('dry-run: 页面已打开');
+await handOffTaskSpace();
 return;
 ` : ''}
 
@@ -117,7 +119,7 @@ await wait(30);
 
 // 填写描述（contenteditable，用 execCommand）
 cliLog('📝 填写描述...');
-await js(\\\`(() => {
+await js(\`(() => {
   const editor = document.querySelector('[contenteditable="true"]');
   if (!editor) return 'no editor';
   editor.focus();
@@ -125,67 +127,87 @@ await js(\\\`(() => {
   document.execCommand('delete', false, null);
   document.execCommand('insertText', false, '${escapedDesc}');
   return 'filled: ' + editor.textContent.trim().slice(0, 40);
-})()\\\`);
+})()\`);
 await wait(2);
 
 // 设置封面（点击默认封面区域打开 Ant Design Modal）
 cliLog('🖼️ 设置封面...');
-await js(\\\`document.querySelector('._default-cover')?.click()\\\`);
+await js(\`document.querySelector('._default-cover')?.click()\`);
 await wait(2);
 
 // 在模态框中确认选帧
-const coverResult = await js(\\\`(() => {
+const coverResult = await js(\`(() => {
   const modal = document.querySelector('.ant-modal-body');
   if (!modal) return 'no modal';
   const confirmBtn = modal.querySelector('.ant-btn-primary');
   if (confirmBtn) { confirmBtn.click(); return 'cover confirmed'; }
   return 'no confirm btn';
-})()\\\`);
+})()\`);
 cliLog('封面: ' + coverResult);
 await wait(2);
 
-// ⚠️ 滚动到发布按钮并点击（按钮在视口外！）
-cliLog('📜 滚动到发布按钮...');
-await js(\\\`(() => {
-  // 先找按钮（class 含 hash，可能变化）
-  let btn = document.querySelector('._button-primary_3a3lq_60');
-  if (!btn) {
-    // 备用：找粉色按钮
-    const btns = document.querySelectorAll('button');
-    for (const b of btns) {
-      const bg = getComputedStyle(b).backgroundColor;
-      if (bg.includes('254, 54, 102') && b.textContent?.trim()) {
-        btn = b;
-        break;
-      }
-    }
-  }
-  if (btn) {
-    btn.scrollIntoView({ block: 'center' });
-    return 'scrolled to: ' + btn.textContent?.trim();
-  }
-  return 'no publish btn';
-})()\\\`);
-await wait(1);
-
-// 点击发布
+// 点击发布（多候选 + 滚动 + JS 点击兜底，按钮可能在视口外）
 cliLog('🚀 点击发布...');
-const publishResult = await js(\\\`(() => {
-  let btn = document.querySelector('._button-primary_3a3lq_60');
-  if (!btn) {
+try {
+  const publishResult = await js(\`(async () => {
+  window.scrollTo(0, document.body.scrollHeight);
+  await new Promise(r => setTimeout(r, 500));
+  const candidates = ['发布', '发布视频'];
+  const isVisible = (el) => {
+    if (!el || !el.getClientRects) return false;
+    const rects = el.getClientRects();
+    if (!rects.length) return false;
+    const rect = rects[0];
+    if (rect.width === 0 || rect.height === 0) return false;
+    const s = getComputedStyle(el);
+    if (s.visibility === 'hidden' || s.display === 'none' || s.opacity === '0' || s.pointerEvents === 'none') return false;
+    return true;
+  };
+  const doClick = (el) => { el.scrollIntoView({ block: 'center' }); el.click(); };
+  const findIn = (root) => {
+    const sels = ['button', '[role="button"]', 'a', 'div'];
+    for (const sel of sels) {
+      for (const el of root.querySelectorAll(sel)) {
+        if (!isVisible(el)) continue;
+        const t = (el.textContent || '').trim();
+        if (candidates.includes(t)) { doClick(el); return { clicked: true, text: t, match: 'exact' }; }
+      }
+    }
+    for (const sel of sels) {
+      for (const el of root.querySelectorAll(sel)) {
+        if (!isVisible(el)) continue;
+        const t = (el.textContent || '').trim();
+        if (t.length > 0 && t.length <= 20 && candidates.some(c => t.includes(c))) { doClick(el); return { clicked: true, text: t, match: 'contains' }; }
+      }
+    }
+    return null;
+  };
+  let result = findIn(document);
+  if (!result) {
+    const btn = document.querySelector('._button-primary_3a3lq_60');
+    if (btn && isVisible(btn)) { doClick(btn); result = { clicked: true, text: (btn.textContent || '').trim(), match: 'class' }; }
+  }
+  if (!result) {
     const btns = document.querySelectorAll('button');
     for (const b of btns) {
       const bg = getComputedStyle(b).backgroundColor;
-      if (bg.includes('254, 54, 102') && b.textContent?.includes('发布')) {
-        btn = b;
-        break;
-      }
+      if (bg.includes('254, 54, 102') && b.textContent && b.textContent.includes('发布')) { doClick(b); result = { clicked: true, text: b.textContent.trim(), match: 'color' }; break; }
     }
   }
-  if (btn) { btn.click(); return 'clicked: ' + btn.textContent?.trim(); }
-  return 'no publish btn';
-})()\\\`);
-cliLog('发布: ' + publishResult);
+  return JSON.stringify(result || { clicked: false });
+})()\`);
+  let r;
+  try { r = typeof publishResult === 'string' ? JSON.parse(publishResult) : publishResult; } catch (pe) { r = {}; }
+  if (!r || !r.clicked) {
+    throw new Error('未找到发布按钮' + (r && r.text ? ': ' + r.text : ''));
+  }
+  cliLog('✅ 已点击发布按钮: ' + r.text + ' (' + r.match + ')');
+} catch (e) {
+  cliLog('⚠️ 发布按钮点击失败: ' + e.message);
+  cliLog('请在浏览器中手动点击「发布」按钮完成发布');
+  await handOffTaskSpace();
+  return;
+}
 await wait(5);
 
 // 验证（URL 应变为 manage/video?status=2）
@@ -195,6 +217,7 @@ cliLog(success ? '✅ 发布成功！' : '⚠️ 请检查发布状态');
 
 await captureScreenshot();
 await completeTaskSpace('${taskSpace}', { keep: false });
+})();
 `;
 
 console.log('🚀 启动 ego-browser...\n');

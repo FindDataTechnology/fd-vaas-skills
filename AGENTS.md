@@ -23,7 +23,7 @@ wired end-to-end** via the `fd-vaas-*` skills (no glue code to write by hand):
 
 ```
 demand / 文案
-  -> /fd-vaas-brainstorm-koubo    (optional: 选题 + 脚本大纲 planning)
+  -> /fd-vaas-brainstorm           (optional: 选题 + 脚本/图文大纲 planning)
   -> /fd-vaas-video-creator       (文案 -> 口播视频 .mp4 + .srt;  built-in TTS/Seedream/Seedance generators;
                                    OR 录屏/网页操作视频 via ego-browser + cap)
   -> /fd-vaas-publish-videos       (.mp4 -> 6 video platforms;  ego-browser macOS / patchright Windows)
@@ -60,7 +60,7 @@ via its built-in `scripts/platforms/<platform>.{mjs,py}` uploaders.*
 | `fd-coding-bore-tunnel` | expose a local port via bore.pub | repo skill | `/bore-tunnel` |
 | `fd-coding-cloudflare-tunnel` | expose a local port via Cloudflare Tunnel (HTTPS) | repo skill | `/cf-tunnel` |
 | `fd-coding-wifi-tunnel` | share a local service over LAN/WiFi | repo skill | `/wifi-tunnel` |
-| `fd-vaas-brainstorm-koubo` | 选题矩阵 + 脚本框架 + 差异化角度 + 大纲 | repo skill (prompt) | `/fd-vaas-brainstorm-koubo` |
+| `fd-vaas-brainstorm` | 口播选题矩阵 + 脚本大纲 / 图文草稿（Markdown + 纯文本双版本）+ 差异化角度 | repo skill (prompt) | `/fd-vaas-brainstorm` |
 | `fd-vaas-video-creator` | 文案 -> 口播视频 `.mp4`+`.srt` (TTS+字幕+Remotion), **or** 录屏视频; **built-in TTS/Seedream/Seedance generators** | repo skill | `/fd-vaas-video-creator` |
 | `fd-vaas-publish-videos` | one video -> 6 video platforms (dual-runtime upload built-in) | repo skill | `/fd-vaas-publish-videos` |
 | `fd-vaas-publish-docs` | one article -> 9 图文 platforms (ego-browser instruction-driven) | repo skill | `/fd-vaas-publish-docs` |
@@ -118,7 +118,7 @@ SKILL_V=.agents/skills/fd-vaas-video-creator/scripts
 SKILL_P=.agents/skills/fd-vaas-publish-videos/scripts
 
 # 1. (optional) brainstorm topics + script outline
-#    /fd-vaas-brainstorm-koubo <赛道>
+#    /fd-vaas-brainstorm <赛道>
 
 # 2. 文案 -> 口播视频 (new-task -> TTS -> fix-tts-timings -> preflight -> Remotion render)
 node $SKILL_V/new-task.mjs    --slug <slug> --script /path/to/script.txt [--width 1920 --height 1080]

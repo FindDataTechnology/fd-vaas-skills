@@ -88,6 +88,7 @@ console.log(`🎵 抖音视频发布
 
 // 生成 ego-browser 脚本
 const egoScript = `
+(async () => {
 await useOrCreateTaskSpace('douyin-publish-${Date.now()}');
 
 // ─── 工具函数 ───────────────────────────────────────────
@@ -162,8 +163,8 @@ async function clickByText(texts, label, exact = false) {
   try {
     const result = await js(\`(() => {
       const elements = document.querySelectorAll('button, div, span, a');
-      const targets = ${JSON.stringify(textList)};
-      const exact = ${exact};
+      const targets = \${JSON.stringify(textList)};
+      const exact = \${exact};
       
       for (const el of elements) {
         if (!el.offsetParent) continue;
@@ -213,7 +214,7 @@ async function uploadCover(coverPath, coverType) {
     })()\`);
     
     if (found) {
-      await uploadFile('#douyin-cover-input', '${coverPath}');
+      await uploadFile('#douyin-cover-input', coverPath);
       await wait(5);
       
       // 点击完成按钮
@@ -300,7 +301,7 @@ if (!${dryRun ? 'true' : 'false'}) {
       const editor = document.querySelector('[contenteditable="true"]');
       if (editor) {
         editor.focus();
-        const fullText = \`${fullDesc.replace(/`/g, '\\\\`').replace(/\\$/, '\\\\$')}\`;
+        const fullText = ${JSON.stringify(fullDesc)};
         document.execCommand('insertText', false, fullText);
         return { success: true };
       }
@@ -383,7 +384,9 @@ await wait(0.5);
 // 将控制权交给用户，让用户手动确认和发布
 // 注意：脚本到此退出，任务窗口仍开着。用户回复「发布完成」后，
 // 由 agent 跑清理 heredoc（completeTaskSpace）关掉这个窗口，不要让用户自己关。
-await handOffTaskSpace('请确认所有信息无误后，手动点击「发布」按钮完成上传。发布完成后在对话里回复「发布完成」，我会自动关闭浏览器窗口，不用手动关。');
+cliLog('请确认所有信息无误后，手动点击「发布」按钮完成上传。发布完成后在对话里回复「发布完成」，我会自动关闭浏览器窗口，不用手动关。');
+await handOffTaskSpace();
+})();
 `;
 
 console.log('🚀 启动 ego-browser...\n');

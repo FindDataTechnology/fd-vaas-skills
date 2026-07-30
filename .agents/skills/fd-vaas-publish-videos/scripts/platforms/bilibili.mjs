@@ -77,6 +77,7 @@ const escapedDesc = desc.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 const escapedCover = absCover.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
 const egoScript = `
+(async () => {
 await useOrCreateTaskSpace('${taskSpace}');
 
 cliLog('🌐 打开 B站创作中心上传页...');
@@ -86,22 +87,22 @@ await wait(5);
 // ⚠️ 等待 micro-app 加载
 cliLog('⏳ 等待 micro-app 微前端加载...');
 for (let i = 0; i < 15; i++) {
-  const ready = await js(\\\`!!document.querySelector('micro-app[name=video-up]')?.shadowRoot\\\`);
+  const ready = await js(\`!!document.querySelector('micro-app[name=video-up]')?.shadowRoot\`);
   if (ready) { cliLog('✅ micro-app 已加载'); break; }
   await wait(2);
 }
 
 // 检查登录
-const loginCheck = await js(\\\`(() => {
+const loginCheck = await js(\`(() => {
   const text = document.body.innerText.slice(0, 500);
   return text.includes('扫码登录') || text.includes('登录');
-})()\\\`);
+})()\`);
 if (loginCheck) {
   cliLog('⚠️ 需要登录 B站');
   cliLog('   请切换到 ego-browser 窗口扫码登录');
   for (let i = 0; i < 60; i++) {
     await wait(3);
-    const ready = await js(\\\`!!document.querySelector('micro-app[name=video-up]')?.shadowRoot\\\`);
+    const ready = await js(\`!!document.querySelector('micro-app[name=video-up]')?.shadowRoot\`);
     if (ready) { cliLog('✅ 登录成功！'); break; }
   }
 }
@@ -109,7 +110,8 @@ if (loginCheck) {
 ${dryRun ? `
 cliLog('🔍 dry-run 模式');
 await captureScreenshot();
-await handOffTaskSpace('dry-run: 页面已打开');
+cliLog('dry-run: 页面已打开');
+await handOffTaskSpace();
 return;
 ` : ''}
 
@@ -153,7 +155,7 @@ await wait(30);
 
 // 在 shadow DOM 内填写标题
 cliLog('📝 填写标题...');
-await js(\\\`(() => {
+await js(\`(() => {
   const sr = document.querySelector('micro-app[name=video-up]')?.shadowRoot;
   const input = sr?.querySelector('input[placeholder*="标题"]');
   if (input) {
@@ -163,13 +165,13 @@ await js(\\\`(() => {
     return 'title set';
   }
   return 'no title input';
-})()\\\`);
+})()\`);
 await wait(1);
 
 // 填写简介
 ${desc ? `
 cliLog('📝 填写简介...');
-await js(\\\`(() => {
+await js(\`(() => {
   const sr = document.querySelector('micro-app[name=video-up]')?.shadowRoot;
   const textarea = sr?.querySelector('textarea');
   if (textarea) {
@@ -179,7 +181,7 @@ await js(\\\`(() => {
     return 'desc set';
   }
   return 'no textarea';
-})()\\\`);
+})()\`);
 await wait(1);
 ` : ''}
 
@@ -187,18 +189,18 @@ await wait(1);
 ${tags.length > 0 ? `
 cliLog('🏷️ 添加标签...');
 for (const tag of ${JSON.stringify(tags)}) {
-  await js(\\\`(() => {
+  await js(\`(() => {
     const sr = document.querySelector('micro-app[name=video-up]')?.shadowRoot;
     const tagInput = sr?.querySelector('input[placeholder*="标签"]');
     if (tagInput) {
       tagInput.focus();
-      tagInput.value = '\\\${tag}';
+      tagInput.value = \${JSON.stringify(tag)};
       tagInput.dispatchEvent(new Event('input', { bubbles: true }));
       tagInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      return 'tag: ' + '\\\${tag}';
+      return 'tag: ' + \${JSON.stringify(tag)};
     }
     return 'no tag input';
-  })()\\\`);
+  })()\`);
   await wait(1);
 }
 ` : ''}
@@ -206,12 +208,12 @@ for (const tag of ${JSON.stringify(tags)}) {
 // 上传封面
 ${absCover ? `
 cliLog('🖼️ 上传封面...');
-await js(\\\`(() => {
+await js(\`(() => {
   const sr = document.querySelector('micro-app[name=video-up]')?.shadowRoot;
   const coverArea = sr?.querySelector('[class*="cover"] [class*="upload"], [class*="cover-upload"]');
   coverArea?.click();
   return coverArea ? 'clicked' : 'no cover area';
-})()\\\`);
+})()\`);
 await wait(2);
 try {
   await uploadFile('input[type="file"][accept*="image"]', '${escapedCover}');
@@ -222,14 +224,64 @@ try {
 }
 ` : ''}
 
-// 点击发布
+// 点击发布（多候选 + 滚动 + JS 点击兜底）
 cliLog('🚀 点击发布...');
-await js(\\\`(() => {
+try {
+  const publishResult = await js(\`(async () => {
+  window.scrollTo(0, document.body.scrollHeight);
+  await new Promise(r => setTimeout(r, 500));
+  const candidates = ['立即发布', '发布', '投稿'];
+  const isVisible = (el) => {
+    if (!el || !el.getClientRects) return false;
+    const rects = el.getClientRects();
+    if (!rects.length) return false;
+    const rect = rects[0];
+    if (rect.width === 0 || rect.height === 0) return false;
+    const s = getComputedStyle(el);
+    if (s.visibility === 'hidden' || s.display === 'none' || s.opacity === '0' || s.pointerEvents === 'none') return false;
+    return true;
+  };
+  const doClick = (el) => { el.scrollIntoView({ block: 'center' }); el.click(); };
+  const findIn = (root) => {
+    const sels = ['button', '[role="button"]', 'a', 'div'];
+    for (const sel of sels) {
+      for (const el of root.querySelectorAll(sel)) {
+        if (!isVisible(el)) continue;
+        const t = (el.textContent || '').trim();
+        if (candidates.includes(t)) { doClick(el); return { clicked: true, text: t, match: 'exact' }; }
+      }
+    }
+    for (const sel of sels) {
+      for (const el of root.querySelectorAll(sel)) {
+        if (!isVisible(el)) continue;
+        const t = (el.textContent || '').trim();
+        if (t.length > 0 && t.length <= 20 && candidates.some(c => t.includes(c))) { doClick(el); return { clicked: true, text: t, match: 'contains' }; }
+      }
+    }
+    return null;
+  };
+  let result = null;
   const sr = document.querySelector('micro-app[name=video-up]')?.shadowRoot;
-  const btn = sr?.querySelector('button.submit, [class*="submit"]');
-  if (btn) { btn.click(); return 'clicked submit'; }
-  return 'no submit btn';
-})()\\\`);
+  if (sr) result = findIn(sr);
+  if (!result) result = findIn(document);
+  if (!result && sr) {
+    const btn = sr.querySelector('button.submit, [class*="submit"]');
+    if (btn && isVisible(btn)) { doClick(btn); result = { clicked: true, text: (btn.textContent || '').trim(), match: 'class' }; }
+  }
+  return JSON.stringify(result || { clicked: false });
+})()\`);
+  let r;
+  try { r = typeof publishResult === 'string' ? JSON.parse(publishResult) : publishResult; } catch (pe) { r = {}; }
+  if (!r || !r.clicked) {
+    throw new Error('未找到发布按钮' + (r && r.text ? ': ' + r.text : ''));
+  }
+  cliLog('✅ 已点击发布按钮: ' + r.text + ' (' + r.match + ')');
+} catch (e) {
+  cliLog('⚠️ 发布按钮点击失败: ' + e.message);
+  cliLog('请在浏览器中手动点击「发布」按钮完成发布');
+  await handOffTaskSpace();
+  return;
+}
 await wait(5);
 
 // 验证
@@ -239,6 +291,7 @@ cliLog(success ? '✅ 发布成功！' : '⚠️ 请检查发布状态');
 
 await captureScreenshot();
 await completeTaskSpace('${taskSpace}', { keep: false });
+})();
 `;
 
 console.log('🚀 启动 ego-browser...\n');
