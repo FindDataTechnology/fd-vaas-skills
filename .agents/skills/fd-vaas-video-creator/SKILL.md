@@ -303,6 +303,12 @@ node $SKILL/captions-to-srt.mjs \
 
 **判断**:一次性动画大片(需要视觉设计)走模板;标准口播 + 素材(视频/图片轮播)走 `VoiceoverVideo`。
 
+**新类型模板标准(硬性)**:
+
+- 场景切换 **MUST** 用 `scripts/scene-align.mjs` 从真实字幕时间戳派生 `<Sequence from= durationInFrames=>`(pipeline 里加 `scene-align` 步骤,产物以 `scenesSrc` prop 传给模板)。
+- **MUST NOT** 在模板里硬编码帧数算术(`durationInFrames - N`、写死的 `from=9140` 之类)——VAASTutorial 负帧事故就是这么来的。
+- 帧数公式只信时间戳:`from = round(startMs/1000*fps)`,`durationInFrames = round((endMs-startMs)/1000*fps) + padFrames`。
+
 ## 分发(可选)
 
 ```bash

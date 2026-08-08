@@ -27,13 +27,13 @@
 
 ## Phase 3: scene-align 场景映射
 
-- [ ] 新建 `scripts/scene-align.mjs`：
-  - [ ] 输入：修正后 captions.json + 可选脚本文件（读显式分段标记）+ fps/pad 参数
-  - [ ] 自动分段：句间 gap ≥ 300ms 为边界
-  - [ ] 合并 < 1.5s 短段（并入前段）
-  - [ ] 输出 `[{from, durationInFrames, text, role}]`（role 预留 hook/body/cta）
-- [ ] `--preview` 模式：打印分段表（序号/起止秒/时长/文本前 20 字）供渲染前确认
-- [ ] 写进 SKILL.md 模板标准：新类型 MUST 用 scene-align 派生 Sequence，MUST NOT 硬编码帧数算术
+- [x] 新建 `scripts/scene-align.mjs`：
+  - [x] 输入：修正后 captions.json + 可选脚本文件（读显式分段标记）+ fps/pad 参数
+  - [x] 自动分段：句间 gap ≥ 300ms 为边界
+  - [x] 合并 < 1.5s 短段（并入前段）
+  - [x] 输出 `[{from, durationInFrames, text, role}]`（role 预留 hook/body/cta）
+- [x] `--preview` 模式：打印分段表（序号/起止秒/时长/文本前 20 字）供渲染前确认
+- [x] 写进 SKILL.md 模板标准：新类型 MUST 用 scene-align 派生 Sequence，MUST NOT 硬编码帧数算术
 
 ## Phase 4: 内置类型 dogfood
 

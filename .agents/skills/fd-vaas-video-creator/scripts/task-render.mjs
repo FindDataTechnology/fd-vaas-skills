@@ -14,6 +14,9 @@
  *                    durationInFrames（+tailPad 尾余量）；音频/字幕拷到
  *                    remotion-app/public/（带 slug 前缀）
  *   preflight        音频/字幕/时长三方对齐校验，失败即中止
+ *   scene-align      由字幕时间戳推导 Sequence 分段 → <slug>-scenes.json
+ *                    拷到 remotion-app/public/，props 注入 scenesSrc
+ *                    （参数取 type.defaults 的 gapMs/minSegmentMs/padFrames）
  *   render           组装 props → remotion render → 回写 task.json + history.md
  *
  * 类型可带 types/<id>/steps.mjs（default export {步骤名: (ctx) => ctx}），
@@ -32,7 +35,7 @@
  *
  * props 优先级: type.defaults（非保留键）< 类型输入（<key>Src / 原值）
  *              < 计算值（audioSrc/captionsSrc/durationInFrames/width/height）
- *              < --extra-props
+ *              < pipeline 注入（ctx.renderProps，如 scenesSrc）< --extra-props
  *
  * 前置:
  *   - TTS 生成器已可用（.env 里有 VOL_AGENT_API_KEY 等）
@@ -144,6 +147,7 @@ const ctx = {
   composition,
   tailPad,
   extraProps: extraPropsArg ? JSON.parse(extraPropsArg) : {},
+  renderProps: {}, // pipeline 步骤注入的渲染 props（如 scene-align 的 scenesSrc）
   props: {},
   log: (m) => console.log(m),
 };
@@ -266,6 +270,35 @@ function stepPreflight(ctx) {
   return ctx;
 }
 
+/** scene-align: 字幕时间戳 → Sequence 分段 JSON → props.scenesSrc */
+function stepSceneAlign(ctx) {
+  console.log("🧭 scene-align…");
+  const pubName = `${ctx.slug}-scenes.json`;
+  const d = ctx.type?.defaults ?? {};
+  const sceneArgs = [
+    path.join(ctx.SKILL, "scripts/scene-align.mjs"),
+    "--captions",
+    path.join(ctx.taskDir, "captions.json"),
+    "--fps",
+    String(ctx.fps),
+    "--gap-ms",
+    String(d.gapMs ?? 300),
+    "--min-seg-ms",
+    String(d.minSegmentMs ?? 1500),
+    "--pad-frames",
+    String(d.padFrames ?? 0),
+    "--out",
+    path.join(ctx.PUBLIC, pubName),
+  ];
+  // script.txt 存在时传入：有 ## 标记走显式分段，无标记自动分段
+  const scriptPath = path.join(ctx.taskDir, "script.txt");
+  if (fs.existsSync(scriptPath)) sceneArgs.push("--script", scriptPath);
+  const res = spawnSync("node", sceneArgs, { stdio: "inherit" });
+  if (res.status !== 0) process.exit(res.status || 1);
+  ctx.renderProps.scenesSrc = pubName;
+  return ctx;
+}
+
 /** render: 组装 props → remotion render → 回写 task.json + history.md */
 function stepRender(ctx) {
   const { task } = ctx;
@@ -304,6 +337,7 @@ function stepRender(ctx) {
     durationInFrames: ctx.durationInFrames,
     width: task.video.width,
     height: task.video.height,
+    ...ctx.renderProps,
     ...ctx.extraProps,
   };
 
@@ -353,6 +387,7 @@ const BUILTIN_STEPS = {
   tts: stepTts,
   "fix-tts-timings": stepFixTtsTimings,
   preflight: stepPreflight,
+  "scene-align": stepSceneAlign,
   render: stepRender,
 };
 
