@@ -37,14 +37,15 @@ const ver = (cmd, args = "--version") => {
   }
 };
 
-// .env 关键变量存在性（不读值）
+// .env 关键变量存在性（不读值；占位符视为未配置）
+const PLACEHOLDER = /^(your[-_]|your_|changeme|xxx+|<.*>|\.\.\.)/i;
 const envKeys = () => {
   const p = path.join(VAAS, ".env");
   if (!fs.existsSync(p)) return { file: false, keys: new Set() };
   const keys = new Set();
   for (const line of fs.readFileSync(p, "utf8").split("\n")) {
     const m = line.match(/^\s*([A-Za-z_][A-Za-z_0-9]*)\s*=\s*(\S+)/);
-    if (m && m[2] && !m[2].startsWith("#")) keys.add(m[1].toLowerCase());
+    if (m && m[2] && !m[2].startsWith("#") && !PLACEHOLDER.test(m[2])) keys.add(m[1].toLowerCase());
   }
   return { file: true, keys };
 };
