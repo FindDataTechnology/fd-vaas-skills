@@ -1,0 +1,22 @@
+{
+  "id": "screen-recording",
+  "name": "录屏视频",
+  "description": "已录好的操作/网页录屏入库：ffprobe 实测尺寸时长、归位 <slug>.mp4、回写 manifest，不进 Remotion",
+  "version": 1,
+  "status": "stable",
+  "inputs": {
+    "video": {
+      "required": true,
+      "type": "file",
+      "desc": "已录好的 mp4（来自 /cap 或 /fd-browser-record）"
+    },
+    "notes": {
+      "required": false,
+      "type": "text",
+      "desc": "录屏内容备注（记入 history.md）"
+    }
+  },
+  "pipeline": ["ingest"],
+  "composition": null,
+  "platforms": ["douyin", "xiaohongshu", "bilibili", "weixin", "kuaishou", "youtube"]
+}

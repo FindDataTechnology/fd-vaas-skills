@@ -37,9 +37,9 @@
 
 ## Phase 4: 内置类型 dogfood
 
-- [ ] `types/voiceover/type.json`：映射现有口播流程（pipeline: tts→fix-tts-timings→preflight→render；composition: VoiceoverVideo）
-- [ ] `types/screen-recording/type.json`：pipeline 用自定义 steps.mjs 封装录屏流程
-- [ ] `list.mjs` 正确列出两者；`--type voiceover` 渲染与默认路径产物一致
+- [x] `types/voiceover/type.json`：映射现有口播流程（pipeline: tts→fix-tts-timings→preflight→render；composition: VoiceoverVideo）
+- [x] `types/screen-recording/type.json`：pipeline 用自定义 steps.mjs 封装录屏流程
+- [x] `list.mjs` 正确列出两者；`--type voiceover` 渲染与默认路径产物一致
 
 ## Phase 5: 文档与对齐
 

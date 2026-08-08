@@ -1,0 +1,25 @@
+{
+  "id": "voiceover",
+  "name": "口播视频",
+  "description": "文案转 AI 配音 + 逐字同步字幕 + 画面轮播，标准口播短视频（不带 --type 的旧任务默认走本流程）",
+  "version": 1,
+  "status": "stable",
+  "inputs": {
+    "script": {
+      "required": true,
+      "type": "file",
+      "desc": "口播稿 txt（支持 `## 场景名` 显式分段标记，供 scene-align 用）"
+    },
+    "orientation": {
+      "required": false,
+      "type": "enum",
+      "enum": ["1080x1920", "1920x1080"],
+      "default": "1080x1920",
+      "desc": "竖屏 1080x1920（默认）/ 横屏 1920x1080"
+    }
+  },
+  "pipeline": ["tts", "fix-tts-timings", "preflight", "render"],
+  "composition": "VoiceoverVideo",
+  "defaults": { "voice": "auto", "tailPad": 15 },
+  "platforms": ["douyin", "xiaohongshu", "bilibili", "weixin", "kuaishou", "youtube"]
+}
