@@ -15,15 +15,15 @@
 ## Phase 2: pipeline 解释器
 
 ### 2.1 步骤抽取（纯重构，不改行为）
-- [ ] task-render.mjs 现有流程抽成命名步骤：`tts` → `fix-tts-timings` → `preflight` → `render`
-- [ ] 每步签名统一 `(ctx) => ctx`，ctx 携带 taskDir/task.json/props
-- [ ] 回归：不带 `--type` 跑一次完整口播渲染，产物与变更前一致
+- [x] task-render.mjs 现有流程抽成命名步骤：`tts` → `fix-tts-timings` → `preflight` → `render`
+- [x] 每步签名统一 `(ctx) => ctx`，ctx 携带 taskDir/task.json/props
+- [x] 回归：不带 `--type` 跑一次完整口播渲染，产物与变更前一致
 
 ### 2.2 按类型调度
-- [ ] `new-task.mjs --type <id>`：校验类型存在 + 必填输入齐全，task.json 写入 `type`
-- [ ] `task-render.mjs`：读 task.json.type → registry.get → 按 pipeline 顺序执行
-- [ ] 未知类型错误信息列出可用类型清单
-- [ ] 类型可提供 `types/<id>/steps.mjs` 覆盖/插入自定义步骤（供 screen-recording 等非渲染类型用）
+- [x] `new-task.mjs --type <id>`：校验类型存在 + 必填输入齐全，task.json 写入 `type`
+- [x] `task-render.mjs`：读 task.json.type → registry.get → 按 pipeline 顺序执行
+- [x] 未知类型错误信息列出可用类型清单
+- [x] 类型可提供 `types/<id>/steps.mjs` 覆盖/插入自定义步骤（供 screen-recording 等非渲染类型用）
 
 ## Phase 3: scene-align 场景映射
 
