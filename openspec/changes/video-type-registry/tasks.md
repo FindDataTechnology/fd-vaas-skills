@@ -3,14 +3,14 @@
 ## Phase 1: 类型 schema 与注册发现
 
 ### 1.1 type.json schema
-- [ ] 定义 schema：`id, name, description, version, status, inputs{}, pipeline[], composition, defaults{}, platforms[]`
-- [ ] `inputs` 每项：`{required, type(file|json|text|enum), desc, default?}`
-- [ ] 写 schema 校验函数（无新依赖，手写断言即可），非法 type.json 报具体字段错误
+- [x] 定义 schema：`id, name, description, version, status, inputs{}, pipeline[], composition, defaults{}, platforms[]`
+- [x] `inputs` 每项：`{required, type(file|json|text|enum), desc, default?}`
+- [x] 写 schema 校验函数（无新依赖，手写断言即可），非法 type.json 报具体字段错误
 
 ### 1.2 注册与发现
-- [ ] 新建 `.agents/skills/fd-vaas-video-creator/types/` 目录
-- [ ] `scripts/types/registry.mjs`：扫 `types/*/type.json`，缓存，提供 `get(id)` / `list()` / `validate()`
-- [ ] `scripts/types/list.mjs`：打印类型清单（id/名称/状态/必填输入/适用平台/简介）
+- [x] 新建 `.agents/skills/fd-vaas-video-creator/types/` 目录
+- [x] `scripts/types/registry.mjs`：扫 `types/*/type.json`，缓存，提供 `get(id)` / `list()` / `validate()`
+- [x] `scripts/types/list.mjs`：打印类型清单（id/名称/状态/必填输入/适用平台/简介）
 
 ## Phase 2: pipeline 解释器
 
