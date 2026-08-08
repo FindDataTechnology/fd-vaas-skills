@@ -2,6 +2,28 @@
 
 > **🌐 Language:** [简体中文](README.md) · English (this file)
 
+> 🚀 **One-line install:** `curl -fsSL https://raw.githubusercontent.com/FindDataTechnology/fd-vaas-skills/main/install.sh | bash`
+
+## ⚡ Your first video in 5 minutes
+
+```bash
+export VAAS=<path to the cloned VAAS repo, e.g. ~/fd-vaas-skills>   # all commands below use $VAAS
+
+# 1. Install (skip if you already ran the one-line install)
+cd $VAAS && ./install.sh
+
+# 2. Fill in the key: edit .env, set vol_agent_api_key (Volcengine Ark, https://console.volcengine.com/ark)
+#    Not sure the environment is ready? Run anytime:
+node $VAAS/scripts/doctor.mjs
+
+# 3. Write one line of voiceover and render
+echo "Hello, this is my first VAAS video." > /tmp/demo-script.txt
+node $VAAS/.agents/skills/fd-vaas-video-creator/scripts/new-task.mjs --slug demo --script /tmp/demo-script.txt
+node $VAAS/.agents/skills/fd-vaas-video-creator/scripts/task-render.mjs --slug demo
+
+# Output: $VAAS/downloads/fd-videos/demo/demo.mp4 (+ .srt subtitles)
+```
+
 > Take a content demand, generate a **variable-type resource** (slide deck, document, screen-recording video, AI image/video, or a Remotion-rendered voiceover video), then **publish it automatically to different social-media accounts** - ideally producing a *different* variant per platform.
 
 VAAS is an **orchestration layer** over two halves, with no application code of its own:
@@ -29,6 +51,7 @@ Article: topic -> /fd-vaas-brainstorm (图文 mode) -> article -> /fd-vaas-publi
 ## Table of contents
 
 - [VAAS - Variable Asset Authoring & Syndication](#vaas---variable-asset-authoring--syndication)
+  - [⚡ Your first video in 5 minutes](#your-first-video-in-5-minutes)
   - [How it works](#how-it-works)
   - [VAAS mainlines](#vaas-mainlines)
   - [Repository layout](#repository-layout)
@@ -266,14 +289,14 @@ External CLIs ship their own help - prefer it over guessing flags: `cap guide` /
 
 6 platforms, each with both an ego-browser (`.mjs`, macOS) and a patchright (`.py`, Windows) implementation. Browser automation is **headless** by default.
 
-| Platform | Script | Key technical challenge | Notes |
-|---|---|---|---|
-| `douyin` | `douyin.{mjs,py}` | standard DOM | `--cover-horizontal` + `--cover-vertical`; `--schedule`; tag ≤ 10 |
-| `kuaishou` | `kuaishou.{mjs,py}` | React Joyride overlay + off-screen publish btn | tag ≤ **4** (not 5) |
-| `xiaohongshu` | `xiaohongshu.{mjs,py}` | standard DOM | title ≤ 20 chars; tag ≤ 10 |
-| `bilibili` | `bilibili.{mjs,py}` | **micro-app shadow DOM** | `--cover` (not `--thumb`); `--tid` category; no `--schedule` |
-| `weixin` (Channels) | `weixin.{mjs,py}` | **Wujie shadow DOM** + HTTP server + DataTransfer | no separate title; auto-publishes after processing |
-| `youtube` | `youtube.{mjs,py}` | **Polymer dialog** + 4-step flow | `--thumbnail`; `--visibility`; "not for kids" mandatory |
+| Platform | Script | Key technical challenge | Notes | Verified |
+|---|---|---|---|---|
+| `douyin` | `douyin.{mjs,py}` | standard DOM | `--cover-horizontal` + `--cover-vertical`; `--schedule`; tag ≤ 10 | ✅ macOS ego, real session / ⚠️ Windows patchright inferred |
+| `kuaishou` | `kuaishou.{mjs,py}` | React Joyride overlay + off-screen publish btn | tag ≤ **4** (not 5) | ✅ macOS ego, real session / ⚠️ Windows patchright inferred |
+| `xiaohongshu` | `xiaohongshu.{mjs,py}` | standard DOM | title ≤ 20 chars; tag ≤ 10 | ✅ macOS ego, real session / ⚠️ Windows patchright inferred |
+| `bilibili` | `bilibili.{mjs,py}` | **micro-app shadow DOM** | `--cover` (not `--thumb`); `--tid` category; no `--schedule` | ⚠️ inferred, unverified |
+| `weixin` (Channels) | `weixin.{mjs,py}` | **Wujie shadow DOM** + HTTP server + DataTransfer | no separate title; auto-publishes after processing | ⚠️ inferred, unverified |
+| `youtube` | `youtube.{mjs,py}` | **Polymer dialog** + 4-step flow | `--thumbnail`; `--visibility`; "not for kids" mandatory | ⚠️ inferred, unverified |
 
 See `.agents/skills/fd-vaas-publish-videos/references/platform-quirks.md` and `references/<platform>.md`.
 
@@ -281,17 +304,17 @@ See `.agents/skills/fd-vaas-publish-videos/references/platform-quirks.md` and `r
 
 9 platforms, all via ego-browser (instruction-driven, `references/<platform>.md` heredocs).
 
-| Platform | Notes |
-|---|---|
-| Zhihu `zhihu` | article |
-| WeChat Official Account `weixin` | article |
-| Xiaohongshu `xiaohongshu` | image-text note |
-| Xueqiu `xueqiu` | finance column |
-| Eastmoney `eastmoney` | finance |
-| Tonghuashun `tonghuashun` | finance |
-| Toutiao `toutiao` | article |
-| Baijiahao `baijiahao` | article |
-| Weibo `weibo` | long-form |
+| Platform | Notes | Verified |
+|---|---|---|
+| Zhihu `zhihu` | article | ⚠️ inferred, unverified |
+| WeChat Official Account `weixin` | article | ⚠️ inferred, unverified |
+| Xiaohongshu `xiaohongshu` | image-text note | ⚠️ inferred, unverified |
+| Xueqiu `xueqiu` | finance column | ⚠️ inferred, unverified |
+| Eastmoney `eastmoney` | finance | ⚠️ inferred, unverified |
+| Tonghuashun `tonghuashun` | finance | ⚠️ inferred, unverified |
+| Toutiao `toutiao` | article | ⚠️ inferred, unverified |
+| Baijiahao `baijiahao` | article | ⚠️ inferred, unverified |
+| Weibo `weibo` | long-form | ⚠️ inferred, unverified |
 
 > ⚠️ Selectors are mostly page-structure inferences, **unverified on a real logged-in session**. Verify via `references/probe.md`'s `snapshotText` flow before first publish.
 
@@ -403,6 +426,8 @@ pip install -r scripts/requirements.txt
 ---
 
 ## Pitfalls & troubleshooting
+
+> **First line of diagnosis:** `node scripts/doctor.mjs` — checks Node/ffmpeg/keys/remotion deps/skill links and prints the fix for each.
 
 - **`social-auto-upload/` has been removed** - all `sau`, `sau_cli.py`, cookie-file, and `account_name` references in old docs are obsolete. Distribution is now done by ego-browser + patchright built into `fd-vaas-publish-videos` / `fd-vaas-publish-docs`.
 - **Standalone `voice/image/video-generator` skills no longer exist** - generators were merged into `fd-vaas-video-creator/scripts/generators/`. Multi-provider switching is still provided by the root `scripts/litellm-bridge.py`.

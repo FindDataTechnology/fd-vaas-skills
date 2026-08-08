@@ -20,45 +20,45 @@
     - 未发现密钥/内部 IP/账号 ID 泄漏；scene 品牌词仅 FindDataTech/FindData（已公开品牌）
 
 ### 1.3 签入
-- [ ] `git add remotion-app/src remotion-app/package.json remotion-app/tsconfig.json`（及 remotion 配置文件）
-- [ ] `git add remotion-app/public/` 中渲染必需的品牌资产（logo 等），逐个确认
-- [ ] `git add openspec/ mcp-server/`（排除 `__pycache__`、本地 db）
-- [ ] 提交信息说明「公开渲染源码 + 已归档 spec 成果」
+- [x] `git add remotion-app/src remotion-app/package.json remotion-app/tsconfig.json`（及 remotion 配置文件）
+- [x] `git add remotion-app/public/` 中渲染必需的品牌资产（logo 等），逐个确认
+- [x] `git add openspec/ mcp-server/`（排除 `__pycache__`、本地 db）
+- [x] 提交信息说明「公开渲染源码 + 已归档 spec 成果」
 
 ## Phase 2: install.sh 升级
 
 ### 2.1 依赖检查
-- [ ] 检查 Node 18+、git、ffmpeg/ffprobe（缺失给 brew/apt 安装命令）
-- [ ] 按平台检查：macOS → ego-browser、cap、officecli；Windows 提示 patchright + uv
-- [ ] 每项缺失只警告不中断，汇总到最后报告
+- [x] 检查 Node 18+、git、ffmpeg/ffprobe（缺失给 brew/apt 安装命令）
+- [x] 按平台检查：macOS → ego-browser、cap、officecli；Windows 提示 patchright + uv
+- [x] 每项缺失只警告不中断，汇总到最后报告
 
 ### 2.2 项目初始化
-- [ ] `npm install --prefix remotion-app`（失败时给出手动命令）
-- [ ] 检查 `VoiceoverVideo` composition 已注册；未注册则执行/提示 `references/setup.md` 步骤
-- [ ] `.env` 不存在时从 `.env.example` 复制并高亮提示填 Ark key
+- [x] `npm install --prefix remotion-app`（失败时给出手动命令）
+- [x] 检查 `VoiceoverVideo` composition 已注册；未注册则执行/提示 `references/setup.md` 步骤
+- [x] `.env` 不存在时从 `.env.example` 复制并高亮提示填 Ark key
 
 ### 2.3 技能链接（跨平台）
-- [ ] 枚举 `.agents/skills/` 中需要暴露的技能清单（与现有 `.claude/skills` 子集一致）
-- [ ] macOS/Linux：创建/修复软链接；Windows（Git Bash 检测到 `MINGW`/`MSYS` 或无软链权限）：复制目录
-- [ ] 幂等：已存在且指向正确则跳过
+- [x] 枚举 `.agents/skills/` 中需要暴露的技能清单（与现有 `.claude/skills` 子集一致）
+- [x] macOS/Linux：创建/修复软链接；Windows（Git Bash 检测到 `MINGW`/`MSYS` 或无软链权限）：复制目录
+- [x] 幂等：已存在且指向正确则跳过
 
 ### 2.4 收尾
-- [ ] 调用 `node scripts/doctor.mjs`，把报告作为安装结果输出
-- [ ] 打印「下一步：填 .env → 看 README 快速路径」
+- [x] 调用 `node scripts/doctor.mjs`，把报告作为安装结果输出
+- [x] 打印「下一步：填 .env → 看 README 快速路径」
 
 ## Phase 3: doctor.mjs
 
-- [ ] 新建 `scripts/doctor.mjs`，检查项为数据驱动数组 `{name, check(), level, fix}`
-- [ ] 检查：Node/ffmpeg/python 版本；ego-browser/cap/officecli which；`.env` 关键变量存在性（`VOL_*`/Ark key，不打印值）；`remotion-app/node_modules` 存在；`VoiceoverVideo` 注册；`.claude/skills` 链接完整
-- [ ] 输出 ✅/⚠️/❌ 三级 + 修复命令；有 ❌ 退出码非 0
-- [ ] README「坑与排错」节引用 doctor 作为第一排查手段
+- [x] 新建 `scripts/doctor.mjs`，检查项为数据驱动数组 `{name, check(), level, fix}`
+- [x] 检查：Node/ffmpeg/python 版本；ego-browser/cap/officecli which；`.env` 关键变量存在性（`VOL_*`/Ark key，不打印值）；`remotion-app/node_modules` 存在；`VoiceoverVideo` 注册；`.claude/skills` 链接完整
+- [x] 输出 ✅/⚠️/❌ 三级 + 修复命令；有 ❌ 退出码非 0
+- [x] README「坑与排错」节引用 doctor 作为第一排查手段
 
 ## Phase 4: README 快速路径与状态透明
 
-- [ ] README.md 顶部（一键安装之后）新增「5 分钟第一支视频」：install → 填 key → new-task + task-render 两条命令 → 产物路径
-- [ ] 平台支持矩阵加「验证状态」列：✅ 实机验证 / ⚠️ 推断未验证（图文 9 平台标 ⚠️ + 指向 probe.md；patchright Windows 链路标 ⚠️）
-- [ ] README.en.md 同步上述两处改动
-- [ ] AGENTS.md 补一句：改技能改 `.agents/skills/`（真相源），`.claude/skills` 由 install.sh 生成
+- [x] README.md 顶部（一键安装之后）新增「5 分钟第一支视频」：install → 填 key → new-task + task-render 两条命令 → 产物路径
+- [x] 平台支持矩阵加「验证状态」列：✅ 实机验证 / ⚠️ 推断未验证（图文 9 平台标 ⚠️ + 指向 probe.md；patchright Windows 链路标 ⚠️）
+- [x] README.en.md 同步上述两处改动
+- [x] AGENTS.md 补一句：改技能改 `.agents/skills/`（真相源），`.claude/skills` 由 install.sh 生成
 
 ## Phase 5: 验证
 

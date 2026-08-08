@@ -4,6 +4,26 @@
 
 > 🚀 **一键安装：** `curl -fsSL https://raw.githubusercontent.com/FindDataTechnology/fd-vaas-skills/main/install.sh | bash`
 
+## ⚡ 5 分钟第一支视频
+
+```bash
+export VAAS=<克隆下来的仓库根目录，如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
+
+# 1. 安装（已跑过一键安装可跳过）
+cd $VAAS && ./install.sh
+
+# 2. 填密钥：编辑 .env，填入 vol_agent_api_key（火山方舟，https://console.volcengine.com/ark）
+#    不确定环境是否就绪？随时跑：
+node $VAAS/scripts/doctor.mjs
+
+# 3. 写一句口播稿并渲染
+echo "你好，这是 VAAS 的第一支视频。" > /tmp/demo-script.txt
+node $VAAS/.agents/skills/fd-vaas-video-creator/scripts/new-task.mjs --slug demo --script /tmp/demo-script.txt
+node $VAAS/.agents/skills/fd-vaas-video-creator/scripts/task-render.mjs --slug demo
+
+# 产物：$VAAS/downloads/fd-videos/demo/demo.mp4（+ .srt 字幕）
+```
+
 > 接收一个内容需求，生成**可变类型的资源**（幻灯片、文档、屏幕录制视频、AI 图片/视频，或 Remotion 渲染的口播视频），然后**自动发布到不同的社交媒体账号**--理想情况下为每个平台产出*不同*的变体。
 
 VAAS 是架在两半之上的一个**编排层**，自身没有应用代码：
@@ -31,6 +51,7 @@ VAAS 是架在两半之上的一个**编排层**，自身没有应用代码：
 ## 目录
 
 - [VAAS - 可变资源创作与分发](#vaas---可变资源创作与分发)
+  - [⚡ 5 分钟第一支视频](#5-分钟第一支视频)
   - [工作原理](#工作原理)
   - [VAAS 主线](#vaas-主线)
   - [仓库结构](#仓库结构)
@@ -268,14 +289,14 @@ npx remotion render      # 把视频渲染成文件
 
 6 个平台，每个都有 ego-browser（`.mjs`，macOS）和 patchright（`.py`，Windows）两套实现。浏览器自动化默认**无头**。
 
-| 平台 | 脚本 | 核心技术挑战 | 备注 |
-|---|---|---|---|
-| `douyin` | `douyin.{mjs,py}` | 标准 DOM | `--cover-horizontal` + `--cover-vertical`；`--schedule`；tag ≤ 10 |
-| `kuaishou` | `kuaishou.{mjs,py}` | React Joyride 遮罩 + 发布按钮在视口外 | tag ≤ **4**（不是 5） |
-| `xiaohongshu` | `xiaohongshu.{mjs,py}` | 标准 DOM | title ≤ 20 字；tag ≤ 10 |
-| `bilibili` | `bilibili.{mjs,py}` | **micro-app shadow DOM** | `--cover`（不是 `--thumb`）；`--tid` 分区；不支持 `--schedule` |
-| `weixin`（视频号） | `weixin.{mjs,py}` | **Wujie shadow DOM** + HTTP server + DataTransfer | 无独立标题字段；处理后自动发布 |
-| `youtube` | `youtube.{mjs,py}` | **Polymer dialog** + 4 步流程 | `--thumbnail`；`--visibility`；"Not made for kids" 强制 |
+| 平台 | 脚本 | 核心技术挑战 | 备注 | 验证状态 |
+|---|---|---|---|---|
+| `douyin` | `douyin.{mjs,py}` | 标准 DOM | `--cover-horizontal` + `--cover-vertical`；`--schedule`；tag ≤ 10 | ✅ macOS ego 实机验证 / ⚠️ Windows patchright 推断 |
+| `kuaishou` | `kuaishou.{mjs,py}` | React Joyride 遮罩 + 发布按钮在视口外 | tag ≤ **4**（不是 5） | ✅ macOS ego 实机验证 / ⚠️ Windows patchright 推断 |
+| `xiaohongshu` | `xiaohongshu.{mjs,py}` | 标准 DOM | title ≤ 20 字；tag ≤ 10 | ✅ macOS ego 实机验证 / ⚠️ Windows patchright 推断 |
+| `bilibili` | `bilibili.{mjs,py}` | **micro-app shadow DOM** | `--cover`（不是 `--thumb`）；`--tid` 分区；不支持 `--schedule` | ⚠️ 推断未验证 |
+| `weixin`（视频号） | `weixin.{mjs,py}` | **Wujie shadow DOM** + HTTP server + DataTransfer | 无独立标题字段；处理后自动发布 | ⚠️ 推断未验证 |
+| `youtube` | `youtube.{mjs,py}` | **Polymer dialog** + 4 步流程 | `--thumbnail`；`--visibility`；"Not made for kids" 强制 | ⚠️ 推断未验证 |
 
 详见 `.agents/skills/fd-vaas-publish-videos/references/platform-quirks.md` 与 `references/<platform>.md`。
 
@@ -283,17 +304,17 @@ npx remotion render      # 把视频渲染成文件
 
 9 个平台，全部走 ego-browser（指令驱动，`references/<platform>.md` heredoc）。
 
-| 平台 | 备注 |
-|---|---|
-| 知乎 `zhihu` | 文章 |
-| 微信公众号 `weixin` | 图文 |
-| 小红书 `xiaohongshu` | 图文笔记 |
-| 雪球 `xueqiu` | 财经专栏 |
-| 东方财富号 `eastmoney` | 财经 |
-| 同花顺财经号 `tonghuashun` | 财经 |
-| 今日头条 `toutiao` | 文章 |
-| 百家号 `baijiahao` | 文章 |
-| 微博 `weibo` | 长文 |
+| 平台 | 备注 | 验证状态 |
+|---|---|---|
+| 知乎 `zhihu` | 文章 | ⚠️ 推断未验证 |
+| 微信公众号 `weixin` | 图文 | ⚠️ 推断未验证 |
+| 小红书 `xiaohongshu` | 图文笔记 | ⚠️ 推断未验证 |
+| 雪球 `xueqiu` | 财经专栏 | ⚠️ 推断未验证 |
+| 东方财富号 `eastmoney` | 财经 | ⚠️ 推断未验证 |
+| 同花顺财经号 `tonghuashun` | 财经 | ⚠️ 推断未验证 |
+| 今日头条 `toutiao` | 文章 | ⚠️ 推断未验证 |
+| 百家号 `baijiahao` | 文章 | ⚠️ 推断未验证 |
+| 微博 `weibo` | 长文 | ⚠️ 推断未验证 |
 
 > ⚠️ 这些平台的选择器多为页面结构推断，**未在登录态下实机验证**。首次发布前用 `references/probe.md` 的 `snapshotText` 流程核对选择器。
 
@@ -405,6 +426,8 @@ pip install -r scripts/requirements.txt
 ---
 
 ## 坑与排错
+
+> **第一排查手段：** `node scripts/doctor.mjs` —— 逐项检查 Node/ffmpeg/密钥/remotion 依赖/技能链接，给出修复命令。
 
 - **`social-auto-upload/` 已移除**--旧文档里所有 `sau`、`sau_cli.py`、cookie 文件、`account_name` 的描述都过时了。分发现在由 `fd-vaas-publish-videos` / `fd-vaas-publish-docs` 内置的 ego-browser + patchright 完成。
 - **独立的 `voice/image/video-generator` 技能已不存在**--生成器合并进了 `fd-vaas-video-creator/scripts/generators/`。多 Provider 切换仍由根目录 `scripts/litellm-bridge.py` 提供。
