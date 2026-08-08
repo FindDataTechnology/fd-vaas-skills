@@ -62,6 +62,6 @@
 
 ## Phase 5: 验证
 
-- [ ] 干净目录模拟新用户：`git clone` 公开仓库 → install.sh → doctor → 快速路径渲染（可用本机另开目录）
-- [ ] 确认 `git status` 干净、无敏感文件被跟踪
-- [ ] 推送到 GitHub 后以「匿名视角」过一遍 README 快速路径
+- [x] 干净目录模拟新用户：`git clone` 公开仓库 → install.sh → doctor → 快速路径渲染（可用本机另开目录）
+- [x] 确认 `git status` 干净、无敏感文件被跟踪
+- [x] 推送到 GitHub 后以「匿名视角」过一遍 README 快速路径
