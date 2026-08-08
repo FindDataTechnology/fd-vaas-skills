@@ -40,7 +40,7 @@ import {
 import { SubtitleBar } from "./SubtitleBar";
 import { SubtitleBrand } from "./SubtitleBrand";
 import { VoiceOver } from "./voiceover";
-import { VoiceoverVideo } from "./VoiceoverVideo";
+import { VoiceoverVideo } from "./types/VoiceoverVideo";
 import { CostRevolution } from "./CostRevolution";
 import {
   CoverBrand,

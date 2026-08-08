@@ -140,6 +140,11 @@ node $SKILL_P/publish.mjs --slug <slug> --title "…" \
 node $SKILL_P/platforms/douyin.mjs --file <mp4> --title "…" --desc "…" --tags a,b
 ```
 
+**Adding a new video type** = one directory `.agents/skills/fd-vaas-video-creator/types/<id>/`
+(`type.json` declares inputs/pipeline/composition; optional `steps.mjs` overrides pipeline steps) +
+one Remotion template `remotion-app/src/types/<Composition>.tsx` — no core-script changes. List
+registered types: `node $SKILL_V/types/list.mjs`.
+
 ### Article mainline - run from `VAAS/`
 
 ```bash

@@ -88,43 +88,31 @@ remotion渲染视频前要注意使用正确的音频和字幕文件
 
 ## 视频类型判断(开工前先选)
 
-收到需求后,先判断走哪条线:
+已注册的视频类型以文件系统为准,先查清单:
 
-| 类型 | 典型需求 | 产出方式 | 关键工具 |
-|---|---|---|---|
-| **口播视频**(默认) | "把这段文案做成视频"、"配个音加字幕"、"讲解视频" | TTS + 字幕 + Remotion 渲染 | seed-tts-2.0 + Remotion |
-| **录屏/网页操作视频** | "录个网页操作"、"操作演示"、"打开 XX 网站录下来"、"实操视频"、"屏幕录制" | 打开浏览器 → 操作 → cap 录屏 → 导出 mp4 | ego-browser + cap(通过 `fd-browser-record` skill) |
+```bash
+SKILL=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
+node $SKILL/types/list.mjs          # 人类可读:id/名称/输入/pipeline/适用平台
+node $SKILL/types/list.mjs --json   # 机器可读
+```
 
-判断不清时问用户一句:"是口播配音视频还是录屏操作视频?"。不要硬套口播流程到录屏需求上。
+一个类型 = `$VAAS/.agents/skills/fd-vaas-video-creator/types/<id>/type.json`(+ 可选 `steps.mjs` 自定义 pipeline 步骤)。类型声明了输入(inputs)、pipeline、composition、适用平台。新增类型 = 新增目录,不改核心脚本。
 
-**录屏视频直接调 `fd-browser-record` skill** —— 那个 skill 封装了浏览器操作 + cap 录屏的全部细节(权限处理、窗口匹配、后台录制、导出)。本 skill 负责 task 目录管理、产出物回写 task.json、以及和 publish 的衔接。
+- 带类型建任务:`node $SKILL/new-task.mjs --slug <slug> --type <id> --<输入> <值>…`(必填输入缺了会报错并列出)
+- 不带 `--type` = 兼容旧任务,按 `voiceover` 默认流程(tts→fix-tts-timings→preflight→render)
+- 录屏类需求的**录制动作**仍由 `fd-browser-record` skill 完成(浏览器操作 + cap 录屏);`screen-recording` 类型负责把录好的 mp4 纳入 task 目录管理
+
+判断不清时对照 list.mjs 的 description/platforms;都不匹配再问用户,别硬套。
 
 ## 录屏视频流程
 
-调用 `fd-browser-record` skill 完成录制,最终 mp4 纳入 task 目录,publish 流程和口播视频完全一致。
+录屏视频已注册为 `screen-recording` 类型。**录制**仍由 `fd-browser-record` skill 完成(它封装了浏览器操作 + cap 录屏的全部细节:权限处理、窗口匹配、后台录制、导出);录好的 mp4 走类型 pipeline 入库,publish 流程和口播视频完全一致。
 
-### 1. 建 task 目录
+### 1. 调用 fd-browser-record 录制
 
-用 `new-task.mjs` 建目录。录屏视频**不需要文案文件**,但 `new-task.mjs` 强制要 `--script`,所以传一个占位说明文件:
-
-```bash
-# 先写一个操作说明文件(代替 script.txt,记录要录什么)
-echo "操作演示:打开 example.com,展示首页内容" > /tmp/recording-plan.txt
-
-export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
-SKILL=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
-node $SKILL/new-task.mjs --slug <slug> --script /tmp/recording-plan.txt \
-  --width 1920 --height 1080
-```
-
-`script.txt` 里存的是录屏操作说明,不是口播稿。`task.json` 初始 status 是 `draft`。
-
-### 2. 调用 fd-browser-record 录制
-
-**加载 `fd-browser-record` skill** 后执行录制。把输出直接放进 task 目录:
+**加载 `fd-browser-record` skill** 后执行录制,输出到临时路径:
 
 ```bash
-TASK_DIR=$VAAS/downloads/fd-videos/<slug>
 BROWSER_RECORD=$VAAS/.agents/skills/fd-browser-record/scripts/cap-record.sh
 
 # 方式 A:录浏览器窗口(推荐,画面干净,只有网页)
@@ -132,62 +120,36 @@ BROWSER_RECORD=$VAAS/.agents/skills/fd-browser-record/scripts/cap-record.sh
 bash "$BROWSER_RECORD" record-window \
   --match "Google Chrome" \
   --duration <秒数> \
-  --output "$TASK_DIR/<slug>.mp4"
+  --output "/tmp/<slug>.mp4"
 
 # 方式 B:录主屏(需要展示桌面/多窗口操作时用)
 bash "$BROWSER_RECORD" record-screen \
   --duration <秒数> \
-  --output "$TASK_DIR/<slug>.mp4"
+  --output "/tmp/<slug>.mp4"
 
 # 方式 C:后台录制(操作时间不确定,操作完再停)
 bash "$BROWSER_RECORD" record-window --match "Google Chrome" --detach \
-  --output "$TASK_DIR/<slug>.cap"
+  --output "/tmp/<slug>.cap"
 # ... 用 ego-browser 做操作 ...
 bash "$BROWSER_RECORD" stop \
-  --cap-file "$TASK_DIR/<slug>.cap" \
-  --export "$TASK_DIR/<slug>.mp4"
+  --cap-file "/tmp/<slug>.cap" \
+  --export "/tmp/<slug>.mp4"
 ```
 
 **录制时长默认值**:用户没说时长的话,根据操作复杂度估,默认 15 秒起。简单操作 15s,中等 30s,复杂流程 60s。宁愿多录不要少录,长了可以后剪。
 
-### 3. 回写 task.json
-
-录完后,用一段 Node 脚本更新 task.json,把录屏元数据写进去,status 设为 `rendered`:
+### 2. 入库(new-task + ingest)
 
 ```bash
-node -e "
-const fs = require('fs');
-const path = require('path');
-const dir = '$VAAS/downloads/fd-videos/<slug>';
-const task = JSON.parse(fs.readFileSync(path.join(dir, 'task.json'), 'utf8'));
-task.status = 'rendered';
-task.type = 'screen-recording';    // 标记视频类型
-task.recording = {
-  source: 'browser-window',        // browser-window | screen
-  tool: 'cap',
-  windowApp: 'Google Chrome',      // 录的哪个 App 的窗口(主屏录的话省略)
-  targetUrl: 'https://example.com', // 操作的网页(如果有)
-  durationSec: 15,                 // 实际时长
-  output: '<slug>.mp4',
-  capProject: '<slug>.cap',        // 如果保留了 .cap 工程
-};
-task.render = {
-  composition: 'screen-recording',
-  durationInFrames: 15 * 30,       // 估算值,精确值用 ffprobe
-  output: '<slug>.mp4',
-};
-fs.writeFileSync(path.join(dir, 'task.json'), JSON.stringify(task, null, 2) + '\n');
-// 追加 history
-const history = fs.readFileSync(path.join(dir, 'history.md'), 'utf8');
-fs.writeFileSync(path.join(dir, 'history.md'),
-  history + '- ' + new Date().toISOString() + ' — recorded via cap (browser window, 15s) → <slug>.mp4\n');
-console.log('✅ task.json updated (status=rendered, type=screen-recording)');
-"
+SKILL=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
+node $SKILL/new-task.mjs --slug <slug> --type screen-recording \
+  --video /tmp/<slug>.mp4 --notes "操作演示:打开 example.com 展示首页"
+node $SKILL/task-render.mjs --slug <slug>
 ```
 
-录屏视频的 `type` 字段是 `screen-recording`,和口播视频区分。publish 流程不关心这个字段,照样能发。
+`ingest` 步骤自动完成:ffprobe 实测宽高/时长 → rename 归位 `<slug>.mp4`(task 目录只留一份) → 回写 task.json 的 `video` 实测尺寸、`render.{output,durationInFrames,source}`、`status=rendered` → history.md 记账(含 notes)。幂等,可重复跑。
 
-### 4. 后续流程(和口播视频一致)
+### 3. 后续流程(和口播视频一致)
 
 - 加封面:用 `scripts/generate-covers.mjs --slug <name> --title "..."` 一键生成 6 平台统一公司风格封面(横/竖/YouTube/视频号共 4 张,自动回写 task.json render.covers),或用 `embed-poster.mjs` 嵌进 mp4;发布时 publish.mjs 发现没封面会自动补全
 - 发布:走 `fd-vaas-publish-videos`,和口播视频一样按 slug 找到 mp4
@@ -297,17 +259,17 @@ node $SKILL/captions-to-srt.mjs \
   --out /path/to/<slug>/captions.srt
 ```
 
-## 组合视频模板(IntroduceOrg 之类)
+## 组合视频模板(IntroduceXxx = legacy,新类型看这里)
 
-`remotion-app/src/Composition.tsx` 里除了参数化的 `VoiceoverVideo`,还预注册了带动画场景的组合模板(`IntroduceOrg` 含 5 幕 + 2s 封面, `IntroduceGov`, `IntroduceReport` 等)。这些模板把音频、字幕、场景动画一起打包,渲染时只需要给对应的 `--composition <id>` + 手工传 `audioSrc` prop。字幕文本/时间戳硬编码在 `src/SubtitleBar.tsx` 里(不像 `VoiceoverVideo` 那样从 JSON 加载),想复用一个模板换文案 = 改 `SubtitleBar.tsx` 或者新写一个 composition。
+`IntroduceOrg`(5 幕 + 2s 封面)/`IntroduceGov`/`IntroduceReport`/`VAASTutorial` 等是 **legacy 模板**:字幕文本/时间戳硬编码在 `src/SubtitleBar.tsx`、场景帧数写死在源码里,换文案 = 改代码。**不迁移、不复用、不改**(历史视频可能按原样重渲染)。
 
-**判断**:一次性动画大片(需要视觉设计)走模板;标准口播 + 素材(视频/图片轮播)走 `VoiceoverVideo`。
+**新视频类型 = `types/<id>/type.json` + `remotion-app/src/types/<Composition>.tsx` 模板**,模板的一切(字幕/场景/素材)从 props 加载。渲染契约:
 
-**新类型模板标准(硬性)**:
-
-- 场景切换 **MUST** 用 `scripts/scene-align.mjs` 从真实字幕时间戳派生 `<Sequence from= durationInFrames=>`(pipeline 里加 `scene-align` 步骤,产物以 `scenesSrc` prop 传给模板)。
-- **MUST NOT** 在模板里硬编码帧数算术(`durationInFrames - N`、写死的 `from=9140` 之类)——VAASTutorial 负帧事故就是这么来的。
-- 帧数公式只信时间戳:`from = round(startMs/1000*fps)`,`durationInFrames = round((endMs-startMs)/1000*fps) + padFrames`。
+- pipeline 注入:`audioSrc` / `captionsSrc` / `durationInFrames` / `width` / `height`;pipeline 含 `scene-align` 时另有 `scenesSrc`
+- 类型输入:file/json 输入按 `<key>Src` 传引用(文件已拷到 `public/`),text/enum 输入传原值;`type.defaults` 的非保留键垫底,`--extra-props` 最高优先
+- 场景切换 **MUST** 用 `scripts/scene-align.mjs` 从真实字幕时间戳派生 `<Sequence from= durationInFrames=>`
+- **MUST NOT** 硬编码帧数算术(`durationInFrames - N`、写死的 `from=`)——VAASTutorial 负帧事故就是这么来的
+- 帧数公式只信时间戳:`from = round(startMs/1000*fps)`,`durationInFrames = round((endMs-startMs)/1000*fps) + padFrames`
 
 ## 分发(可选)
 

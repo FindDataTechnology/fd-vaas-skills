@@ -52,6 +52,12 @@
 | composition | model |
 | "task-render"（固定） | driver |
 
+**对照检查（2026-08-08 实测）**：`mcp-server/registry.json` 现有 voiceover 条目为
+`{name:"voiceover", provider:"local", model:"remotion", driver:"create_voiceover"}`。映射规则可对齐：
+name=type.id ✓、provider 固定 "local" ✓；model 登记 composition（"VoiceoverVideo"）比 "remotion" 更精确、
+driver 新类型统一 "task-render"。既有 voiceover 条目的 model/driver **保持不动**（mcp_server 已在用，
+改动会破坏既有调用），新类型按上表登记。
+
 ### 3. scene-align 算法
 
 ```

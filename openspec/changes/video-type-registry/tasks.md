@@ -43,7 +43,7 @@
 
 ## Phase 5: 文档与对齐
 
-- [ ] SKILL.md 重写「视频类型判断」节：指向 list.mjs + 类型目录，删除散文式双类型描述
-- [ ] SKILL.md「组合视频模板」节：IntroduceXxx 标记 legacy，说明新类型标准
-- [ ] 对照 `mcp-server/registry.json` 检查 type.json 字段可映射（name/provider/model/driver），记录映射表到 design.md
-- [ ] AGENTS.md 补一句：新视频类型 = types/ 目录 + src/types/ 模板
+- [x] SKILL.md 重写「视频类型判断」节：指向 list.mjs + 类型目录，删除散文式双类型描述
+- [x] SKILL.md「组合视频模板」节：IntroduceXxx 标记 legacy，说明新类型标准
+- [x] 对照 `mcp-server/registry.json` 检查 type.json 字段可映射（name/provider/model/driver），记录映射表到 design.md
+- [x] AGENTS.md 补一句：新视频类型 = types/ 目录 + src/types/ 模板
