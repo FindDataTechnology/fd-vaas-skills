@@ -17,8 +17,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REMOTION_APP = "/Users/chengsishi/VAAS/remotion-app";
-const DEFAULT_LOGO = "/Users/chengsishi/VAAS/downloads/common/icon.png";
+const VAAS = process.env.VAAS_ROOT ?? path.resolve(__dirname, "../../../..");
+const REMOTION_APP = path.join(VAAS, "remotion-app");
+const DEFAULT_LOGO = path.join(VAAS, "downloads/common/icon.png");
 
 // ─── args ───
 const args = process.argv.slice(2);

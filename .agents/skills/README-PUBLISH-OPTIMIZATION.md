@@ -97,7 +97,7 @@ node .agents/skills/douyin-upload/scripts/douyin-upload.mjs \
 
 ### 5. fd-vaas-publish (整合)
 
-**文件**: `fd-vaas-publish/scripts/publish.mjs`
+**文件**: `d-vaas-publish-videos/scripts/publish.mjs`
 
 **改进**:
 - 支持新旧两种 CLI 脚本
@@ -110,7 +110,7 @@ node .agents/skills/douyin-upload/scripts/douyin-upload.mjs \
 **用法**:
 ```bash
 # 多平台一起发布
-node .agents/skills/fd-vaas-publish/scripts/publish.mjs \
+node .agents/skills/d-vaas-publish-videos/scripts/publish.mjs \
   --slug findata-intro \
   --title "寻数科技品牌介绍" \
   --platforms douyin,bilibili,youtube \
@@ -248,7 +248,7 @@ node .agents/skills/douyin-upload/scripts/douyin-upload.mjs \
   --dry-run
 
 # 测试多平台整合 (dry-run)
-node .agents/skills/fd-vaas-publish/scripts/publish.mjs \
+node .agents/skills/d-vaas-publish-videos/scripts/publish.mjs \
   --slug test \
   --title "测试视频" \
   --platforms douyin,bilibili,youtube \

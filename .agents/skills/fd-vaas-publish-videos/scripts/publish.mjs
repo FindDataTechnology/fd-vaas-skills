@@ -26,6 +26,7 @@
  */
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
 
 // ─── args ──────────────────────────────────────────────
@@ -75,7 +76,8 @@ function loadEnv(file) {
   return out;
 }
 
-const VAAS = "/Users/chengsishi/VAAS";
+// VAAS 仓库根 = 本脚本上四级(.agents/skills/<skill>/scripts/)，可用 VAAS_ROOT 环境变量覆盖
+const VAAS = process.env.VAAS_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const TASK_DIR = path.join(VAAS, "downloads/fd-videos", slug);
 const manifestPath = path.join(TASK_DIR, "task.json");
 
@@ -294,7 +296,7 @@ for (const p of platforms) {
   });
 }
 
-// ─── update manifest ───────────────────────────────────
+// ─── update manifest ──────────────────────────────────
 if (!dryRun) {
   manifest.distribution = manifest.distribution ?? [];
   for (const r of results) {
@@ -306,6 +308,20 @@ if (!dryRun) {
       scheduled: schedule || null,
       title: cliTitle,
     });
+
+    // Write to SQLite database
+    const dbWriter = path.join(VAAS_ROOT, 'data', 'db_writer.py');
+    if (fs.existsSync(dbWriter)) {
+      spawnSync('python3', [
+        dbWriter,
+        'distribute',
+        slug,
+        r.platform,
+        r.account,
+        cliTitle,
+        schedule || ''
+      ], { stdio: 'inherit' });
+    }
   }
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
 
@@ -314,6 +330,18 @@ if (!dryRun) {
     const now = new Date().toISOString();
     const summary = results.map((r) => `${r.platform}:${r.ok ? "ok" : "fail"}`).join(", ");
     fs.appendFileSync(historyPath, `- ${now} - publish: ${summary}\n`);
+
+    // Write history to database
+    const dbWriter = path.join(VAAS_ROOT, 'data', 'db_writer.py');
+    if (fs.existsSync(dbWriter)) {
+      spawnSync('python3', [
+        dbWriter,
+        'history',
+        slug,
+        'publish',
+        summary
+      ], { stdio: 'inherit' });
+    }
   }
 }
 

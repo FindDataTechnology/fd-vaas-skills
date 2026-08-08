@@ -12,7 +12,8 @@
 ## 播放前 poster(用户提到"封面"通常指这个)
 
 ```bash
-SKILL=/Users/chengsishi/VAAS/.claude/skills/fd-vaas-video-creator/scripts
+export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
+SKILL=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
 
 # 从视频里 t=1.0s 处截一帧作 poster(若已有 CoverOrg 淡入完的画面)
 node $SKILL/embed-poster.mjs --slug finddata-intro --from-frame 1.0

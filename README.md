@@ -84,8 +84,9 @@ VAAS 是架在两半之上的一个**编排层**，自身没有应用代码：
 3. **`/fd-vaas-publish-videos`**--一支视频 -> 6 个平台。`publish.mjs` 按 `process.platform` 派发：macOS 走 `.mjs`（ego-browser），Windows 走 `.py`（patchright）。从 `.env` 读取各平台偏好（标签、`BILIBILI_TID`、`TENCENT_SHORT_TITLE`、`YOUTUBE_VISIBILITY`、定时），把结果回写到 `task.json` 的 `distribution[]`。`--dry-run` 可预览命令。
 
 ```bash
-SKILL_V=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-video-creator/scripts
-SKILL_P=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-publish-videos/scripts
+export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
+SKILL_V=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
+SKILL_P=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts
 
 # 2. 文案 -> 口播视频
 node $SKILL_V/new-task.mjs    --slug <slug> --script /path/to/script.txt
@@ -104,7 +105,7 @@ node $SKILL_P/publish.mjs --slug <slug> --title "…" --platforms douyin,xiaohon
 - ⚠️ **发布前必须让用户确认**（发出去撤不回来）。各平台浏览器选择器多为页面结构推断、**未在登录态下实机验证**，首次发布前必须用 `references/probe.md` 的 `snapshotText` 流程核对选择器再驱动。
 
 ```bash
-SKILL_D=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-publish-docs/scripts
+SKILL_D=$VAAS/.agents/skills/fd-vaas-publish-docs/scripts
 node $SKILL_D/publish.mjs --slug <slug> --platforms zhihu,xiaohongshu --dry-run   # 预览；确认后再去掉 --dry-run
 ```
 
@@ -303,8 +304,8 @@ npx remotion render      # 把视频渲染成文件
 ### 视频：从文案到多平台发布
 
 ```bash
-SKILL_V=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-video-creator/scripts
-SKILL_P=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-publish-videos/scripts
+SKILL_V=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
+SKILL_P=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts
 
 # 1. 文案 -> 口播视频
 node $SKILL_V/new-task.mjs    --slug demo --script ./script.txt
@@ -322,7 +323,7 @@ node $SKILL_P/platforms/douyin.mjs --file downloads/fd-videos/demo/demo.mp4 \
 ### 图文：发布一篇文章
 
 ```bash
-SKILL_D=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-publish-docs/scripts
+SKILL_D=$VAAS/.agents/skills/fd-vaas-publish-docs/scripts
 # 文章放在 downloads/fd-docs/<slug>/ 下
 node $SKILL_D/publish.mjs --slug <slug> --platforms zhihu,xiaohongshu --dry-run
 # 确认选择器无误、用户同意后，去掉 --dry-run 真正发布

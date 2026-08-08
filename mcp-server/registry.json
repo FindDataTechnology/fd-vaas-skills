@@ -1,0 +1,18 @@
+{
+  "voice": [
+    { "name": "tts", "provider": "volcengine", "model": "${TTS_MODEL}", "driver": "generate_voice" }
+  ],
+  "image": [
+    { "name": "seedream", "provider": "volcengine", "model": "${IMAGE_MODEL}", "driver": "generate_image" }
+  ],
+  "video": [
+    { "name": "seedance", "provider": "volcengine", "model": "${VIDEO_MODEL}", "driver": "generate_video" },
+    { "name": "voiceover", "provider": "local", "model": "remotion", "driver": "create_voiceover" }
+  ],
+  "cover": [
+    { "name": "brand", "provider": "local", "model": "remotion", "driver": "create_cover" }
+  ],
+  "copy": [
+    { "name": "brainstorm", "provider": "llm", "model": "claude", "driver": "brainstorm" }
+  ]
+}

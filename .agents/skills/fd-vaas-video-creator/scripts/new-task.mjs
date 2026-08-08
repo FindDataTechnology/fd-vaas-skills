@@ -22,6 +22,7 @@
  */
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
 const args = process.argv.slice(2);
 function getArg(k) {
@@ -48,7 +49,8 @@ if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
   process.exit(1);
 }
 
-const ROOT = "/Users/chengsishi/VAAS/downloads/fd-videos";
+const VAAS = process.env.VAAS_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
+const ROOT = path.join(VAAS, "downloads/fd-videos");
 const dir = path.join(ROOT, slug);
 if (fs.existsSync(dir)) {
   console.error(`❌ task dir already exists: ${dir}`);

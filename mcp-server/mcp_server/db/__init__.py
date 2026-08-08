@@ -1,0 +1,48 @@
+"""Database layer for VAAS MCP Server."""
+
+from .database import get_connection, init_schema, ensure_db_exists, DB_PATH
+from .models import (
+    generate_id,
+    insert_asset,
+    insert_content,
+    get_asset,
+    get_asset_by_slug,
+    get_content,
+    get_content_by_slug,
+    list_assets,
+    list_content,
+    update_asset_stage,
+    update_content_status,
+    record_asset_history,
+    upsert_variant,
+    get_variants,
+    insert_distribution,
+    get_distribution_by_asset,
+    get_distribution_by_content,
+    get_asset_stats,
+)
+
+__all__ = [
+    "get_connection",
+    "init_schema",
+    "ensure_db_exists",
+    "DB_PATH",
+    "generate_id",
+    "insert_asset",
+    "insert_content",
+    "get_asset",
+    "get_asset_by_slug",
+    "get_content",
+    "get_content_by_slug",
+    "list_assets",
+    "list_content",
+    "update_asset_stage",
+    "update_content_status",
+    "record_asset_history",
+    "upsert_variant",
+    "get_variants",
+    "insert_distribution",
+    "get_distribution_by_asset",
+    "get_distribution_by_content",
+    "get_asset_stats",
+]

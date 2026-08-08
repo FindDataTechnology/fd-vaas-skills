@@ -24,6 +24,7 @@
  */
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { execSync, spawnSync } from "child_process";
 
 const args = process.argv.slice(2);
@@ -43,7 +44,7 @@ if (!slug) {
   process.exit(1);
 }
 
-const VAAS = "/Users/chengsishi/VAAS";
+const VAAS = process.env.VAAS_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const TASK_DIR = path.join(VAAS, "downloads/fd-videos", slug);
 const REMOTION = path.join(VAAS, "remotion-app");
 const PUBLIC = path.join(REMOTION, "public");

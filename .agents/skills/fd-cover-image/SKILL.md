@@ -38,7 +38,8 @@ compatibility: Node.js 18+; Remotion 项目 (VAAS/remotion-app); 项目公共素
 ### 生成品牌封面（最简）
 
 ```bash
-SKILL=/Users/chengsishi/VAAS/.agents/skills/fd-cover-image/scripts
+export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
+SKILL=$VAAS/.agents/skills/fd-cover-image/scripts
 
 node $SKILL/generate-cover.mjs \
   --title "寻数科技" \
@@ -104,7 +105,7 @@ node $SKILL/generate-cover.mjs \
 
 ```bash
 # 直接用 remotion still 渲染任意 composition 的第一帧
-cd /Users/chengsishi/VAAS/remotion-app
+cd $VAAS/remotion-app
 npx remotion still <CompositionId> \
   --output /path/to/output.jpg \
   --image-format jpeg \

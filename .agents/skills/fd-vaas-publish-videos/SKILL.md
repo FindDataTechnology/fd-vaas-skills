@@ -69,7 +69,8 @@ compatibility: macOS=Node.js 18+ + ego-browser; Windows=Python 3.10+ + patchrigh
 ### 一键多平台发布（推荐）
 
 ```bash
-SKILL=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-publish/scripts
+export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
+SKILL=$VAAS/.agents/skills/d-vaas-publish-videos/scripts
 
 # 最简：发到 .env 里配的默认平台
 node $SKILL/publish.mjs --slug finddata-brand-2026 --title "寻数科技｜探索更开放更公平的AI未来"
@@ -92,7 +93,7 @@ node $SKILL/publish.mjs --slug finddata-brand-2026 --title "..." --dry-run
 ### 单平台发布（调试用）
 
 ```bash
-SKILL=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-publish/scripts/platforms
+SKILL=$VAAS/.agents/skills/d-vaas-publish-videos/scripts/platforms
 
 # 抖音
 node $SKILL/douyin.mjs --file video.mp4 --title "标题" --desc "描述" --tags "标签1,标签2" --cover-horizontal cover.jpg
@@ -246,7 +247,7 @@ EOF
 ## 首次配置
 
 ```bash
-cd /Users/chengsishi/VAAS
+cd $VAAS
 [ -f .env ] || cp .env.example .env
 $EDITOR .env   # 改 PLATFORMS 和各平台 XXX_TAGS
 ```

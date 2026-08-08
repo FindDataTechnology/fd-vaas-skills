@@ -1,5 +1,6 @@
 # dotenv
 .env
+.env.bak
 
 # Python
 __pycache__/
@@ -19,17 +20,39 @@ Thumbs.db
 *.swp
 *.swo
 
-# Project specific
-remotion-app/
+# Project data & private state (NEVER commit)
 demands/
 downloads/
-demand.md
+demand*.md
+data/
+vaas.db
+*.bak
+*.bak-*
+.mcp.json
 
 # Browser profiles & runtime state (logged-in sessions - NEVER commit)
 .profiles/
+
+# Remotion: source IS tracked; ignore build output & generated/per-task media
+remotion-app/node_modules/
+remotion-app/out/
+remotion-app/.remotion/
+remotion-app/dist/
+remotion-app/*.mp4
+remotion-app/public/*.mp4
+remotion-app/public/*.mp3
+!remotion-app/public/voice-logo-en.mp3
+!remotion-app/public/voice-logo-zh-clean.mp3
+remotion-app/public/voiceover-*
+remotion-app/public/*captions*.json
+remotion-app/public/vaas-tutorial-*
+remotion-app/public/company-introduce.*
 
 # Temp
 tmp/
 temp/
 tmp-*.txt
 *.log
+
+# Python test cache
+.pytest_cache/

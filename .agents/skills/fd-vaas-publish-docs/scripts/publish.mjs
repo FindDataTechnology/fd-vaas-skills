@@ -24,6 +24,7 @@
  */
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
 
 // ─── args ──────────────────────────────────────────────
@@ -65,7 +66,8 @@ function loadEnv(file) {
   return out;
 }
 
-const VAAS = "/Users/chengsishi/VAAS";
+// VAAS 仓库根 = 本脚本上四级(.agents/skills/<skill>/scripts/)，可用 VAAS_ROOT 环境变量覆盖
+const VAAS = process.env.VAAS_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
 // ─── 平台规格表(与 SKILL.md「平台差异化默认」一致) ───
 // bodyMax=0 无硬上限(只 warn);tagMax=0 不吃标签;markdown=true 正文走 markdown(知乎渲染)
@@ -139,6 +141,7 @@ if (recordMode) {
   const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
   meta.distribution = meta.distribution ?? [];
   const now = new Date().toISOString();
+  const dbWriter = path.join(VAAS, "data", "db_writer.py");
   for (const p of recPlatforms) {
     const spec = PLATFORMS[p];
     if (!spec) { console.error(`⚠️  未知平台 ${p},跳过`); continue; }
@@ -149,6 +152,14 @@ if (recordMode) {
       uploadedAt: now,
       editor: spec.editor,
     });
+    // 统一库:记录文章分发 + 平台变体(标题)
+    if (fs.existsSync(dbWriter)) {
+      spawnSync("python3", [
+        dbWriter, "distribute", slug, p,
+        spec.editor, cliTitle ?? meta.title ?? "",
+        process.env.DOC_SCHEDULE ?? "", "article"
+      ], { stdio: "inherit" });
+    }
     console.log(`✅ 记录 ${p} (${spec.name})`);
   }
   fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + "\n");
@@ -156,6 +167,9 @@ if (recordMode) {
   const historyPath = path.join(TASK_DIR, "history.md");
   const summary = recPlatforms.join(", ");
   fs.appendFileSync(historyPath, `- ${now} - publish-docs: ${summary}\n`);
+  if (fs.existsSync(dbWriter)) {
+    spawnSync("python3", [dbWriter, "history", slug, "publish-docs", summary], { stdio: "inherit" });
+  }
   console.log(`\n已回写 ${metaPath} 的 distribution[](${meta.distribution.length} 条)`);
   process.exit(0);
 }

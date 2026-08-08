@@ -15,7 +15,8 @@
 ## 步骤 1:安装 Remotion 包
 
 ```bash
-cd /Users/chengsishi/VAAS/remotion-app
+export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
+cd $VAAS/remotion-app
 npx remotion add @remotion/captions
 ```
 
@@ -26,8 +27,8 @@ npx remotion add @remotion/captions
 把本 Skill 的 `references/voiceover-video-composition.tsx` 复制为 `remotion-app/src/VoiceoverVideo.tsx`:
 
 ```bash
-cp /Users/chengsishi/VAAS/.claude/skills/fd-vaas-video-creator/references/voiceover-video-composition.tsx \
-   /Users/chengsishi/VAAS/remotion-app/src/VoiceoverVideo.tsx
+cp $VAAS/.agents/skills/fd-vaas-video-creator/references/voiceover-video-composition.tsx \
+   $VAAS/remotion-app/src/VoiceoverVideo.tsx
 ```
 
 ## 步骤 3:注册合成
@@ -72,9 +73,9 @@ import { VoiceoverVideo, type VoiceoverVideoProps } from "./VoiceoverVideo";
 `captions-to-srt.mjs`(把 caption JSON 转 .srt 软字幕)需要在 remotion-app 里:
 
 ```bash
-cp /Users/chengsishi/VAAS/.claude/skills/fd-vaas-video-creator/scripts/captions-to-srt.mjs \
-   /Users/chengsishi/VAAS/remotion-app/scripts/captions-to-srt.mjs
-chmod +x /Users/chengsishi/VAAS/remotion-app/scripts/captions-to-srt.mjs
+cp $VAAS/.agents/skills/fd-vaas-video-creator/scripts/captions-to-srt.mjs \
+   $VAAS/remotion-app/scripts/captions-to-srt.mjs
+chmod +x $VAAS/remotion-app/scripts/captions-to-srt.mjs
 ```
 
 `generate-voiceover.mjs`(调 TTS + 拷贝 audio/captions 进 public/)已经在 `remotion-app/scripts/`,由 VAAS 项目托管,不用再拷。
@@ -82,6 +83,6 @@ chmod +x /Users/chengsishi/VAAS/remotion-app/scripts/captions-to-srt.mjs
 ## 步骤 5:验证
 
 ```bash
-cd /Users/chengsishi/VAAS/remotion-app
+cd $VAAS/remotion-app
 npx remotion compositions   # 应列出 VoiceoverVideo(以及现有的 IntroduceGov 等)
 ```

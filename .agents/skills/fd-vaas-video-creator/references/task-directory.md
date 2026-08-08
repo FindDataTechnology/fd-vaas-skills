@@ -76,7 +76,8 @@ Append-only,人类可读,记录每次改动的动机 + 结果。示例:
 ## 上手流程
 
 ```bash
-SKILL=/Users/chengsishi/VAAS/.claude/skills/fd-vaas-video-creator/scripts
+export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
+SKILL=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
 
 # 1. 建 task 目录
 node $SKILL/new-task.mjs --slug finddata-intro \

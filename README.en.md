@@ -82,8 +82,9 @@ The `fd-vaas-*` skills are the wired demand-to-publish pipeline.
 3. **`/fd-vaas-publish-videos`** - one video -> 6 platforms. `publish.mjs` dispatches by `process.platform`: macOS -> `.mjs` (ego-browser), Windows -> `.py` (patchright). Reads per-platform preferences from `.env` (tags, `BILIBILI_TID`, `TENCENT_SHORT_TITLE`, `YOUTUBE_VISIBILITY`, schedule), writes results back to `task.json`'s `distribution[]`. `--dry-run` previews the commands.
 
 ```bash
-SKILL_V=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-video-creator/scripts
-SKILL_P=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-publish-videos/scripts
+export VAAS=<path to the cloned VAAS repo, e.g. ~/fd-vaas-skills>   # all commands below use $VAAS
+SKILL_V=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
+SKILL_P=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts
 
 # 2. script -> voiceover video
 node $SKILL_V/new-task.mjs    --slug <slug> --script /path/to/script.txt
@@ -102,7 +103,7 @@ node $SKILL_P/publish.mjs --slug <slug> --title "…" --platforms douyin,xiaohon
 - ⚠️ **Get user confirmation before publishing** (cannot undo). Platform selectors are mostly page-structure inferences, **unverified on a real logged-in session** - before first publish, verify selectors via `references/probe.md`'s `snapshotText` flow, then drive.
 
 ```bash
-SKILL_D=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-publish-docs/scripts
+SKILL_D=$VAAS/.agents/skills/fd-vaas-publish-docs/scripts
 node $SKILL_D/publish.mjs --slug <slug> --platforms zhihu,xiaohongshu --dry-run   # preview; drop --dry-run only after user confirms
 ```
 
@@ -301,8 +302,8 @@ See `.agents/skills/fd-vaas-publish-videos/references/platform-quirks.md` and `r
 ### Video: script -> multi-platform publish
 
 ```bash
-SKILL_V=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-video-creator/scripts
-SKILL_P=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-publish-videos/scripts
+SKILL_V=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
+SKILL_P=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts
 
 # 1. script -> voiceover video
 node $SKILL_V/new-task.mjs    --slug demo --script ./script.txt
@@ -320,7 +321,7 @@ node $SKILL_P/platforms/douyin.mjs --file downloads/fd-videos/demo/demo.mp4 \
 ### Article: publish an article
 
 ```bash
-SKILL_D=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-publish-docs/scripts
+SKILL_D=$VAAS/.agents/skills/fd-vaas-publish-docs/scripts
 # article lives under downloads/fd-docs/<slug>/
 node $SKILL_D/publish.mjs --slug <slug> --platforms zhihu,xiaohongshu --dry-run
 # after selectors check + user confirmation, drop --dry-run to actually publish

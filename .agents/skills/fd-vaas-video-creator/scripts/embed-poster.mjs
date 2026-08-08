@@ -20,6 +20,7 @@
  */
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
 
 const args = process.argv.slice(2);
@@ -38,7 +39,11 @@ const fromFrame = getArg("--from-frame");
 let mp4Path, posterPath, taskDir;
 
 if (slug) {
-  taskDir = path.join("/Users/chengsishi/VAAS/downloads/fd-videos", slug);
+  taskDir = path.join(
+    process.env.VAAS_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.."),
+    "downloads/fd-videos",
+    slug,
+  );
   mp4Path = path.join(taskDir, `${slug}.mp4`);
   if (!fs.existsSync(mp4Path)) {
     console.error(`❌ mp4 not found: ${mp4Path}`);

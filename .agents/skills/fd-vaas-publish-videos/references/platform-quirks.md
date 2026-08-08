@@ -1,6 +1,6 @@
 # 平台差异化配置参考
 
-上传全部走 `fd-vaas-publish/scripts/platforms/<platform>.mjs`（ego-browser 自动化），复用用户 Chrome
+上传全部走 `d-vaas-publish-videos/scripts/platforms/<platform>.mjs`（ego-browser 自动化），复用用户 Chrome
 登录态，无需 cookie 文件、无需 Playwright、无需 `--account`。
 
 以下是每个平台的重点，写进 `.env` 一次搞定，别每次发布现查。

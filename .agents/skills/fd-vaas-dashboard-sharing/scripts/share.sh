@@ -1,5 +1,7 @@
 #!/bin/bash
 PORT=8765
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VAAS_ROOT="${VAAS_ROOT:-$(cd "$SCRIPT_DIR/../../../.." && pwd)}"
 
 echo ""
 echo "🌐 选择看板分享方式"
@@ -35,7 +37,7 @@ case "$choice" in
     1)
         echo ""
         echo "📡 启动 WiFi 局域网分享..."
-        /Users/chengsishi/VAAS/.agents/skills/fd-coding-wifi-tunnel/scripts/wifi-tunnel.sh $PORT
+        "$VAAS_ROOT/.agents/skills/fd-coding-wifi-tunnel/scripts/wifi-tunnel.sh" $PORT
         ;;
     2)
         echo ""

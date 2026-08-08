@@ -87,7 +87,8 @@ downloads/fd-docs/<slug>/
 配置在**项目根 `.env`**(和 TTS/seedream/fd-vaas-publish 共享一个),不在 skill 目录里。首次用:
 
 ```bash
-cd /Users/chengsishi/VAAS
+export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
+cd $VAAS
 [ -f .env ] || cp .env.example .env
 $EDITOR .env   # 改 PLATFORMS_DOCS 和各平台 XXX_DOC_TAGS
 ```
@@ -105,7 +106,7 @@ $EDITOR .env   # 改 PLATFORMS_DOCS 和各平台 XXX_DOC_TAGS
 ### 第一步:出适配后的发布计划(必跑)
 
 ```bash
-SKILL=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-publish-docs/scripts
+SKILL=$VAAS/.agents/skills/fd-vaas-publish-docs/scripts
 
 # 读 task dir,出每个平台适配后的标题/正文/标签/封面 + 要 export 的环境变量
 node $SKILL/publish.mjs --slug finddata-open-data --plan
@@ -226,7 +227,7 @@ patchright install chromium   # macOS 走 https_proxy=http://127.0.0.1:7892(见 
 
 ## 参考
 
-- `/Users/chengsishi/VAAS/.env.example` -- 项目根统一配置样板(含 `fd-vaas-publish-docs` 段)
+- `$VAAS/.env.example` -- 项目根统一配置样板(含 `fd-vaas-publish-docs` 段)
 - `references/platform-quirks.md` -- 各图文平台内容规格坑(字数/图片/标签/原创/排版/风控)
 - `references/probe.md` -- 选择器核对流程(snapshotText dump + 定位),首次发布前必跑
 - `references/{zhihu,weixin,xiaohongshu,xueqiu,eastmoney,tonghuashun}.md` -- 各平台登录 + 发文 heredoc 骨架

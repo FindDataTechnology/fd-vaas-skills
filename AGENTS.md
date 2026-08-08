@@ -145,6 +145,42 @@ node $SKILL_D/publish.mjs --slug <slug> \
 
 ## Architecture notes that span files
 
+### MCP Server (mcp-server/) — unified, single server
+
+VAAS provides **one** MCP server at `mcp-server/` (registered in `.mcp.json` as `vaas`)
+that unifies generation, publishing, material management, and generator discovery.
+Namespaced tools (MCP tool names forbid dots, so `prefix_` namespaces):
+
+- `generate_*`: `generate_voice/image/video/cover` — dispatch through the **generation
+  registry** (`mcp-server/registry.json`, drivers in `mcp_server/registry.py`); add a
+  new generation/copy method = one registry entry + one driver line.
+- `orchestrate_*`: `orchestrate_voiceover`, `orchestrate_brainstorm`
+- `publish_*`: `publish_video/article`, `publish_validate_ready`, `publish_get_config`,
+  `publish_simulate`, `publish_record`
+- `assets_*`: `assets_list/get/stats` + Remotion discovery (`assets_list_common`,
+  `assets_find_logo`, `assets_list_compositions`, `assets_validate_paths`,
+  `assets_get_scene_templates`)
+- `registry_*`: `registry_list_generators`, `registry_describe_generator`
+
+Legacy names (`create_cover_image`, `list_all_content`, `get_content_details`, …) remain
+as deprecated aliases for one release.
+
+**Database**: single SQLite at `data/vaas.db` — one source of truth shared by the skill
+chain and the MCP server. Tables: `assets` (generic material tree with `stage` +
+`parent_id`/`lineage_root` lineage), `variants` (per-platform adaptation),
+`distribution` (publish records), plus video details (`videos/tts_records/renders/...`)
+and `asset_history`. The old root `vaas.db` (`content`/`distribution`) is **archived** —
+read-only, never written.
+
+**Migrations**: `mcp-server/scripts/migrate_unify_db.py` merges old DBs into
+`data/vaas.db` (idempotent, backs up first); `mcp-server/scripts/migrate_task_json_to_db.py`
+imports legacy `task.json` files.
+
+**Start the server**: `cd mcp-server && python -m mcp_server.main`
+
+See `mcp-server/README.md` for full documentation.
+
+
 - **Login model**: macOS - ego-browser inherits the user's Chrome login state (login once in a real
   browser, reuse thereafter; no cookie files). Windows - patchright `launch_persistent_context` stores
   login in `VAAS/.profiles/<platform>/`. Each platform's session is independent - multi-platform

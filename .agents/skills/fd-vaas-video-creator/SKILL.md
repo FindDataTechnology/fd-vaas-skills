@@ -111,7 +111,8 @@ remotion渲染视频前要注意使用正确的音频和字幕文件
 # 先写一个操作说明文件(代替 script.txt,记录要录什么)
 echo "操作演示:打开 example.com,展示首页内容" > /tmp/recording-plan.txt
 
-SKILL=/Users/chengsishi/VAAS/.claude/skills/fd-vaas-video-creator/scripts
+export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
+SKILL=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
 node $SKILL/new-task.mjs --slug <slug> --script /tmp/recording-plan.txt \
   --width 1920 --height 1080
 ```
@@ -123,8 +124,8 @@ node $SKILL/new-task.mjs --slug <slug> --script /tmp/recording-plan.txt \
 **加载 `fd-browser-record` skill** 后执行录制。把输出直接放进 task 目录:
 
 ```bash
-TASK_DIR=/Users/chengsishi/VAAS/downloads/fd-videos/<slug>
-BROWSER_RECORD=/Users/chengsishi/VAAS/.claude/skills/fd-browser-record/scripts/cap-record.sh
+TASK_DIR=$VAAS/downloads/fd-videos/<slug>
+BROWSER_RECORD=$VAAS/.agents/skills/fd-browser-record/scripts/cap-record.sh
 
 # 方式 A:录浏览器窗口(推荐,画面干净,只有网页)
 # 先打开目标网页(ego-browser),再录 Chrome/浏览器窗口
@@ -157,7 +158,7 @@ bash "$BROWSER_RECORD" stop \
 node -e "
 const fs = require('fs');
 const path = require('path');
-const dir = '/Users/chengsishi/VAAS/downloads/fd-videos/<slug>';
+const dir = '$VAAS/downloads/fd-videos/<slug>';
 const task = JSON.parse(fs.readFileSync(path.join(dir, 'task.json'), 'utf8'));
 task.status = 'rendered';
 task.type = 'screen-recording';    // 标记视频类型
@@ -194,7 +195,7 @@ console.log('✅ task.json updated (status=rendered, type=screen-recording)');
 ## 主流程(口播视频 · 推荐:一键 pipeline)
 
 ```bash
-SKILL=/Users/chengsishi/VAAS/.claude/skills/fd-vaas-video-creator/scripts
+SKILL=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
 
 # 1. 建 task 目录(拷 script + 初始化 task.json/history.md)
 node $SKILL/new-task.mjs --slug <slug> --script /path/to/script.txt \
@@ -214,7 +215,7 @@ node $SKILL/task-render.mjs --slug <slug> \
 ## 查询已有 task
 
 ```bash
-SKILL=/Users/chengsishi/VAAS/.claude/skills/fd-vaas-video-creator/scripts
+SKILL=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
 
 node $SKILL/task-info.mjs --list                      # 所有 slug 一览
 node $SKILL/task-info.mjs --slug finddata-intro       # 单个 task 人读摘要
@@ -230,7 +231,7 @@ node $SKILL/task-info.mjs --slug finddata-intro --json # 机读 manifest
 ### 1. TTS → 音频 + 原始字幕
 
 ```bash
-cd /Users/chengsishi/VAAS/remotion-app
+cd $VAAS/remotion-app
 node scripts/generate-voiceover.mjs --file /path/to/script.txt [--voice <id>]
 # 输出:public/voiceover-<ts>.mp3, public/captions-<ts>.json
 ```
@@ -305,9 +306,9 @@ node $SKILL/captions-to-srt.mjs \
 ## 分发(可选)
 
 ```bash
-cd /Users/chengsishi/VAAS/social-auto-upload
+cd $VAAS/social-auto-upload
 sau douyin upload-video --account <name> \
-  --file /Users/chengsishi/VAAS/downloads/fd-videos/<slug>/<slug>.mp4 \
+  --file $VAAS/downloads/fd-videos/<slug>/<slug>.mp4 \
   --title "…" --desc "…" --tags a,b
 ```
 
@@ -350,7 +351,7 @@ sau douyin upload-video --account <name> \
 豆包 TTS(seed-tts-2.0),文转语音 + 官方逐字时间戳。
 
 ```bash
-GEN=/Users/chengsishi/VAAS/.agents/skills/fd-vaas-video-creator/scripts/generators
+GEN=$VAAS/.agents/skills/fd-vaas-video-creator/scripts/generators
 
 # 合成语音(自动推断音色)
 node $GEN/tts-wrapper.js create --text "欢迎使用豆包语音合成"

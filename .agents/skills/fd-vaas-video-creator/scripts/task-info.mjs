@@ -12,8 +12,10 @@
  */
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
-const ROOT = "/Users/chengsishi/VAAS/downloads/fd-videos";
+const VAAS = process.env.VAAS_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
+const ROOT = path.join(VAAS, "downloads/fd-videos");
 const args = process.argv.slice(2);
 const has = (k) => args.includes(k);
 const val = (k) => {

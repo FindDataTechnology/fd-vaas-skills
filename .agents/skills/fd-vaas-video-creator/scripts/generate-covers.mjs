@@ -24,6 +24,7 @@
  */
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
 
 // ─── args ──────────────────────────────────────────────
@@ -67,7 +68,7 @@ function loadEnv(file) {
   return out;
 }
 
-const VAAS = "/Users/chengsishi/VAAS";
+const VAAS = process.env.VAAS_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const TASK_DIR = path.join(VAAS, "downloads/fd-videos", slug);
 const manifestPath = path.join(TASK_DIR, "task.json");
 
