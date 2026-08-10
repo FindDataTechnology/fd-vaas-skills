@@ -44,6 +44,7 @@ import { VoiceoverVideo } from "./types/VoiceoverVideo";
 import { CarouselVideo } from "./types/CarouselVideo";
 import { KineticQuoteVideo } from "./types/KineticQuoteVideo";
 import { NewsFlashVideo } from "./types/NewsFlashVideo";
+import { ListicleVideo } from "./types/ListicleVideo";
 import { CostRevolution } from "./CostRevolution";
 import {
   CoverBrand,
@@ -784,6 +785,32 @@ export const MyComposition: React.FC = () => {
           captionsSrc: "captions.json",
           scenesSrc: "scenes.json",
           metaSrc: "meta.json",
+          durationInFrames: 300,
+        }}
+        calculateMetadata={({ props }) =>
+          Promise.resolve({
+            durationInFrames: props.durationInFrames,
+            width: props.width ?? 1080,
+            height: props.height ?? 1920,
+          })
+        }
+      />
+      {/* ============================================================
+         ListicleVideo - 榜单合集（数据驱动：scenes + items）
+         倒数排名卡片：hook 大字卡 → 条目卡×N（排名弹出动画，可选配图）→ CTA
+         ============================================================ */}
+      <Composition
+        id="ListicleVideo"
+        component={ListicleVideo}
+        durationInFrames={300}
+        fps={30}
+        width={1080}
+        height={1920}
+        defaultProps={{
+          audioSrc: "voiceover.mp3",
+          captionsSrc: "captions.json",
+          scenesSrc: "scenes.json",
+          itemsSrc: "items.json",
           durationInFrames: 300,
         }}
         calculateMetadata={({ props }) =>

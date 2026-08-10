@@ -1,0 +1,9 @@
+{
+  "title": "2026 三款 AI 编程助手",
+  "items": [
+    { "title": "GitHub Copilot", "text": "生态最广、企业铺货最成熟" },
+    { "title": "Cursor", "text": "编辑器深度集成、Tab 补全流畅" },
+    { "title": "Claude Code", "text": "终端原生、长上下文、多步自主执行" }
+  ],
+  "source": "寻数科技整理"
+}

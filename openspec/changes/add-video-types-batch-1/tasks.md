@@ -27,11 +27,11 @@
 
 ## Phase 4: listicle 榜单合集
 
-- [ ] `types/listicle/type.json`（inputs: script + items.json）
-- [ ] `src/types/ListicleVideo.tsx`：hook 大字卡 → 倒数条目卡（排名弹出动画）→ CTA
-- [ ] items 数 vs scene-align 段数校验（不符时列出段数/条目数报错）
-- [ ] 条目图可选（无图时纯排版卡）
-- [ ] example/（Top 3 示例）+ 端到端渲染验证 + 短音频验证
+- [x] `types/listicle/type.json`（inputs: script + items.json）
+- [x] `src/types/ListicleVideo.tsx`：hook 大字卡 → 倒数条目卡（排名弹出动画）→ CTA
+- [x] items 数 vs scene-align 段数校验（不符时列出段数/条目数报错）
+- [x] 条目图可选（无图时纯排版卡）
+- [x] example/（Top 3 示例）+ 端到端渲染验证 + 短音频验证
 
 ## Phase 5: data-viz 数据可视化讲解
 

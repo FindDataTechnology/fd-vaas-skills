@@ -1,0 +1,36 @@
+{
+  "id": "listicle",
+  "name": "榜单合集",
+  "description": "倒数排名卡片视频：hook 大字卡 -> 条目卡×N（排名弹出动画，可选配图）-> CTA。items.json 提供 title/items；条目数与口播段数渲染前校验一致。",
+  "version": 1,
+  "status": "experimental",
+  "inputs": {
+    "script": {
+      "required": true,
+      "type": "file",
+      "desc": "口播稿。`## 段名` 分段：1 hook + N 条目 + 1 cta，条目段数须与 items 数匹配。"
+    },
+    "items": {
+      "required": true,
+      "type": "json",
+      "desc": "榜单清单 JSON：{title:string, items:[{title:string, text?:string, image?:string}], source?:string}。items 数须等于口播条目段数。image 为任务目录下的文件名（可选）。"
+    },
+    "orientation": {
+      "required": false,
+      "type": "enum",
+      "enum": ["1080x1920", "1920x1080"],
+      "default": "1080x1920",
+      "desc": "画幅。1080x1920 竖屏 / 1920x1080 横屏。"
+    }
+  },
+  "pipeline": ["tts", "fix-tts-timings", "scene-align", "validate-items", "preflight", "render"],
+  "composition": "ListicleVideo",
+  "defaults": {
+    "voice": "auto",
+    "tailPad": 15,
+    "gapMs": 300,
+    "minSegmentMs": 1500,
+    "padFrames": 0
+  },
+  "platforms": ["douyin", "xiaohongshu", "bilibili", "weixin", "kuaishou", "youtube"]
+}
