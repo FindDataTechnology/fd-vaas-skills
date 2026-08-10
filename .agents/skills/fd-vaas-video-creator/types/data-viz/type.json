@@ -1,0 +1,36 @@
+{
+  "id": "data-viz",
+  "name": "数据可视化讲解",
+  "description": "每口播段一个图表场景：hook 大字卡 -> 图表卡×N（柱状生长/折线描画/饼图展开，进度动画占段帧 40%）-> CTA。data.json 提供 charts 规格；图表数与口播段数渲染前校验一致。",
+  "version": 1,
+  "status": "experimental",
+  "inputs": {
+    "script": {
+      "required": true,
+      "type": "file",
+      "desc": "口播稿。`## 段名` 分段：1 hook + N 图表段 + 1 cta，图表段数须与 data.charts 数匹配。"
+    },
+    "data": {
+      "required": true,
+      "type": "json",
+      "desc": "图表规格 JSON：{title:string, charts:[{type:'bar'|'line'|'pie', title?, labels?, values?, series?, unit?}], source?}。charts 数须等于口播图表段数。"
+    },
+    "orientation": {
+      "required": false,
+      "type": "enum",
+      "enum": ["1080x1920", "1920x1080"],
+      "default": "1080x1920",
+      "desc": "画幅。1080x1920 竖屏 / 1920x1080 横屏。"
+    }
+  },
+  "pipeline": ["tts", "fix-tts-timings", "scene-align", "validate-data", "preflight", "render"],
+  "composition": "DataVizVideo",
+  "defaults": {
+    "voice": "auto",
+    "tailPad": 15,
+    "gapMs": 300,
+    "minSegmentMs": 1500,
+    "padFrames": 0
+  },
+  "platforms": ["douyin", "xiaohongshu", "bilibili", "weixin", "kuaishou", "youtube"]
+}

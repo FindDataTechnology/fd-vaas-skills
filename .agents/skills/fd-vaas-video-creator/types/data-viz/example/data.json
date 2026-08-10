@@ -1,0 +1,30 @@
+{
+  "title": "2026 AI 编程工具市场格局",
+  "source": "寻数科技整理",
+  "charts": [
+    {
+      "type": "bar",
+      "title": "月活开发者（万）",
+      "labels": ["Copilot", "Cursor", "Claude Code", "Cody"],
+      "values": [180, 120, 210, 60],
+      "unit": "万"
+    },
+    {
+      "type": "line",
+      "title": "近半年月活增长",
+      "labels": ["3月", "4月", "5月", "6月", "7月", "8月"],
+      "series": [
+        { "name": "Claude Code", "values": [70, 95, 130, 160, 190, 210] },
+        { "name": "Copilot", "values": [150, 155, 162, 168, 174, 180] }
+      ],
+      "unit": "万"
+    },
+    {
+      "type": "pie",
+      "title": "市场份额占比",
+      "labels": ["Claude Code", "Copilot", "Cursor", "其他"],
+      "values": [29, 25, 17, 29],
+      "unit": "%"
+    }
+  ]
+}

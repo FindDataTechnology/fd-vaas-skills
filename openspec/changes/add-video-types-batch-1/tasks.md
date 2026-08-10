@@ -35,11 +35,11 @@
 
 ## Phase 5: data-viz 数据可视化讲解
 
-- [ ] `src/types/charts/` 组件库：BarChart（柱状生长）/ LineChart（折线描画）/ PieChart（展开），数值动画
-- [ ] 图表配色只用 theme.ts COLORS；渲染前 grep 校验无裸色值
-- [ ] `types/data-viz/type.json`（inputs: script + data.json charts spec）
-- [ ] `src/types/DataVizVideo.tsx`：图表场景与口播段对齐切换
-- [ ] example/（一组真实感数据）+ 端到端渲染验证（竖屏 + 横屏）+ 短音频验证
+- [x] `src/types/charts/` 组件库：BarChart（柱状生长）/ LineChart（折线描画）/ PieChart（展开），数值动画
+- [x] 图表配色只用 theme.ts COLORS；渲染前 grep 校验无裸色值
+- [x] `types/data-viz/type.json`（inputs: script + data.json charts spec）
+- [x] `src/types/DataVizVideo.tsx`：图表场景与口播段对齐切换
+- [x] example/（一组真实感数据）+ 端到端渲染验证（竖屏 + 横屏）+ 短音频验证
 
 ## Phase 6: 收尾
 

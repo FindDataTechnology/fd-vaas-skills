@@ -45,6 +45,7 @@ import { CarouselVideo } from "./types/CarouselVideo";
 import { KineticQuoteVideo } from "./types/KineticQuoteVideo";
 import { NewsFlashVideo } from "./types/NewsFlashVideo";
 import { ListicleVideo } from "./types/ListicleVideo";
+import { DataVizVideo } from "./types/DataVizVideo";
 import { CostRevolution } from "./CostRevolution";
 import {
   CoverBrand,
@@ -811,6 +812,32 @@ export const MyComposition: React.FC = () => {
           captionsSrc: "captions.json",
           scenesSrc: "scenes.json",
           itemsSrc: "items.json",
+          durationInFrames: 300,
+        }}
+        calculateMetadata={({ props }) =>
+          Promise.resolve({
+            durationInFrames: props.durationInFrames,
+            width: props.width ?? 1080,
+            height: props.height ?? 1920,
+          })
+        }
+      />
+      {/* ============================================================
+         DataVizVideo - 数据可视化讲解（数据驱动：scenes + data charts）
+         hook 大字卡 → 图表卡×N（柱状生长/折线描画/饼图展开）→ CTA
+         ============================================================ */}
+      <Composition
+        id="DataVizVideo"
+        component={DataVizVideo}
+        durationInFrames={300}
+        fps={30}
+        width={1080}
+        height={1920}
+        defaultProps={{
+          audioSrc: "voiceover.mp3",
+          captionsSrc: "captions.json",
+          scenesSrc: "scenes.json",
+          dataSrc: "data.json",
           durationInFrames: 300,
         }}
         calculateMetadata={({ props }) =>

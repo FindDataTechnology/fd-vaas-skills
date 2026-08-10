@@ -1,0 +1,13 @@
+{
+  "title": "AI 编程工具月活对比",
+  "source": "寻数科技整理",
+  "charts": [
+    {
+      "type": "bar",
+      "title": "月活开发者（万）",
+      "labels": ["Copilot", "Cursor", "Claude Code", "Cody"],
+      "values": [180, 120, 210, 60],
+      "unit": "万"
+    }
+  ]
+}
