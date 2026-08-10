@@ -43,6 +43,7 @@ import { VoiceOver } from "./voiceover";
 import { VoiceoverVideo } from "./types/VoiceoverVideo";
 import { CarouselVideo } from "./types/CarouselVideo";
 import { KineticQuoteVideo } from "./types/KineticQuoteVideo";
+import { NewsFlashVideo } from "./types/NewsFlashVideo";
 import { CostRevolution } from "./CostRevolution";
 import {
   CoverBrand,
@@ -756,6 +757,33 @@ export const MyComposition: React.FC = () => {
           captionsSrc: "captions.json",
           scenesSrc: "scenes.json",
           images: [],
+          durationInFrames: 300,
+        }}
+        calculateMetadata={({ props }) =>
+          Promise.resolve({
+            durationInFrames: props.durationInFrames,
+            width: props.width ?? 1080,
+            height: props.height ?? 1920,
+          })
+        }
+      />
+
+      {/* ============================================================
+         NewsFlashVideo - 热点速报（数据驱动：scenes + meta）
+         固定结构：标题卡 → 要点卡×N → CTA；validate-structure 前置校验
+         ============================================================ */}
+      <Composition
+        id="NewsFlashVideo"
+        component={NewsFlashVideo}
+        durationInFrames={300}
+        fps={30}
+        width={1080}
+        height={1920}
+        defaultProps={{
+          audioSrc: "voiceover.mp3",
+          captionsSrc: "captions.json",
+          scenesSrc: "scenes.json",
+          metaSrc: "meta.json",
           durationInFrames: 300,
         }}
         calculateMetadata={({ props }) =>

@@ -20,10 +20,10 @@
 
 ## Phase 3: news-flash 热点速报
 
-- [ ] `types/news-flash/type.json`（inputs: script + meta.json `{headline, points[3], source?}`）
-- [ ] `src/types/NewsFlashVideo.tsx`：标题卡 → 要点卡 ×3 → CTA，口播段映射到卡
-- [ ] points 数量 ≠ 口播要点段数时渲染前报错并列出对照
-- [ ] example/ + 端到端渲染验证 + 短音频验证
+- [x] `types/news-flash/type.json`（inputs: script + meta.json `{headline, points[3], source?}`）
+- [x] `src/types/NewsFlashVideo.tsx`：标题卡 → 要点卡 ×3 → CTA，口播段映射到卡
+- [x] points 数量 ≠ 口播要点段数时渲染前报错并列出对照
+- [x] example/ + 端到端渲染验证 + 短音频验证
 
 ## Phase 4: listicle 榜单合集
 

@@ -1,0 +1,36 @@
+{
+  "id": "news-flash",
+  "name": "热点速报",
+  "description": "固定结构卡片视频：标题卡 -> 要点卡×N -> CTA。meta.json 提供 headline/points/source；要点数与口播段数渲染前校验一致。",
+  "version": 1,
+  "status": "experimental",
+  "inputs": {
+    "script": {
+      "required": true,
+      "type": "file",
+      "desc": "口播稿。`## 段名` 分段：1 hook + N 要点 + 1 cta，段数须与 meta.points 数匹配。"
+    },
+    "meta": {
+      "required": true,
+      "type": "json",
+      "desc": "结构清单 JSON：{headline:string, points:[{text}|string], source?:string}。points 数须等于口播要点段数。"
+    },
+    "orientation": {
+      "required": false,
+      "type": "enum",
+      "enum": ["1080x1920", "1920x1080"],
+      "default": "1080x1920",
+      "desc": "画幅。1080x1920 竖屏 / 1920x1080 横屏。"
+    }
+  },
+  "pipeline": ["tts", "fix-tts-timings", "scene-align", "validate-structure", "preflight", "render"],
+  "composition": "NewsFlashVideo",
+  "defaults": {
+    "voice": "auto",
+    "tailPad": 15,
+    "gapMs": 300,
+    "minSegmentMs": 1500,
+    "padFrames": 0
+  },
+  "platforms": ["douyin", "xiaohongshu", "bilibili", "weixin", "kuaishou", "youtube"]
+}
