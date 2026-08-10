@@ -180,7 +180,14 @@ function stepTts(ctx) {
     console.error(`❌ script.txt 不存在于 ${ctx.taskDir}（tts 步骤需要口播稿）`);
     process.exit(1);
   }
-  const script = fs.readFileSync(scriptPath, "utf8").trim();
+  // 剥离 `## ` 分段标记行：它们是 scene-align 的结构标记，不参与朗读；
+  // scene-align 仍读完整 script.txt（含标记）做显式分段。
+  const script = fs
+    .readFileSync(scriptPath, "utf8")
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*##\s+/.test(l))
+    .join("\n")
+    .trim();
 
   console.log("🎤 TTS…");
   const ttsArgs = [ctx.TTS_WRAPPER, "--text", script];

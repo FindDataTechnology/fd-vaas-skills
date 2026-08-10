@@ -1,0 +1,43 @@
+{
+  "id": "carousel",
+  "name": "图文轮播口播视频",
+  "description": "一张图对应一个口播段，Ken Burns 缓推/拉 + 交叉淡入；图少于段时循环复用且相邻不重复。支持 seedream 自动补图。",
+  "version": 1,
+  "status": "experimental",
+  "inputs": {
+    "script": {
+      "required": true,
+      "type": "file",
+      "desc": "口播稿。用 ## 标记分段可显式对齐画面切换；不标则按停顿自动分段。"
+    },
+    "images": {
+      "required": true,
+      "type": "json",
+      "desc": "图片清单 JSON 数组。每项可为：文件路径字符串（相对任务目录或 CWD 或绝对路径）、{\"path\":\"...\"}、{\"prompt\":\"...\"}（调 seedream 生成）。"
+    },
+    "orientation": {
+      "required": false,
+      "type": "enum",
+      "enum": ["1080x1920", "1920x1080"],
+      "default": "1080x1920",
+      "desc": "画幅。1080x1920 竖屏 / 1920x1080 横屏。"
+    },
+    "generate": {
+      "required": false,
+      "type": "enum",
+      "enum": ["true", "false"],
+      "default": "false",
+      "desc": "缺图补图开关。为 true 时，清单里的纯字符串项若找不到对应文件，则把该字符串当作 prompt 调 seedream 生成。"
+    }
+  },
+  "pipeline": ["generate-images", "tts", "fix-tts-timings", "scene-align", "preflight", "render"],
+  "composition": "CarouselVideo",
+  "defaults": {
+    "voice": "auto",
+    "tailPad": 15,
+    "gapMs": 300,
+    "minSegmentMs": 1500,
+    "padFrames": 0
+  },
+  "platforms": ["douyin", "xiaohongshu", "bilibili", "weixin", "kuaishou", "youtube"]
+}

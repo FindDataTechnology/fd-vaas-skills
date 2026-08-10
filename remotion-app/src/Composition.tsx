@@ -41,6 +41,7 @@ import { SubtitleBar } from "./SubtitleBar";
 import { SubtitleBrand } from "./SubtitleBrand";
 import { VoiceOver } from "./voiceover";
 import { VoiceoverVideo } from "./types/VoiceoverVideo";
+import { CarouselVideo } from "./types/CarouselVideo";
 import { CostRevolution } from "./CostRevolution";
 import {
   CoverBrand,
@@ -712,7 +713,31 @@ export const MyComposition: React.FC = () => {
       />
 
       {/* ============================================================
-    <>
+         CarouselVideo - 图文轮播口播视频（数据驱动：scenes + images）
+         一张图对应一个口播段，Ken Burns + 交叉淡入
+         ============================================================ */}
+      <Composition
+        id="CarouselVideo"
+        component={CarouselVideo}
+        durationInFrames={300}
+        fps={30}
+        width={1080}
+        height={1920}
+        defaultProps={{
+          audioSrc: "voiceover.mp3",
+          captionsSrc: "captions.json",
+          scenesSrc: "scenes.json",
+          images: [],
+          durationInFrames: 300,
+        }}
+        calculateMetadata={({ props }) =>
+          Promise.resolve({
+            durationInFrames: props.durationInFrames,
+            width: props.width ?? 1080,
+            height: props.height ?? 1920,
+          })
+        }
+      />
       {/* ============================================================
          CostRevolution — AI 软件公司成本革命视频 (1920×1080, narrated)
          场景编排：Hook → 传统 SaaS 抛物线成本图 → AI 应用折线成本图 →

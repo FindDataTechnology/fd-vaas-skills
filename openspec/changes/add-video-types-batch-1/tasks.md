@@ -4,12 +4,12 @@
 
 ## Phase 1: carousel 图文轮播
 
-- [ ] `types/carousel/type.json`（inputs: script + images[]，可选 `"generate": true`）
-- [ ] `src/types/CarouselVideo.tsx`：Ken Burns 推拉 + 交叉淡入转场，Sequence 来自 scene-align
-- [ ] `types/carousel/steps.mjs`：`generate-images` 步骤（调 seedream-wrapper，缺图时补）
-- [ ] 图数 < 场景数时循环复用（末图不重复相邻）
-- [ ] example/（script + 3 张示例图）+ 端到端渲染验证
-- [ ] 短音频渲染验证
+- [x] `types/carousel/type.json`（inputs: script + images[]，可选 `"generate": true`）
+- [x] `src/types/CarouselVideo.tsx`：Ken Burns 推拉 + 交叉淡入转场，Sequence 来自 scene-align
+- [x] `types/carousel/steps.mjs`：`generate-images` 步骤（调 seedream-wrapper，缺图时补）
+- [x] 图数 < 场景数时循环复用（末图不重复相邻）
+- [x] example/（script + 3 张示例图）+ 端到端渲染验证
+- [x] 短音频渲染验证
 
 ## Phase 2: kinetic-quote 金句文字动画
 

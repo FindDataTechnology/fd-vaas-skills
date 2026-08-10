@@ -47,6 +47,15 @@ remotion-app/public/voiceover-*
 remotion-app/public/*captions*.json
 remotion-app/public/vaas-tutorial-*
 remotion-app/public/company-introduce.*
+# 类型化渲染任务产物（<slug>-<key>.<ext>，均无内置资源命名冲突）
+remotion-app/public/*-scenes.json
+remotion-app/public/*-images.json
+remotion-app/public/*-img-*.png
+remotion-app/public/*-img-*.jpg
+remotion-app/public/*-items.json
+remotion-app/public/*-meta.json
+remotion-app/public/*-data.json
+remotion-app/public/*-keywords.json
 
 # Temp
 tmp/
