@@ -1,9 +1,10 @@
 ---
 name: fd-vaas-video-creator
 description: >
-  视频创作主技能,产出可直接发布的 mp4。支持两种视频类型:
-  (1) 口播视频——文案转 AI 配音+逐字同步字幕+画面,流程:new-task → TTS(seed-tts-2.0)→
-  fix-tts-timings → preflight → Remotion 渲染 → mp4(+.srt);
+  视频创作主技能,产出可直接发布的 mp4。支持多种视频类型(类型注册表驱动,
+  用 scripts/types/list.mjs 查完整清单):
+  (1) 口播系——文案转 AI 配音+逐字同步字幕+画面,流程:new-task → TTS(seed-tts-2.0)→
+  fix-tts-timings → scene-align → preflight → Remotion 渲染 → mp4(+.srt);
   (2) 录屏/网页操作视频——用浏览器打开目标页面,操作过程中用 cap 录屏,
   产出 mp4(可配麦克风解说)。所有产物强制落在 downloads/fd-videos/<slug>/ 目录,
   由 task.json 结构化管理。视觉层支持已有素材/seedance 视频/seedream 图片/ppt 母带。
@@ -28,9 +29,14 @@ compatibility: Node.js 18+;ffmpeg/ffprobe;Remotion 项目 VAAS/remotion-app;fd-b
 
 同一个 slug 改配音/微调 = 覆盖成片 + 追加 `history.md`;彻底换文案 = 新 slug。
 
-**两种视频类型**,task.json 用 `type` 字段区分(没有 type 字段默认口播):
-- `voiceover` — 口播视频(TTS + 字幕 + Remotion)
-- `screen-recording` — 录屏/网页操作视频(ego-browser + cap)
+**视频类型由注册表驱动**,task.json 用 `type` 字段指定(没有 type 字段默认 `voiceover`)。用 `scripts/types/list.mjs` 查完整清单,当前内置 7 类:
+- `voiceover`(stable)— 口播视频(TTS + 字幕 + Remotion),通用兜底
+- `screen-recording`(stable)— 录屏/网页操作视频(ego-browser + cap)
+- `carousel`(experimental)— 图文轮播:每段一张图,Ken Burns + 交叉淡入,缺图可 seedream 补
+- `kinetic-quote`(experimental)— 金句文字动画:逐句入场、逐字高亮、关键词放大
+- `news-flash`(experimental)— 热点速报:标题卡 → 要点卡×N → CTA
+- `listicle`(experimental)— 榜单合集:倒数排名卡片,可选配图
+- `data-viz`(experimental)— 数据可视化:每段一个图表(柱状生长/折线描画/饼图展开)
 
 ## 为什么是这套流程
 
