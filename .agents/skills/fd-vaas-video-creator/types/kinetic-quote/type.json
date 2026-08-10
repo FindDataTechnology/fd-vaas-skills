@@ -1,0 +1,32 @@
+{
+  "id": "kinetic-quote",
+  "name": "金句文字动画",
+  "description": "纯文字动态排版：逐句 spring 弹入、逐字（字幕时间戳）高亮、关键词恒放大变色。无图片。关键词支持 `**词**` 显式标记，否则取段内最长中文词。",
+  "version": 1,
+  "status": "experimental",
+  "inputs": {
+    "script": {
+      "required": true,
+      "type": "file",
+      "desc": "口播稿。`## 段落名` 显式分段；用 `**关键词**` 标记每段要放大的词（不标则自动取最长中文词）。"
+    },
+    "orientation": {
+      "required": false,
+      "type": "enum",
+      "enum": ["1080x1920", "1920x1080"],
+      "default": "1080x1920",
+      "desc": "画幅。1080x1920 竖屏 / 1920x1080 横屏。"
+    }
+  },
+  "pipeline": ["tts", "fix-tts-timings", "scene-align", "extract-keywords", "preflight", "render"],
+  "composition": "KineticQuoteVideo",
+  "defaults": {
+    "voice": "auto",
+    "tailPad": 15,
+    "gapMs": 300,
+    "minSegmentMs": 1500,
+    "padFrames": 0,
+    "minKeywordLen": 2
+  },
+  "platforms": ["douyin", "xiaohongshu", "bilibili", "weixin", "kuaishou", "youtube"]
+}

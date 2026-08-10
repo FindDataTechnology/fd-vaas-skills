@@ -13,10 +13,10 @@
 
 ## Phase 2: kinetic-quote 金句文字动画
 
-- [ ] `types/kinetic-quote/type.json`（inputs: 仅 script，支持 `## ` 显式分段）
-- [ ] `src/types/KineticQuoteVideo.tsx`：逐句入场、关键词放大变色、逐字 captions 同步
-- [ ] 关键词提取规则：defaults 可配（默认取每段最长词/用户标记 `**词**`）
-- [ ] example/ + 端到端渲染验证 + 短音频验证
+- [x] `types/kinetic-quote/type.json`（inputs: 仅 script，支持 `## ` 显式分段）
+- [x] `src/types/KineticQuoteVideo.tsx`：逐句入场、关键词放大变色、逐字 captions 同步
+- [x] 关键词提取规则：defaults 可配（默认取每段最长词/用户标记 `**词**`）
+- [x] example/ + 端到端渲染验证 + 短音频验证
 
 ## Phase 3: news-flash 热点速报
 

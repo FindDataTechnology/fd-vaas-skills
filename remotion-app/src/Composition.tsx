@@ -42,6 +42,7 @@ import { SubtitleBrand } from "./SubtitleBrand";
 import { VoiceOver } from "./voiceover";
 import { VoiceoverVideo } from "./types/VoiceoverVideo";
 import { CarouselVideo } from "./types/CarouselVideo";
+import { KineticQuoteVideo } from "./types/KineticQuoteVideo";
 import { CostRevolution } from "./CostRevolution";
 import {
   CoverBrand,
@@ -701,6 +702,33 @@ export const MyComposition: React.FC = () => {
         defaultProps={{
           audioSrc: "voiceover.mp3",
           captionsSrc: "captions.json",
+          durationInFrames: 300,
+        }}
+        calculateMetadata={({ props }) =>
+          Promise.resolve({
+            durationInFrames: props.durationInFrames,
+            width: props.width ?? 1080,
+            height: props.height ?? 1920,
+          })
+        }
+      />
+
+      {/* ============================================================
+         KineticQuoteVideo - 金句文字动画（数据驱动：scenes + keywords）
+         逐句 spring 弹入、逐字高亮、关键词恒放大变色
+         ============================================================ */}
+      <Composition
+        id="KineticQuoteVideo"
+        component={KineticQuoteVideo}
+        durationInFrames={300}
+        fps={30}
+        width={1080}
+        height={1920}
+        defaultProps={{
+          audioSrc: "voiceover.mp3",
+          captionsSrc: "captions.json",
+          scenesSrc: "scenes.json",
+          keywordsSrc: "keywords.json",
           durationInFrames: 300,
         }}
         calculateMetadata={({ props }) =>
