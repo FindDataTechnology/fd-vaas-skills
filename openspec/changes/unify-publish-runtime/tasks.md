@@ -19,9 +19,9 @@
 
 ## Phase 2: 切换默认
 
-- [ ] `publish.mjs` 默认 `RUNTIME` 翻 `py`（`auto` 的 macOS 分支改 `py`，或直接 `RUNTIME = env.PYTHON || "python3"`、`SCRIPT_EXT = "py"`）
-- [ ] 逐平台对齐 `.py` 与 `.mjs` 行为，回填缺陷：bilibili shadow-DOM（以 `.py` 为准）、kuaishou 封面上传路径
-- [ ] douyin / bilibili / kuaishou / youtube 在 patchright Chrome 扫码登录（建立 `.profiles/<platform>`；youtube 需代理）
+- [x] `publish.mjs` 默认 `RUNTIME` 翻 `py`（`auto` 分支改 `USE_PY = true`，macOS 不再默认走 mjs）✓ 2026-08-11 commit 26fdcb3，dry-run 验证 xiaohongshu/bilibili/douyin 全走 py 运行时
+- [ ] 逐平台对齐：5 个 Playwright 平台 py 运行时已走 vendored upstream（canonical，无需与 .mjs 对齐）；bilibili 仍走本地 bilibili.py（上游用 biliup 二进制），需真机验证 shadow-DOM 上传
+- [ ] douyin / kuaishou / youtube 扫码登录建立 cookie（`sau_adapter.py --platform <p> --login` → `cookies/<p>_uploader/account.json`；weixin 已 migrate-profile；youtube 需 `VAAS_YT_PROXY` 代理）—— 需用户在场扫码，非自治
 - [x] 更新 fd-vaas-publish-videos SKILL.md / 文档：单一运行时说明、cookies/ 登录模型、sync-upstream.sh 用法、ego-browser 段落降级为 legacy ✓ 2026-08-11 重写完成 (commit 05d73c7，已 push)
 
 ## Phase 3: 清理死代码
