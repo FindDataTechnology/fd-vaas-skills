@@ -46,6 +46,6 @@
 - [x] 5 个类型 README.md（用法 + 输入示例 + 注意事项）
 - [x] `list.mjs` 输出核对：7 类型，状态/必填输入正确
 - [x] 全部类型初始 status=experimental 写入 type.json
-- [ ] 挑 1 个类型（建议 listicle 或 data-viz）实发一条视频，走完 publish 全流程
+- [x] 挑 1 个类型（建议 listicle 或 data-viz）实发一条视频，走完 publish 全流程 ✓ 2026-08-11 dataviz-demo (DataVizVideo) 经 publish.mjs → sau_adapter → vendored upstream 实发到小红书成功（wait_for_url 命中 success 页）
 - [x] SKILL.md「视频类型判断」表更新为新类型清单
 - [x] batch-2 候选（多语言变体优先）记入 demand 或新 proposal 占位
