@@ -2,36 +2,61 @@
 name: fd-vaas-publish-videos
 description: >
   把 fd-vaas-video-creator 出的口播视频一键发到多个社交平台。**编排 + 上传一体化**：
-  平台差异化偏好、标签、定时由 publish.mjs 编排；每个平台的上传逻辑内置在 scripts/platforms/<platform>.* 中。
-  支持抖音/小红书/B站/快手/视频号/YouTube 六个平台。**双运行时**：macOS 走 ego-browser（.mjs，复用 Chrome
-  登录态，无 cookie）；Windows 走 patchright（.py，stealth Playwright，持久 profile 复用登录态）。
-  ego-browser 没有 Windows 版，Windows 必须用 patchright 链路。
-  触发场景：用户说"把这支视频发到抖音/小红书/B站/视频号/YouTube/快手"、"多平台一起发"、
-  "分发这条视频"、"push to socials"、"posting the video"，或者刚做完一支 fd-videos/<slug>/
-  里的视频、要走下一步分发时。**必须**用本 skill 的 publish.mjs，不要直接手写各平台参数。
-compatibility: macOS=Node.js 18+ + ego-browser; Windows=Python 3.10+ + patchright(`pip install patchright` + `patchright install chromium`);
-  各平台创作者中心已登录; fd-vaas-video-creator 已跑完（存在 downloads/fd-videos/<slug>/task.json + <slug>.mp4）。
-  publish.mjs 按 process.platform 自动派发：macOS->.mjs(ego-browser)，Windows->.py(patchright)。
+  平台差异化偏好、标签、定时由 publish.mjs 编排；上传逻辑走「vendor + 薄适配层」——
+  把 social-auto-upload 上游整个 vendor 进 scripts/upstream/，薄适配层 sau_adapter.py 把
+  CLI 翻译成上游 <Platform>Video(...).main() 调用。支持抖音/小红书/B站/快手/视频号/YouTube 六平台。
+  两种运行时：`--runtime py`（推荐，走 vendored upstream + patchright，已验证小红书实发）；
+  `--runtime mjs`（legacy，ego-browser，macOS auto 默认，Phase 2-3 会淘汰）。bilibili 上游走 biliup
+  二进制而非 Playwright，py 运行时仍走本地 bilibili.py。触发场景：用户说"把这支视频发到
+  抖音/小红书/B站/视频号/YouTube/快手"、"多平台一起发"、"分发这条视频"、"push to socials"、
+  "posting the video"，或者刚做完一支 fd-videos/<slug>/ 里的视频、要走下一步分发时。
+  **必须**用本 skill 的 publish.mjs，不要直接手写各平台参数。
+compatibility: 推荐 py 运行时=Python 3.10+ + patchright(`pip install patchright` + `patchright install chromium`)，
+  各平台 cookie 已登录(cookies/<platform>_uploader/account.json)；fd-vaas-video-creator 已跑完
+  (存在 downloads/fd-videos/<slug>/task.json + <slug>.mp4)。macOS 也可用 legacy mjs 运行时
+  (Node.js 18+ + ego-browser)。publish.mjs --runtime py 全平台走 sau_adapter → vendored upstream；
+  --runtime mjs 走 ego-browser .mjs；--runtime auto=macOS mjs / Windows py。
 ---
 
 # FD VAAS 视频分发器
 
-一支视频 = 一次发布指令 -> **多个平台 各自的偏好参数 各自的上传脚本**。本 skill 把平台差异化
-配置外化到 `.env`，再让 `publish.mjs` 一行组装出对每个平台正确的上传命令，最终调用
-`scripts/platforms/<platform>.mjs`（macOS/ego-browser）或 `<platform>.py`（Windows/patchright）完成自动化上传。
+一支视频 = 一次发布指令 -> **多个平台 各自的偏好参数**。本 skill 把平台差异化配置外化到 `.env`，
+`publish.mjs` 一行组装出对每个平台正确的上传命令。上传逻辑走「vendor + 薄适配层」：
+social-auto-upload 上游整个 vendor 进 `scripts/upstream/`，薄适配层 `sau_adapter.py` 把 CLI 翻译成
+上游 `<Platform>Video(...).main()` 调用。bilibili 上游用 biliup 二进制而非 Playwright，仍走本地 `bilibili.py`。
+
+## 架构：vendor + 薄适配层
+
+```
+publish.mjs (编排: 封面/标签/定时/路由)
+    │
+    ├── --runtime py（推荐）→ sau_adapter.py → vendored upstream
+    │     ├── xiaohongshu/douyin/kuaishou/weixin/youtube → upstream Playwright (patchright)
+    │     │     登录态: cookies/<platform>_uploader/account.json (storage_state)
+    │     └── bilibili → bilibili.py（上游用 biliup 二进制，不在适配层）
+    │
+    └── --runtime mjs（legacy）→ <platform>.mjs (ego-browser，Phase 2-3 淘汰)
+          登录态: ego-browser 继承用户 Chrome
+```
+
+**为什么 vendor 上游**：我们手写的 `.py` 退出 0 但实际没发布成功——漏 `set_thumbnail` 封面步骤、
+无原创声明、无 success-page 校验。上游是久经实战的实现，vendor 后小红书实发验证通过
+（上游 `wait_for_url("**/publish/success?**")` 命中 success 页才报「视频发布成功」）。
+vendor 让我们免费获得上游的 bugfix，sync-upstream.sh 一键同步。
 
 ## 支持平台
 
-| 平台 | 脚本 | URL | 核心技术挑战 |
+| 平台 | py 运行时（推荐） | mjs 运行时（legacy） | 核心技术挑战 |
 |---|---|---|---|
-| 抖音 (douyin) | `scripts/platforms/douyin.mjs` | `creator.douyin.com/creator-micro/content/upload` | 标准 DOM，无特殊框架 |
-| 小红书 (xiaohongshu) | `scripts/platforms/xiaohongshu.mjs` | `creator.xiaohongshu.com/publish/publish?target=video` | 标题 ≤ 20 字；话题 ≤ 10 |
-| B站 (bilibili) | `scripts/platforms/bilibili.mjs` | `member.bilibili.com/v2#/upload/video/frame` | **micro-app shadow DOM** |
-| 快手 (kuaishou) | `scripts/platforms/kuaishou.mjs` | `cp.kuaishou.com/article/publish/video` | **React Joyride 遮罩** + **发布按钮在视口外** |
-| 视频号 (weixin) | `scripts/platforms/weixin.mjs` | `channels.weixin.qq.com/platform/post/create` | **Wujie shadow DOM** + **HTTP 服务器 + DataTransfer 文件上传** |
-| YouTube | `scripts/platforms/youtube.mjs` | `studio.youtube.com/videos/upload` | **Polymer dialog** 需强制打开 + 4 步流程 |
+| 抖音 (douyin) | sau_adapter → upstream | douyin.mjs (ego-browser) | 标准 DOM，无特殊框架 |
+| 小红书 (xiaohongshu) | sau_adapter → upstream ✓已实发 | xiaohongshu.mjs | 标题 ≤ 20 字；话题 ≤ 10 |
+| B站 (bilibili) | bilibili.py（上游用 biliup） | bilibili.mjs | **micro-app shadow DOM** |
+| 快手 (kuaishou) | sau_adapter → upstream | kuaishou.mjs | **React Joyride 遮罩** + 视口外按钮 |
+| 视频号 (weixin) | sau_adapter → upstream | weixin.mjs | **Wujie shadow DOM** + DataTransfer 上传 |
+| YouTube | sau_adapter → upstream（需代理） | youtube.mjs | **Polymer dialog** 4 步流程 |
 
-> 每个平台的完整技术档案（选择器表、ego-browser heredoc 代码、常见问题）见 `references/<platform>.md`。
+> mjs 运行时各平台完整技术档案（选择器表、ego-browser heredoc 代码、常见问题）见 `references/<platform>.md`。
+> py 运行时上传逻辑在 `scripts/upstream/uploader/<platform>_uploader/`，是上游 canonical 代码，不要手改。
 
 ## ⚠️ 硬性发布前流程（必须遵守）
 
@@ -59,7 +84,7 @@ compatibility: macOS=Node.js 18+ + ego-browser; Windows=Python 3.10+ + patchrigh
     ↓ 每发完一个回写 task.json distribution[]
 5. 发布完成汇总
     ↓
-6. 关闭 ego 任务窗口（见下「发布后清理」，硬性步骤，别留给用户自己关）
+6. 清理（见下「发布后清理」）
 ```
 
 **违反此流程直接发出去 = 事故**。封面文案都没确认就发，发出去撤不回来。
@@ -70,48 +95,43 @@ compatibility: macOS=Node.js 18+ + ego-browser; Windows=Python 3.10+ + patchrigh
 
 ```bash
 export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
-SKILL=$VAAS/.agents/skills/d-vaas-publish-videos/scripts
+SKILL=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts
 
-# 最简：发到 .env 里配的默认平台
-node $SKILL/publish.mjs --slug finddata-brand-2026 --title "寻数科技｜探索更开放更公平的AI未来"
+# 最简：发到 .env 里配的默认平台（macOS 默认 mjs；显式指定 py 走 vendored upstream）
+node $SKILL/publish.mjs --slug finddata-brand-2026 --title "寻数科技｜探索更开放更公平的AI未来" --runtime py
 
 # 指定平台 + 标签 + 描述
 node $SKILL/publish.mjs --slug finddata-brand-2026 \
   --title "寻数科技｜探索更开放更公平的AI未来" \
   --desc "让数据驱动决策" \
   --platforms douyin,xiaohongshu,bilibili,kuaishou,weixin,youtube \
-  --tags "科技,开源,AI,数据,程序员"
+  --tags "科技,开源,AI,数据,程序员" \
+  --runtime py
 
-# 定时发布
+# 定时发布（py 运行时：除 youtube 外都支持；mjs 运行时：仅 douyin/kuaishou）
 node $SKILL/publish.mjs --slug finddata-brand-2026 \
-  --title "..." --schedule "2026-07-20 21:30"
+  --title "..." --schedule "2026-07-20 21:30" --runtime py
 
 # 别真发，先看一眼每个平台会跑的命令
-node $SKILL/publish.mjs --slug finddata-brand-2026 --title "..." --dry-run
+node $SKILL/publish.mjs --slug finddata-brand-2026 --title "..." --dry-run --runtime py
 ```
 
-### 单平台发布（调试用）
+### 单平台调试（py 运行时，直接调适配层）
 
 ```bash
-SKILL=$VAAS/.agents/skills/d-vaas-publish-videos/scripts/platforms
+ADAPTER=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts/platforms/sau_adapter.py
 
-# 抖音
-node $SKILL/douyin.mjs --file video.mp4 --title "标题" --desc "描述" --tags "标签1,标签2" --cover-horizontal cover.jpg
+# 发一条（走 vendored upstream）
+python3 $ADAPTER --platform xiaohongshu --file video.mp4 --title "标题≤20字"
 
-# 快手
-node $SKILL/kuaishou.mjs --file video.mp4 --title "标题" --desc "描述 #话题" --tags "标签1,标签2"
+# 登录（扫码）
+python3 $ADAPTER --platform douyin --login
 
-# B站
-node $SKILL/bilibili.mjs --file video.mp4 --title "标题" --desc "简介" --tags "标签1" --cover cover.jpg --tid 124
+# 检查 cookie 是否有效
+python3 $ADAPTER --platform xiaohongshu --login-check
 
-# 小红书
-node $SKILL/xiaohongshu.mjs --file video.mp4 --title "标题≤20字" --desc "正文" --tags "标签1,标签2"
-
-# 视频号
-node $SKILL/weixin.mjs --file video.mp4 --desc "描述 #话题"
-
-# YouTube
-node $SKILL/youtube.mjs --file video.mp4 --title "Title" --desc "Description" --tags "tag1,tag2" --visibility public
+# 从旧 .profiles/ 迁移登录态到 cookies/（一次性）
+python3 $ADAPTER --platform weixin --migrate-profile
 ```
 
 ### publish.mjs 参数
@@ -124,14 +144,15 @@ node $SKILL/youtube.mjs --file video.mp4 --title "Title" --desc "Description" --
 | `--note` | ❌ | 小红书用的笔记正文；未给则退到 `desc` |
 | `--platforms` | ❌ | 逗号分隔平台列表，不给用 .env 的 `PLATFORMS` |
 | `--tags` | ❌ | 逗号分隔标签，不给用 .env 的 `TAGS` 或平台专属 `XXX_TAGS` |
-| `--schedule` | ❌ | `YYYY-MM-DD HH:MM`，不给立即发（仅 douyin/kuaishou 支持） |
+| `--runtime` | ❌ | `auto`（默认=macOS mjs / Windows py）/ `py`（推荐）/ `mjs`（legacy） |
+| `--schedule` | ❌ | `YYYY-MM-DD HH:MM`，不给立即发 |
 | `--dry-run` | ❌ | 只打印命令不执行 |
 | `--no-cover` | ❌ | 跳过封面生成与上传，用平台默认封面 |
 | `--cover-only` | ❌ | 只跑封面生成（4 张 + 回写 task.json），不执行发布（给预览确认用） |
 
 ## 平台差异化参数路由
 
-publish.mjs 按平台差异组装不同的 CLI 参数：
+publish.mjs 按平台差异组装不同的 CLI 参数（py/mjs 运行时路由一致）：
 
 | 平台 | 封面参数 | 标签字段 | 特殊参数 | 标签上限 |
 |---|---|---|---|---|
@@ -142,84 +163,80 @@ publish.mjs 按平台差异组装不同的 CLI 参数：
 | 视频号 | `--cover` | (描述内 #话题) | 无单独标题字段 | - |
 | YouTube | `--thumbnail` | `--tags` | `--visibility` | - |
 
-## 各平台技术要点
+## 登录态管理
 
-### 抖音 (douyin) — 标准 DOM，最简单
+### py 运行时（推荐）：cookie storage_state 文件
 
-- **无特殊框架**，标准 `document.querySelector` 即可
-- 描述输入框是 `contenteditable`，用 `execCommand('insertText')` 填写
-- 封面：横版 `.cover-Jg3T4p[0]` + 竖版 `.cover-Jg3T4p[1]`，点击后点「上传封面」
-- 发布按钮：`button` 含「发布」文本 + `primary` class
-- 选择器可能随版本变化，操作前先 `snapshotText()` 验证页面状态
-- 详见 `references/douyin.md`
+vendored upstream 用 patchright 的 `storage_state=` 加载登录态，存为 cookie JSON 文件：
 
-### 快手 (kuaishou) — React Joyride + 视口外按钮
+```
+scripts/upstream/cookies/<platform>_uploader/account.json    # xiaohongshu/douyin/kuaishou/weixin/youtube
+scripts/upstream/cookies/kuaishou_creator.json                # kuaishou 单独命名
+```
 
-- **React Joyride 遮罩**：首次使用时出现全屏遮罩拦截所有点击，必须先移除
-  `[class*="react-joyride"]` 元素
-- **封面选择**：Ant Design Modal，点击 `._default-cover` 打开，`.ant-btn-primary` 确认
-- **发布按钮在视口外**：`._button-primary_3a3lq_60`，必须先 `scrollIntoView({ block: 'center' })`
-- **话题标签 ≤ 4 个**（不是5！），超过报错且需刷新页面
-- 详见 `references/kuaishou.md`
+这些是**运行态登录态，gitignored，永不提交**。首次登录或失效后重新登录：
 
-### B站 (bilibili) — micro-app shadow DOM
+```bash
+ADAPTER=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts/platforms/sau_adapter.py
 
-- **micro-app 微前端**：所有内容在 `micro-app[name=video-up].shadowRoot` 内
-- 所有 `querySelector` 必须改为 `sr.querySelector`
-- **文件上传**：`uploadFile()` 可能失效（找不到 shadow DOM 内 input），用 CDP
-  `DOM.setFileInputFiles` 或 HTTP 服务器 + DataTransfer 方案
-- 需选择分区（`--tid`），否则无法发布
-- 详见 `references/bilibili.md`
+# 1. 扫码登录（弹 headed 浏览器，切扫码 tab，等用户扫）
+python3 $ADAPTER --platform xiaohongshu --login
 
-### 小红书 (xiaohongshu) — 标题字数限制
+# 2. 检查 cookie 是否还有效（不弹浏览器则有效）
+python3 $ADAPTER --platform xiaohongshu --login-check
 
-- 标准 DOM，无特殊框架
-- **标题 ≤ 20 字**（硬限制，超出截断）
-- **话题 ≤ 10 个**，每个话题需等候选框出现再点
-- 视频上传：`div[class^='upload-content'] input.upload-input`
-- 发布验证：URL 含 `/publish/success?`
-- 详见 `references/xiaohongshu.md`
+# 3. 从旧 .profiles/<platform>/ 迁移到 cookies/（已有持久 profile 时一次性迁移）
+python3 $ADAPTER --platform weixin --migrate-profile
+```
 
-### 视频号 (weixin) — Wujie shadow DOM，最复杂
+登录流程（硬性 3 步，上游实现）：
+1. **自动切到扫码登录** — 登录页找「扫码登录」按钮/tab 自动点击
+2. **明确提示用户** — 告诉用户切到弹出的 patchright 窗口扫码
+3. **自动轮询检测** — 每 3 秒检查登录状态，检测到成功自动继续，超时 120 秒提醒
 
-- **Wujie 微前端**：所有内容在 `wujie-app.shadowRoot` 内
-- **文件上传必须用 HTTP 服务器 + DataTransfer API**：
-  1. Node.js 启动本地 HTTP 服务器提供视频文件
-  2. 浏览器 `fetch('http://localhost:PORT/video.mp4')` -> `Blob` -> `new File()`
-  3. `DataTransfer.items.add(file)` -> `input.files = dt.files` -> dispatch `change` 事件
-- `uploadFile()` 和 `DOM.setFileInputFiles` 都不可用（React 事件不跨越 shadow DOM 边界）
-- 无单独标题字段，描述就是正文
-- 发布后状态「处理中」，转码完成后自动发布
-- 详见 `references/weixin.md`
+cookie 过期了重跑 `--login` 即可。`.profiles/` 是旧 `.py` 脚本的持久 profile，py 运行时不再用它
+（除 `--migrate-profile` 一次性迁移）。
 
-### YouTube — Polymer Web Components
+### mjs 运行时（legacy）：ego-browser 继承 Chrome
 
-- **Polymer dialog**：`tp-yt-paper-dialog` 需强制 `opened=true` + `display:block` + `setAttribute('opened','')`
-- **4 步对话框**：Details -> Video elements -> Checks -> Visibility，每步点 Next
-- **"Not made for kids" 必答**：不选则 Next 按钮禁用
-- 标题用 `execCommand('insertText')`（contenteditable `#textbox`，不能用 `.value`）
-- Checks 步骤需等待版权检查自动完成（30-60 秒）
-- Google 登录可能需要 2FA，遇到时交给用户处理
-- 详见 `references/youtube.md`
+ego-browser 继承用户 Chrome 登录态，无 cookie 文件。过期在 ego-browser 中重新登录即可。
 
-## 登录处理标准流程
+## 同步上游：sync-upstream.sh
 
-所有平台共用登录处理模式（硬性 3 步）：
+`scripts/sync-upstream.sh` 是用户要的「快速和开源项目同步」机制：
 
-1. **自动切到扫码登录** — 在登录页找「扫码登录」按钮/tab，自动点击切换
-2. **明确提示用户** — 告诉用户切到 ego-browser 窗口扫码
-3. **自动轮询检测** — 每 3 秒检查登录状态，检测到成功自动继续，超时 120 秒才提醒
+```bash
+cd $VAAS/.agents/skills/fd-vaas-publish-videos/scripts
 
-ego-browser 继承用户 Chrome 登录态。如果过期，在 ego-browser 中重新登录即可，无需 cookie 文件。
+./sync-upstream.sh              # 同步到上游最新 main
+./sync-upstream.sh <sha>        # 同步到指定 commit
+./sync-upstream.sh --check      # 只看 diff + SHA 对比，不写文件
+./sync-upstream.sh --remote <url>  # 用 fork（默认 dreammis/social-auto-upload）
+```
 
-## 发布后清理：关闭 ego 任务窗口（硬性步骤，必须做）
+机制：clone 上游 → `rsync -a --delete` uploader/+utils/ → `scripts/upstream/`（`--delete` 让 vendor
+与上游完全一致）→ 记录 SHA 到 `.upstream-version`。`conf.py` 是本地覆盖（headed/proxy 等），
+sync 不覆盖已有 conf.py，只在首次缺失时 bootstrap。
 
-发布完成后**必须关闭 ego-browser 的任务窗口**，不要留给用户自己关。这是流程的最后一步，不是可选项。
+规则：
+- `scripts/upstream/uploader|utils` 里的文件是 canonical 上游代码，**不要手改**——手改会被下次 sync 冲掉
+- 本地适配全在 `sau_adapter.py` / `conf.py` / `--migrate-profile` 里
+- `cookies/` 与 `logs/` 是运行态，gitignored，不会被 rsync 覆盖
 
-- **自动发布平台**（bilibili / kuaishou / xiaohongshu / youtube / weixin）：上传脚本末尾自调 `completeTaskSpace(id, { keep: false })`，成功时会自动关窗。但**脚本中途报错会让这行被跳过**，所以仍要跑下面的兜底清理。
-- **手动发布平台**（douyin）：脚本在「手动点发布」处 `handOffTaskSpace` 后即退出，窗口不会自动关。**用户回复「发布完成」后**，由你跑兜底清理关掉它。
+## 发布后清理
 
-兜底清理 heredoc（每个平台发完跑一次；douyin 等用户确认发布完成后再跑）：
+### py 运行时（patchright，无 ego 任务窗口）
+
+py 运行时走 patchright，**没有 ego 任务窗口要关**。上游脚本跑完 `wait_for_url("**/publish/success?**")`
+命中 success 页后自行结束，浏览器窗口由 patchright 生命周期管理，脚本退出即关。
+- 自动发布平台（xiaohongshu/kuaishou/weixin/youtube）：脚本跑完即结束，无需兜底
+- douyin：上游也是自动发布（与 mjs 运行时不同，mjs 的 douyin 需手动点发布）
+
+### mjs 运行时（ego-browser，legacy）
+
+mjs 运行时用 ego-browser，发布完**必须关闭 ego 任务窗口**，别留给用户自己关：
+- 自动发布平台（bilibili/kuaishou/xiaohongshu/youtube/weixin）：脚本末尾自调 `completeTaskSpace(id, { keep: false })`，但中途报错会跳过，仍要跑兜底清理
+- 手动发布平台（douyin）：脚本 `handOffTaskSpace` 后退出，**等用户回复「发布完成」后**再跑兜底清理
 
 ```bash
 ego-browser nodejs <<'EOF'
@@ -239,20 +256,25 @@ cliLog('🧹 清理完成，关闭 ' + closed + ' 个任务窗口');
 EOF
 ```
 
-要点：
-- `completeTaskSpace(id, { keep: false })` 对 user-owned 窗口会**先 claim 再 close**，所以**只在用户确认发布完成后才跑**——别在用户还在点发布时跑，会打断。
-- 默认 `keep: false`：发布完不需要保留页面，关掉。只有用户明确说「保留页面」或要继续看发布结果时才 `keep: true`。
-- 别只关当前平台：用户在多平台发布时会积一堆 `*-publish-*` 窗口，跑一次把所有 `publish` 命名的任务窗口都清掉。
-
 ## 首次配置
 
 ```bash
 cd $VAAS
 [ -f .env ] || cp .env.example .env
 $EDITOR .env   # 改 PLATFORMS 和各平台 XXX_TAGS
+
+# py 运行时依赖（一次性）
+pip install patchright
+patchright install chromium
+
+# 各平台扫码登录（headed 浏览器）
+SKILL=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts
+python3 $SKILL/platforms/sau_adapter.py --platform xiaohongshu --login
+python3 $SKILL/platforms/sau_adapter.py --platform douyin --login
+# ... 其余平台同理；youtube 需代理：export VAAS_YT_PROXY=http://127.0.0.1:7892
 ```
 
-关键项：
+关键 .env 项：
 - `PLATFORMS`：逗号分隔，默认发到哪些平台
 - `TAGS`：全局默认标签；`DOUYIN_TAGS` / `BILIBILI_TAGS` 等平台专属覆盖
 - `SCHEDULE`：全局默认定时，一般留空（立即发）
@@ -260,86 +282,80 @@ $EDITOR .env   # 改 PLATFORMS 和各平台 XXX_TAGS
 **分层覆盖**：每支视频想微调，在该 task 目录放 `downloads/fd-videos/<slug>/.publish.env`。
 优先级：`--flag CLI > <task>/.publish.env > <VAAS>/.env > 内置默认`。
 
-## Windows 上传链路（patchright）
+## 各平台技术要点（mjs 运行时 / legacy）
 
-ego-browser 只有 macOS arm64 二进制，**没有 Windows 版**。Windows 上用 patchright（stealth 版
-Playwright，能绕过抖音/小红书/B站的自动化检测）替代，脚本在 `scripts/platforms/<platform>.py`。
-publish.mjs 按 `process.platform` 自动派发，CLI 参数与 macOS 的 `.mjs` 完全一致，无需改用法。
+> 以下针对 mjs 运行时（ego-browser）。py 运行时上传逻辑由 vendored upstream 实现，
+> 见 `scripts/upstream/uploader/<platform>_uploader/main.py`，是上游 canonical 代码。
 
-### 一次性安装（Windows）
+### 抖音 (douyin) — 标准 DOM，最简单
+- 无特殊框架，标准 `document.querySelector`
+- 描述输入框是 `contenteditable`，用 `execCommand('insertText')` 填写
+- 封面：横版 `.cover-Jg3T4p[0]` + 竖版 `.cover-Jg3T4p[1]`，点击后点「上传封面」
+- 发布按钮：`button` 含「发布」文本 + `primary` class
+- 详见 `references/douyin.md`
 
-```powershell
-# 1. 装 patchright（stealth Playwright fork）
-pip install patchright
-# 2. 下载 stealth chromium 浏览器内核
-patchright install chromium
-# 3. （可选）想复用系统 Chrome 而非自带 chromium：在 .env 设 PATCHRIGHT_CHANNEL=chrome
-```
+### 快手 (kuaishou) — React Joyride + 视口外按钮
+- **React Joyride 遮罩**：首次出现全屏遮罩拦截点击，必须先移除 `[class*="react-joyride"]`
+- **发布按钮在视口外**：`._button-primary_3a3lq_60`，必须 `scrollIntoView({ block: 'center' })`
+- **话题标签 ≤ 4 个**（不是5！）
+- 详见 `references/kuaishou.md`
 
-### 登录态：持久 profile（模拟 ego-browser）
+### B站 (bilibili) — micro-app shadow DOM
+- **micro-app 微前端**：所有内容在 `micro-app[name=video-up].shadowRoot` 内
+- 需选择分区（`--tid`），否则无法发布
+- py 运行时走 `bilibili.py`（上游用 biliup 二进制，不在适配层）
+- 详见 `references/bilibili.md`
 
-patchright 用 `launch_persistent_context` 把登录态存到 `VAAS/.profiles/<platform>/`，
-跨次运行复用 —— 首次开浏览器扫码登录，之后不用重登（和 ego-browser 一样不存 cookie 文件）。
-profile 过期了就在弹出的浏览器窗口里重新登录。
+### 小红书 (xiaohongshu) — 标题字数限制
+- **标题 ≤ 20 字**（硬限制）；**话题 ≤ 10 个**
+- 发布验证：URL 含 `/publish/success?`（py 运行时上游 `wait_for_url` 命中才报成功）
+- 详见 `references/xiaohongshu.md`
 
-### 与 macOS 链路的差异
+### 视频号 (weixin) — Wujie shadow DOM，最复杂
+- **Wujie 微前端**：所有内容在 `wujie-app.shadowRoot` 内
+- **文件上传必须用 HTTP 服务器 + DataTransfer API**（mjs 运行时）
+- 详见 `references/weixin.md`
 
-| | macOS (.mjs) | Windows (.py) |
-|---|---|---|
-| 自动化引擎 | ego-browser | patchright (stealth Playwright) |
-| 登录态复用 | 继承用户 Chrome | 独立持久 profile（`VAAS/.profiles/<platform>/`） |
-| 页内 JS | `js(...)` 注入 | `page.evaluate(...)`（JS 与 .mjs 基本同源） |
-| 文件上传 | `uploadFile()` | `set_input_files()`；视频号用 HTTP 服务器 + DataTransfer |
-| 用户交接 | `handOffTaskSpace` | `input()` 阻塞回车（浏览器窗口始终开着） |
-
-### 配置项（.env）
-
-- `PYTHON`：Windows 上 Python 解释器命令，默认 `python`（也可 `py`/`python3`）
-- `VAAS_ROOT`：publish.mjs 自动透传给 .py，定位 `.profiles/` 目录
-
-### 直接调单平台 .py（调试用）
-
-```bash
-python scripts/platforms/douyin.py --file video.mp4 --title "标题" --tags "科技,开源" --dry-run
-```
-
-### ⚠️ 已知限制 / 待真机验证
-
-- **视频号 weixin** 最难：Wujie shadow DOM + React 事件不跨边界，已用 HTTP 服务器 + DataTransfer
-  方案 port，但未在真机登录态下验证完整上传；建议先 `--dry-run` 看能否进到上传页。
-- **B站 bilibili**：micro-app 的 shadow DOM 若为 closed，patchright locator 无法穿透，
-  需改用 weixin 同款 HTTP+DataTransfer（当前先按 open 处理）。
-- **小红书 tags**：中文话题用 `keyboard.type`，CJK 在个别输入框可能需改 `evaluate` 直填。
-- 各平台选择器会随站点改版漂移；失败先读 `references/<platform>.md` 的选择器表，必要时更新 .py 里的 JS。
+### YouTube — Polymer Web Components
+- **Polymer dialog**：`tp-yt-paper-dialog` 需强制 `opened=true`
+- **4 步对话框**：Details -> Video elements -> Checks -> Visibility
+- **"Not made for kids" 必答**
+- py 运行时需代理：`export VAAS_YT_PROXY=http://127.0.0.1:7892`
+- 详见 `references/youtube.md`
 
 ## 故障排查
 
 | 问题 | 解决方案 |
 |---|---|
-| 某平台上传失败 | 读 `references/<platform>.md` 的技术挑战章节 |
-| 登录态失效 | ego-browser 继承 Chrome 登录态，在 ego-browser 中重新登录 |
-| shadow DOM 找不到元素 | B站用 `micro-app[name=video-up].shadowRoot`，视频号用 `wujie-app.shadowRoot` |
-| 文件上传失败 | 视频号必须用 HTTP 服务器 + DataTransfer 方案（见 `references/weixin.md`） |
-| 快手点击没反应 | 移除 React Joyride 遮罩 + scrollIntoView 发布按钮 |
-| YouTube 对话框打不开 | 强制 `paper.opened=true` + `display:block` + `setAttribute('opened','')` |
+| py 运行时某平台上传失败 | 读 `scripts/upstream/uploader/<platform>_uploader/main.py` 看上游逻辑；先 `--login-check` 确认 cookie 有效 |
+| cookie 失效 | `python3 sau_adapter.py --platform <p> --login` 重新扫码 |
+| 从旧 .profiles 迁移 | `python3 sau_adapter.py --platform <p> --migrate-profile` |
+| 想同步上游最新代码 | `./sync-upstream.sh`（或 `--check` 只看 diff） |
+| bilibili py 运行时 | 走 `bilibili.py`，上游用 biliup 二进制不在适配层 |
+| youtube 需代理 | `export VAAS_YT_PROXY=http://127.0.0.1:7892` |
+| mjs 运行时登录态失效 | ego-browser 继承 Chrome 登录态，在 ego-browser 中重新登录 |
+| shadow DOM 找不到元素 | B站 `micro-app[name=video-up].shadowRoot`，视频号 `wujie-app.shadowRoot` |
+| 视频号文件传不上去 | mjs 运行时必须 HTTP+DataTransfer 方案；py 运行时上游已处理 |
+| 快手话题报错 | 话题 ≤ 4 个，超过需刷新 |
 | YouTube Next 按钮灰色 | 必选 "Not made for kids" + 等 Checks 步骤完成 |
-| 快手话题报错 | 话题 ≤ 4 个，超过需刷新页面 |
 | 想只看命令不真发 | 加 `--dry-run` |
 | Windows: `command not found: python` | .env 设 `PYTHON=py` 或 `PYTHON=python3` |
 | Windows: patchright 报找不到 chromium | 跑 `patchright install chromium` |
-| Windows: 登录态每次都丢 | 确认 `VAAS_ROOT` 指向 VAAS，profile 在 `VAAS/.profiles/<platform>/` |
-| Windows: 视频号文件传不上去 | HTTP+DataTransfer 方案已内置；确认本地 HTTP 服务器端口未被占（脚本自动选空闲端口） |
 
 ## 参考
 
-- `scripts/publish.mjs` — 主入口（编排 + 路由到各平台脚本）
-- `scripts/platforms/<platform>.mjs` — 各平台 ego-browser 上传脚本
-- `scripts/platforms/<platform>.py` - 各平台 patchright 上传脚本（Windows），CLI 参数与 .mjs 一致
-- `scripts/platforms/lib/browser_utils.py` - patchright 共享工具（launch/登录/点击/上传）
-- `scripts/platforms/requirements.txt` - Windows 依赖（patchright）
-- `scripts/lib/browser-utils.mjs` — 共享浏览器工具函数
-- `references/platform-quirks.md` — 各平台坑详解
+- `scripts/publish.mjs` — 主入口（编排 + 路由到各平台脚本 + `--runtime` 派发）
+- `scripts/platforms/sau_adapter.py` — 薄适配层（CLI→上游 `<Platform>Video.main()`；`--login`/`--login-check`/`--migrate-profile`）
+- `scripts/sync-upstream.sh` — 上游同步机制（clone+rsync--delete+记 SHA；`--check`/`--remote`/`<sha>`）
+- `scripts/upstream/` — vendored social-auto-upload（uploader/+utils/+conf.py+conf.example.py）
+  - `uploader/<platform>_uploader/main.py` — 各平台上传 canonical 代码（**不要手改**）
+  - `utils/` — stealth.min.js 等共享工具
+  - `conf.py` — VAAS 本地 conf 覆盖（headed/proxy；sync 不覆盖）
+  - `cookies/<platform>_uploader/account.json` — 运行态登录态（gitignored）
+- `scripts/platforms/<platform>.py` — bilibili.py（py 运行时；其余平台走 sau_adapter）
+- `scripts/platforms/<platform>.mjs` — legacy ego-browser 脚本（Phase 3 删除）
+- `scripts/platforms/lib/browser_utils.py` — 旧 .py 共享工具（仅 bilibili.py 仍用）
+- `scripts/lib/browser-utils.mjs` — legacy 共享浏览器工具函数
 - `references/<platform>.md` — 各平台完整技术档案（选择器表、heredoc 代码、常见问题）
-- `references/xiaohongshu-*.md` — 小红书额外参考（upload-flow, selectors, troubleshooting）
 - **fd-cover-image skill** — 封面生成（Remotion 方案，优先用）
 - **fd-vaas-video-creator skill** — 视频产出（本 skill 只读成片，不生成视频）
