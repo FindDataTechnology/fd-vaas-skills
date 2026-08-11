@@ -6,7 +6,7 @@ description: >
   把 social-auto-upload 上游整个 vendor 进 scripts/upstream/，薄适配层 sau_adapter.py 把
   CLI 翻译成上游 <Platform>Video(...).main() 调用。支持抖音/小红书/B站/快手/视频号/YouTube 六平台。
   两种运行时：`--runtime py`（推荐，走 vendored upstream + patchright，已验证小红书实发）；
-  `--runtime mjs`（legacy，ego-browser，macOS auto 默认，Phase 2-3 会淘汰）。bilibili 上游走 biliup
+  `--runtime mjs`（legacy，ego-browser，Phase 3 淘汰）。bilibili 上游走 biliup
   二进制而非 Playwright，py 运行时仍走本地 bilibili.py。触发场景：用户说"把这支视频发到
   抖音/小红书/B站/视频号/YouTube/快手"、"多平台一起发"、"分发这条视频"、"push to socials"、
   "posting the video"，或者刚做完一支 fd-videos/<slug>/ 里的视频、要走下一步分发时。
@@ -14,8 +14,8 @@ description: >
 compatibility: 推荐 py 运行时=Python 3.10+ + patchright(`pip install patchright` + `patchright install chromium`)，
   各平台 cookie 已登录(cookies/<platform>_uploader/account.json)；fd-vaas-video-creator 已跑完
   (存在 downloads/fd-videos/<slug>/task.json + <slug>.mp4)。macOS 也可用 legacy mjs 运行时
-  (Node.js 18+ + ego-browser)。publish.mjs --runtime py 全平台走 sau_adapter → vendored upstream；
-  --runtime mjs 走 ego-browser .mjs；--runtime auto=macOS mjs / Windows py。
+  (Node.js 18+ + ego-browser)。**默认 auto = py**（vendored upstream）；`--runtime mjs` 是 legacy
+  逃生口（ego-browser，Phase 3 删除）；`--runtime py` 显式走 vendored upstream。
 ---
 
 # FD VAAS 视频分发器
@@ -35,7 +35,7 @@ publish.mjs (编排: 封面/标签/定时/路由)
     │     │     登录态: cookies/<platform>_uploader/account.json (storage_state)
     │     └── bilibili → bilibili.py（上游用 biliup 二进制，不在适配层）
     │
-    └── --runtime mjs（legacy）→ <platform>.mjs (ego-browser，Phase 2-3 淘汰)
+    └── --runtime mjs（legacy 逃生口）→ <platform>.mjs (ego-browser，Phase 3 删除)
           登录态: ego-browser 继承用户 Chrome
 ```
 
@@ -97,8 +97,8 @@ vendor 让我们免费获得上游的 bugfix，sync-upstream.sh 一键同步。
 export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
 SKILL=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts
 
-# 最简：发到 .env 里配的默认平台（macOS 默认 mjs；显式指定 py 走 vendored upstream）
-node $SKILL/publish.mjs --slug finddata-brand-2026 --title "寻数科技｜探索更开放更公平的AI未来" --runtime py
+# 最简：发到 .env 里配的默认平台（默认 auto=py，走 vendored upstream，无需显式 --runtime）
+node $SKILL/publish.mjs --slug finddata-brand-2026 --title "寻数科技｜探索更开放更公平的AI未来"
 
 # 指定平台 + 标签 + 描述
 node $SKILL/publish.mjs --slug finddata-brand-2026 \
@@ -144,7 +144,7 @@ python3 $ADAPTER --platform weixin --migrate-profile
 | `--note` | ❌ | 小红书用的笔记正文；未给则退到 `desc` |
 | `--platforms` | ❌ | 逗号分隔平台列表，不给用 .env 的 `PLATFORMS` |
 | `--tags` | ❌ | 逗号分隔标签，不给用 .env 的 `TAGS` 或平台专属 `XXX_TAGS` |
-| `--runtime` | ❌ | `auto`（默认=macOS mjs / Windows py）/ `py`（推荐）/ `mjs`（legacy） |
+| `--runtime` | ❌ | `auto`（默认=**py**，vendored upstream）/ `py`（显式）/ `mjs`（legacy 逃生口，ego-browser，Phase 3 删） |
 | `--schedule` | ❌ | `YYYY-MM-DD HH:MM`，不给立即发 |
 | `--dry-run` | ❌ | 只打印命令不执行 |
 | `--no-cover` | ❌ | 跳过封面生成与上传，用平台默认封面 |

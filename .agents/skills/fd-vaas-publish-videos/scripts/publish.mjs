@@ -109,17 +109,19 @@ if (!fs.existsSync(mp4)) {
 // 平台脚本目录（实际 skill 目录是 fd-vaas-publish-videos）
 const PLATFORMS_DIR = path.join(VAAS, ".agents", "skills", "fd-vaas-publish-videos", "scripts", "platforms");
 
-// 运行时选择：--runtime flag > VAAS_PUBLISH_RUNTIME env > auto（macOS=mjs/ego-browser，Windows=py/upstream）
+// 运行时选择：--runtime flag > VAAS_PUBLISH_RUNTIME env > auto（默认 py/vendored upstream）
+// Phase 2：默认翻 py（vendored social-auto-upload，patchright），macOS 不再默认走 mjs。
+// --runtime mjs 仍保留为 legacy 逃生口（ego-browser），Phase 3 删除。
 // --runtime py 走 vendored social-auto-upload（sau_adapter.py，patchright）；bilibili 仍走 bilibili.py
 const runtimeChoice = (cliRuntime ?? env.VAAS_PUBLISH_RUNTIME ?? "auto").toLowerCase();
 const IS_WIN = process.platform === "win32";
 let USE_PY;
 if (runtimeChoice === "py") USE_PY = true;
 else if (runtimeChoice === "mjs") USE_PY = false;
-else if (runtimeChoice === "auto") USE_PY = IS_WIN;
+else if (runtimeChoice === "auto") USE_PY = true; // ← Phase 2：auto 默认 py（曾为 IS_WIN）
 else {
-  console.warn(`⚠️  未知 --runtime "${runtimeChoice}"，回退 auto`);
-  USE_PY = IS_WIN;
+  console.warn(`⚠️  未知 --runtime "${runtimeChoice}"，回退 auto (=py)`);
+  USE_PY = true;
 }
 const RUNTIME = USE_PY ? (env.PYTHON || "python3") : "node";
 const SCRIPT_EXT = USE_PY ? "py" : "mjs";
