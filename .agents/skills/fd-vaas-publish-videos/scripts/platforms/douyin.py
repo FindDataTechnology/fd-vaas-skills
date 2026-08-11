@@ -17,8 +17,8 @@ import argparse
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 from browser_utils import (  # noqa: E402
     Browser, cli_log, wait, is_logged_in, wait_for_login,
-    click_by_text, safe_fill, upload_file, with_retry, handoff,
-    default_profile_dir,
+    click_by_text, safe_fill, upload_file, with_retry,
+    handoff, type_text, default_profile_dir,
 )
 
 # ─── args ────────────────────────────────────────────────
@@ -93,15 +93,21 @@ JS_ID_VIDEO_INPUT = """
 })()
 """
 
-JS_FILL_DESC = """
-(text) => {
+# 聚焦描述框 + 清空已有内容（selectAll+delete 走 execCommand，仅用于选区/清除）。
+# 文本输入改用 type_text 真实键盘事件——execCommand('insertText') 在抖音 React
+# 受控 contenteditable 上静默失败（.mjs 版描述丢失的根因）。\n 经 patchright 解释为 Enter。
+JS_FOCUS_DESC = """
+() => {
   const editor = document.querySelector('[contenteditable="true"]');
-  if (editor) {
-    editor.focus();
-    document.execCommand('insertText', false, text);
-    return true;
-  }
-  return false;
+  if (!editor) return false;
+  editor.focus();
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  sel.addRange(range);
+  document.execCommand('delete');
+  return true;
 }
 """
 
@@ -180,11 +186,11 @@ with Browser(profile, headless=False) as b:
         except Exception as e:
             cli_log(f"⚠️  视频上传可能需要手动操作: {e}")
 
-        # 步骤 4: 填写作品描述
+        # 步骤 4: 填写作品描述（focus+清空 走 JS_FOCUS_DESC，文本走 type_text 真实键盘事件）
         cli_log("\n▶ [4/6] 填写作品描述")
         try:
-            ok = b.eval(JS_FILL_DESC, full_desc)
-            if ok:
+            if b.eval(JS_FOCUS_DESC):
+                type_text(b, full_desc)
                 cli_log("✅  描述填写完成")
             else:
                 cli_log("⚠️  未找到描述输入框，请手动填写")

@@ -2,13 +2,14 @@
 /**
  * publish.mjs - 优化版
  *
- * fd-vaas-publish 主入口。做的事:
+ * fd-vaas-publish-videos 主入口。做的事:
  *   1. 读 slug 的 task.json,拿到 mp4 路径 + slug + 已发布记录
  *   2. 读 skill-global .env + task-local .publish.env(如存在),合并偏好
  *   3. 按 PLATFORMS 逐个平台调上传脚本（按平台 OS 派发运行时）:
- *        macOS  -> node  .agents/skills/fd-vaas-publish-videos/scripts/platforms/<platform>.mjs  (ego-browser)
- *        Windows-> python .agents/skills/fd-vaas-publish-videos/scripts/platforms/<platform>.py   (patchright)
- *      两套脚本 CLI 参数一致，下面的参数组装逻辑共用。env.PYTHON 可覆盖 Windows 解释器。
+ *        macOS/mjs -> node  platforms/<platform>.mjs  (ego-browser)
+ *        py 运行时 -> python platforms/sau_adapter.py --platform <p>  (vendored social-auto-upload, patchright)
+ *                    bilibili 仍走 platforms/bilibili.py（上游用 biliup 二进制，非 Playwright）
+ *      两套入口 CLI 参数一致，下面的参数组装逻辑共用。env.PYTHON 可覆盖解释器。
  *   4. 每成功一次,append 到 task.json 的 distribution[]
  *
  * 支持平台:
@@ -46,6 +47,7 @@ const cliNote = getArg("--note");
 const cliPlatforms = getArg("--platforms");
 const cliTags = getArg("--tags");
 const cliSchedule = getArg("--schedule");
+const cliRuntime = getArg("--runtime");
 const dryRun = hasArg("--dry-run");
 const noCover = hasArg("--no-cover");
 const coverOnly = hasArg("--cover-only");
@@ -104,19 +106,32 @@ if (!fs.existsSync(mp4)) {
   process.exit(1);
 }
 
-// 平台脚本目录（实际 skill 目录是 fd-vaas-publish-videos；之前写成 fd-vaas-publish 是错的）
+// 平台脚本目录（实际 skill 目录是 fd-vaas-publish-videos）
 const PLATFORMS_DIR = path.join(VAAS, ".agents", "skills", "fd-vaas-publish-videos", "scripts", "platforms");
 
-// macOS = ego-browser (.mjs)；Windows = patchright (.py)。两套脚本 CLI 参数完全一致，下面的参数组装逻辑共用。
-// ego-browser 没有 Windows 版，Windows 走 patchright（stealth Playwright）+ 持久 profile 复用登录态。
+// 运行时选择：--runtime flag > VAAS_PUBLISH_RUNTIME env > auto（macOS=mjs/ego-browser，Windows=py/upstream）
+// --runtime py 走 vendored social-auto-upload（sau_adapter.py，patchright）；bilibili 仍走 bilibili.py
+const runtimeChoice = (cliRuntime ?? env.VAAS_PUBLISH_RUNTIME ?? "auto").toLowerCase();
 const IS_WIN = process.platform === "win32";
-const RUNTIME = IS_WIN ? (env.PYTHON || "python") : "node";
-const SCRIPT_EXT = IS_WIN ? "py" : "mjs";
-const ACCOUNT_LABEL = IS_WIN ? "patchright" : "ego-browser";
+let USE_PY;
+if (runtimeChoice === "py") USE_PY = true;
+else if (runtimeChoice === "mjs") USE_PY = false;
+else if (runtimeChoice === "auto") USE_PY = IS_WIN;
+else {
+  console.warn(`⚠️  未知 --runtime "${runtimeChoice}"，回退 auto`);
+  USE_PY = IS_WIN;
+}
+const RUNTIME = USE_PY ? (env.PYTHON || "python3") : "node";
+const SCRIPT_EXT = USE_PY ? "py" : "mjs";
+const ACCOUNT_LABEL = USE_PY ? "patchright" : "ego-browser";
 
 const newCliScript = (p) => path.join(PLATFORMS_DIR, `${p}.${SCRIPT_EXT}`);
-
-const NODE = "node";
+// 薄适配层：py 运行时 5 个 Playwright 平台走 vendored upstream（social-auto-upload）
+// bilibili 不在此列——上游 bilibili 用 biliup 二进制而非 Playwright，仍走本地 bilibili.py
+const SAU_ADAPTER = path.join(PLATFORMS_DIR, "sau_adapter.py");
+// py 运行时走适配层的平台（bilibili 除外——上游用 biliup 二进制，不在适配层内）
+const SAU_PLATFORMS = new Set(["xiaohongshu", "douyin", "kuaishou", "weixin", "youtube"]);
+const usesAdapter = (p) => USE_PY && SAU_PLATFORMS.has(p);
 
 // ─── per-platform config ───────────────────────────────
 function platformConfig(p) {
@@ -140,6 +155,9 @@ function ensureSeconds(s) {
 
 // ─── 检测平台 CLI 是否存在 ─────────────────────────
 function getCliType(p) {
+  if (usesAdapter(p)) {
+    return fs.existsSync(SAU_ADAPTER) ? 'sau' : null;
+  }
   if (fs.existsSync(newCliScript(p))) {
     return 'new';
   }
@@ -169,12 +187,16 @@ function buildCommand(p) {
   
   if (!cliType) {
     throw new Error(
-      `暂无 ${p} 上传脚本: .agents/skills/fd-vaas-publish/scripts/platforms/${p}.mjs`
+      `暂无 ${p} 上传脚本: .agents/skills/fd-vaas-publish-videos/scripts/platforms/${p}.${SCRIPT_EXT}`
     );
   }
 
-  // 所有平台都使用 ego-browser CLI
-  const argv = [newCliScript(p), "--file", mp4, "--title", cliTitle];
+  // py 运行时：5 个 Playwright 平台走 sau_adapter（vendored social-auto-upload）；
+  // bilibili 仍用原 bilibili.py（上游走 biliup 二进制，不在适配层内）；
+  // mjs 运行时：走 <platform>.mjs（ego-browser）
+  const argv = usesAdapter(p)
+    ? [SAU_ADAPTER, "--platform", p, "--file", mp4, "--title", cliTitle]
+    : [newCliScript(p), "--file", mp4, "--title", cliTitle];
   if (body) argv.push("--desc", body);
   if (cfg.tags) argv.push("--tags", cfg.tags);
   
@@ -201,7 +223,10 @@ function buildCommand(p) {
     if (c) argv.push("--thumbnail", c);
   }
   
-  if (schedule && (p === 'douyin' || p === 'kuaishou')) {
+  const scheduleOk = usesAdapter(p)
+    ? p !== 'youtube'            // 适配层：除 youtube（上游无 publish_date）外都支持定时
+    : (p === 'douyin' || p === 'kuaishou');  // mjs：仅这两平台支持
+  if (schedule && scheduleOk) {
     argv.push("--schedule", p === 'kuaishou' ? ensureSeconds(schedule) : schedule);
   } else if (schedule) {
     console.log(`  ⚠️  ${p} 暂不支持 --schedule，已忽略`);
@@ -215,7 +240,7 @@ function buildCommand(p) {
     argv.push("--dry-run");
   }
   
-  return { cmd: RUNTIME, args: argv, cwd: VAAS, account: ACCOUNT_LABEL, cliType: IS_WIN ? 'py' : 'new' };
+  return { cmd: RUNTIME, args: argv, cwd: VAAS, account: ACCOUNT_LABEL, cliType: USE_PY ? 'py' : 'mjs' };
 }
 
 // ─── 封面:缺了就自动用公司风格模板补一套(发布时自动补全) ──
@@ -310,7 +335,7 @@ if (!dryRun) {
     });
 
     // Write to SQLite database
-    const dbWriter = path.join(VAAS_ROOT, 'data', 'db_writer.py');
+    const dbWriter = path.join(VAAS, 'data', 'db_writer.py');
     if (fs.existsSync(dbWriter)) {
       spawnSync('python3', [
         dbWriter,
@@ -332,7 +357,7 @@ if (!dryRun) {
     fs.appendFileSync(historyPath, `- ${now} - publish: ${summary}\n`);
 
     // Write history to database
-    const dbWriter = path.join(VAAS_ROOT, 'data', 'db_writer.py');
+    const dbWriter = path.join(VAAS, 'data', 'db_writer.py');
     if (fs.existsSync(dbWriter)) {
       spawnSync('python3', [
         dbWriter,
@@ -351,7 +376,7 @@ console.log("📊 发布总结");
 console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 for (const r of results) {
   const badge = r.dryRun ? "🔎 dry" : r.ok ? "✅" : "❌";
-  const cliLabel = IS_WIN ? 'py' : 'ego';
+  const cliLabel = USE_PY ? 'py' : 'ego';
   console.log(`  ${badge} ${r.platform.padEnd(12)} [${cliLabel}] ${r.error ?? ""}`);
 }
 console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

@@ -32,6 +32,10 @@ vaas.db
 
 # Browser profiles & runtime state (logged-in sessions - NEVER commit)
 .profiles/
+# vendored social-auto-upload runtime state (cookies = live logins, logs = per-platform)
+.agents/skills/fd-vaas-publish-videos/scripts/upstream/cookies/
+.agents/skills/fd-vaas-publish-videos/scripts/upstream/logs/
+.agents/skills/fd-vaas-publish-videos/scripts/upstream/.upstream-version
 
 # Remotion: source IS tracked; ignore build output & generated/per-task media
 remotion-app/node_modules/
