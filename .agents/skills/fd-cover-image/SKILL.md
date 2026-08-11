@@ -126,7 +126,7 @@ npx remotion still <CompositionId> \
 ## 与其他工具的关系
 
 - **fd-vaas-video-creator**：视频渲染完成后，如果用户要加封面，调用本 skill 生成，再嵌入到视频里（`embed-poster.mjs`）或用于平台上传。
-- **fd-vaas-publish**：分发前自动调用本 skill 生成各平台对应尺寸的封面，用户确认后再上传。
+- **fd-vaas-publish-videos**：分发前自动调用本 skill 生成各平台对应尺寸的封面，用户确认后再上传。
 - **fd-vaas-video-creator 内置 seedream**：当 Remotion 做不了（需要插画、照片、复杂创意视觉）时才用。使用前向用户说明为什么不用 Remotion 方案。
 
 ---

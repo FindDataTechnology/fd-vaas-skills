@@ -1,8 +1,8 @@
 """
 浏览器自动化通用工具 (patchright 版)
 
-镜像 lib/browser-utils.mjs，但底层换成 patchright(sync API)。
-ego-browser 的 task-space 模型 -> launch_persistent_context + 持久 profile。
+bilibili.py 用的 patchright(sync API) 共享工具。legacy `.mjs` 版已在 Phase 3 删除，
+本文件是唯一运行时实现。ego-browser 的 task-space 模型 -> launch_persistent_context + 持久 profile。
 handOffTaskSpace/takeOverTaskSpace -> 阻塞 input()（浏览器窗口始终开着，用户直接操作）。
 """
 

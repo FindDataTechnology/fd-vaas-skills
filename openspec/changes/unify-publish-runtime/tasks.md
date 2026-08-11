@@ -26,8 +26,8 @@
 
 ## Phase 3: 清理死代码
 
-- [ ] 删 6 个 `.mjs`（douyin/bilibili/kuaishou/weixin/xiaohongshu/youtube）
-- [ ] 删 `lib/browser-utils.mjs`（411 行）
-- [ ] `publish.mjs` 删 `--runtime` 的 `mjs` 选项 + `IS_WIN` 分支（此时已全 py）
-- [ ] grep 确认：无残留 `.mjs` import、无 `execCommand.*insertText` 用于文本输入、无 stale `fd-vaas-publish`（不带 `-videos`）引用
-- [ ] commit + push
+- [x] 删 6 个 `.mjs`（douyin/bilibili/kuaishou/weixin/xiaohongshu/youtube）✓ 2026-08-11
+- [x] 删 `lib/browser-utils.mjs`（411 行）✓ 2026-08-11
+- [x] `publish.mjs` 删 `--runtime` 的 `mjs` 选项 + `IS_WIN` 分支（此时已全 py）✓ 2026-08-11 — `--runtime` 只认 py/auto，传 mjs 报错退出；`RUNTIME = env.PYTHON || "python3"`
+- [x] grep 确认：无残留 `.mjs` import、无 `execCommand.*insertText` 用于文本输入、无 stale `fd-vaas-publish`（不带 `-videos`）引用 ✓ 2026-08-11 — scripts/ 下无 .mjs import（exit 1=clean）；execCommand 仅存 browser_utils.py:157,163（bilibili.py 用的 safe_fill，刻意保留）；bare `fd-vaas-publish` 全清
+- [x] commit + push ✓ 2026-08-11

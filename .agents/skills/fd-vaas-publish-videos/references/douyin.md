@@ -1,8 +1,13 @@
 
-# 抖音上传 Skill (douyin-upload)
+# 抖音上传参考 (douyin)
 
-通过 ego-browser 浏览器自动化，将视频发布到抖音创作者中心（creator.douyin.com）。
-**完全基于真实浏览器操作**，复用用户已有的登录态，不需要额外登录或 cookie 文件。
+> ⚠️ **本文档为 legacy ego-browser 参考**。当前上传走 **vendored upstream**（social-auto-upload，
+> patchright）经 `sau_adapter.py --platform douyin` 调用，见 `fd-vaas-publish-videos/SKILL.md` 的
+> 「登录态管理」与「同步上游」章节。下面的 ego-browser 代码与选择器是历史实现，仅保留供
+> DOM 结构/选择器对照调试用，不再由 `publish.mjs` 路由执行。
+
+抖音上传通过 patchright 自动化，将视频发布到抖音创作者中心（creator.douyin.com）。
+登录态存为 `scripts/upstream/cookies/douyin_uploader/account.json`（`storage_state`）。
 
 ---
 
