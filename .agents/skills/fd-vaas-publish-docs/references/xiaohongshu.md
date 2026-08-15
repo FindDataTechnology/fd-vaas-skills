@@ -1,5 +1,8 @@
 # 小红书图文笔记 xiaohongshu
 
+> ⚠️ **已被上游取代(2026-08)**:小红书图文走 `scripts/note_adapter.py`(复用 vendored social-auto-upload 的 `XiaoHongShuNote`,cookie 与视频发布共享),publish.mjs 会自动路由。本文件留作选择器参考,不再作为发布路径维护。
+
+
 小红书**没有纯文字**,「文档」= 图文笔记,**必须至少 1 张图**。选择器复用本仓库 `xiaohongshu-upload` skill(已部分实机确认)。
 
 ## 入口

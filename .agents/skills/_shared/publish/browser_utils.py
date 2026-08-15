@@ -497,6 +497,63 @@ def fill_title(b, selector, title, label="标题"):
         return False
 
 
+def fill_hidden(b, selector, value, label="填隐藏域"):
+    """填 hidden input/textarea(如公众号 #title):locator.fill 对不可见元素超时,直接 js 赋值 + input 事件。"""
+    try:
+        js = """
+        ([sel, val]) => {
+          const el = document.querySelector(sel);
+          if (!el) return false;
+          el.value = val;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        }
+        """
+        if b.eval(js, [selector, value]):
+            cli_log(f"✅  {label}(js): {value[:40]}")
+            return True
+        cli_log(f"⚠️  {label}: 未找到 {selector}")
+        return False
+    except Exception as e:
+        cli_log(f"⚠️  {label} 失败: {e}")
+        return False
+
+
+def paste_html(b, text, editor_selector, label="正文"):
+    """按行转 <p> 后用 text/html 剪贴板粘贴 —— ProseMirror 类编辑器(公众号)粘纯文本会丢 \\n。
+
+    每行 -> <p>line</p>,空行 -> <p><br></p>;ClipboardItem({'text/html': blob}) 写入,再 Mod+v。
+    失败回退 paste_text(可能丢换行,但内容能进)。
+    """
+    import html as _html
+    lines = text.split("\n")
+    html_body = "".join(
+        f"<p>{_html.escape(l)}</p>" if l.strip() else "<p><br></p>" for l in lines
+    )
+    mod = _mod_key()
+    try:
+        b.page.locator(editor_selector).first.click(timeout=8000)
+        wait(0.3)
+        b.page.keyboard.press(f"{mod}+a")
+        b.page.keyboard.press("Delete")
+        js = """
+        async (htmlStr) => {
+          const blob = new Blob([htmlStr], { type: 'text/html' });
+          await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+          return true;
+        }
+        """
+        b.eval(js, html_body)
+        b.page.keyboard.press(f"{mod}+v")
+        wait(1.5)
+        cli_log(f"✅  {label}: HTML 粘贴({len(text)} 字, {len(lines)} 行)")
+        return True
+    except Exception as e:
+        cli_log(f"⚠️  {label}: HTML 粘贴失败({e}),回退纯文本粘贴")
+        return paste_text(b, text, editor_selector=editor_selector, label=label) != "failed"
+
+
 def upload_images(b, selector, paths, label="上传图片"):
     """给 input[type=file] 设置一张或多张图。paths 可为 str 或 list。"""
     if isinstance(paths, str):

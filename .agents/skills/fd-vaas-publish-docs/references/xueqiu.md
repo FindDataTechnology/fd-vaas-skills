@@ -6,17 +6,17 @@
 
 | 项 | URL / 值 |
 |---|---|
-| 长文编辑器 | `https://xueqiu.com/zhuanlan/publish`(未登录跳登录) |
-| 登录页 | `https://xueqiu.com/user/login` |
+| 首页/登录 | `https://xueqiu.com/`(登录是**页内弹层**:手机验证码「发送验证码」/扫码,URL 不变) |
+| 长文编辑器 | ⚠️ 旧入口 `https://xueqiu.com/zhuanlan/publish` **已 404**(2026-08-11 probe 实测);真实入口待登录后确认(疑似首页/个人页「写长文」弹层) |
 | 发布成功 | URL 变 `https://xueqiu.com/<uid>/<id>` 或跳专栏列表 |
 
-> ⚠️ 雪球长文入口可能改成个人页「写长文」按钮触发弹层,而非独立 URL。probe 时如果 `/zhuanlan/publish` 跳走,改去 `https://xueqiu.com/` 个人页找「写长文」。
+> ⚠️ 2026-08-11 probe:旧 URL 直接 404,且账号未登录(页内弹「发送验证码」)。**先登录,再从首页/个人页找「写长文」入口,重 probe 后回填本表**。
 
-## 0) 首次:probe 核选择器
+## 0) 首次:登录后 probe 核选择器
 
 ```bash
-export PROBE_URL="https://xueqiu.com/zhuanlan/publish"
-# 跑 references/probe.md;雪球编辑器结构未实机验证,必跑
+export PROBE_URL="https://xueqiu.com/"
+# ⚠️ 旧入口已 404:先登录(页内弹层),在首页/个人页找到「写长文」入口后,把 PROBE_URL 换成真实编辑器 URL 再跑 references/probe.md
 ```
 
 ## 1) 登录态校验
@@ -24,23 +24,28 @@ export PROBE_URL="https://xueqiu.com/zhuanlan/publish"
 ```bash
 ego-browser nodejs <<'EOF'
 const task = await useOrCreateTaskSpace('docs-publish-xueqiu')
-await openOrReuseTab('https://xueqiu.com/zhuanlan/publish', { wait: true, timeout: 40 })
+await openOrReuseTab('https://xueqiu.com/', { wait: true, timeout: 40 })
 await wait(3)
 const info = await pageInfo()
-const loggedIn = !/\/(login|signin)\b/i.test(info.url)
+// 登录是页内弹层,URL 不变;粗判:页面同时含「发送验证码」和「登录」= 未登录
+const txt = await js('document.body.innerText.slice(0, 3000)')
+const loggedIn = !(txt.includes('发送验证码') && txt.includes('登录'))
 cliLog(JSON.stringify({ url: info.url, loggedIn }))
 EOF
 ```
 
-## 2) 登录 handoff(扫码)
+## 2) 登录 handoff(页内弹层:手机验证码/扫码)
 
 ```bash
 ego-browser nodejs <<'EOF'
 const task = await useOrCreateTaskSpace('docs-publish-xueqiu')
-await openOrReuseTab('https://xueqiu.com/user/login', { wait: true, timeout: 30 })
+await openOrReuseTab('https://xueqiu.com/', { wait: true, timeout: 30 })
+await wait(2)
+// 触发登录弹层(首页「登录」按钮)
+try { await click('xpath=//*[contains(text(),"登录")][1]') } catch (e) {}
 await wait(2)
 await handOffTaskSpace(task.id)
-cliLog('请在 ego-browser 窗口登录雪球(扫码或账号),完成后回复 continue')
+cliLog('请在 ego-browser 窗口的雪球弹层里登录(手机验证码或扫码),完成后回复 continue')
 EOF
 ```
 
@@ -50,8 +55,8 @@ ego-browser nodejs <<'EOF'
 const task = await useOrCreateTaskSpace('docs-publish-xueqiu')
 await takeOverTaskSpace(task.id)
 await wait(2)
-const info = await pageInfo()
-cliLog(JSON.stringify({ url: info.url, loggedIn: !/\/(login|signin)\b/i.test(info.url) }))
+const txt = await js('document.body.innerText.slice(0, 3000)')
+cliLog(JSON.stringify({ loggedIn: !(txt.includes('发送验证码') && txt.includes('登录')) }))
 EOF
 ```
 
@@ -69,8 +74,13 @@ const BODY  = process.env.DOC_BODY
 const TAGS  = (process.env.DOC_TAGS || '').split(',').map(s=>s.trim()).filter(Boolean).slice(0, 10)
 const COVER = process.env.DOC_COVER || ''
 
-await openOrReuseTab('https://xueqiu.com/zhuanlan/publish', { wait: true, timeout: 40 })
+// ⚠️ 2026-08 probe:/zhuanlan/publish 已 404。先开首页,登录后点「写长文」入口(弹层)
+await openOrReuseTab('https://xueqiu.com/', { wait: true, timeout: 40 })
 await wait(3)
+try {
+  await click('xpath=//*[contains(text(),"写长文") or contains(text(),"发长文")]')
+  await wait(4)
+} catch (e) { cliLog('⚠️ 未找到「写长文」入口,先跑 probe 定位真实入口: ' + e.message) }
 
 // 标题 ⚠️ 待 probe
 await waitForElement('input[placeholder*="标题"], #title', { timeout: 20 })
@@ -131,4 +141,4 @@ EOF
 
 ## ⚠️ 验证状态
 
-选择器来自雪球编辑器结构推断,**未在登录态下实机验证**。长文入口 URL 可能已改弹层。首次发布前**必须**跑 `references/probe.md`,确认后改 ✅ + 日期。
+选择器来自推断,**未在登录态下实机验证**;且 2026-08-11 probe 实测旧入口 `/zhuanlan/publish` **已 404**,当时账号未登录(页内弹「发送验证码」)。**先登录,再从首页/个人页确认真实「写长文」入口,重跑 `references/probe.md`**,确认后改 ✅ + 日期。

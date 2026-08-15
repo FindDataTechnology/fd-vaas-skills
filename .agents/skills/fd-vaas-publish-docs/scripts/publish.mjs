@@ -26,6 +26,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
+import { loadEnv, truncate, stripMd, mdToPlain, summarize, limitTags } from "../../_shared/publish/publish-common.mjs";
 
 // ─── args ──────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -49,23 +50,6 @@ const runtime = getArg("--runtime") || "ego"; // "ego"(打印 heredoc) | "patchr
 const autoPublish = hasArg("--auto-publish");
 const headless = hasArg("--headless");
 
-// ─── env loading (tiny dotenv, no deps) ────────────────
-function loadEnv(file) {
-  if (!fs.existsSync(file)) return {};
-  const out = {};
-  for (const raw of fs.readFileSync(file, "utf8").split("\n")) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    const eq = line.indexOf("=");
-    if (eq < 0) continue;
-    const k = line.slice(0, eq).trim();
-    let v = line.slice(eq + 1).trim();
-    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
-    out[k] = v;
-  }
-  return out;
-}
-
 // VAAS 仓库根 = 本脚本上四级(.agents/skills/<skill>/scripts/)，可用 VAAS_ROOT 环境变量覆盖
 const VAAS = process.env.VAAS_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
@@ -73,9 +57,14 @@ const VAAS = process.env.VAAS_ROOT ?? path.resolve(path.dirname(fileURLToPath(im
 // bodyMax=0 无硬上限(只 warn);tagMax=0 不吃标签;markdown=true 正文走 markdown(知乎渲染)
 const PLATFORMS = {
   zhihu:       { name: "知乎",         editor: "https://zhuanlan.zhihu.com/write",                                              titleMax: 100, bodyMax: 50000, tagMax: 5,  cover: "optional" },
-  weixin:      { name: "微信公众号",     editor: "https://mp.weixin.qq.com/",                                                     titleMax: 64,  bodyMax: 20000, tagMax: 0,  cover: "required" },
+  weixin:      { name: "微信公众号",     editor: "https://mp.weixin.qq.com/ → appmsg?t=media/appmsg_edit&action=edit&type=77&token=<T>",  titleMax: 64,  bodyMax: 20000, tagMax: 0,  cover: "required" },
   xiaohongshu: { name: "小红书",        editor: "https://creator.xiaohongshu.com/publish/publish?from=homepage&target=image",   titleMax: 20,  bodyMax: 1000,  tagMax: 10, cover: "required" },
-  xueqiu:      { name: "雪球",          editor: "https://xueqiu.com/zhuanlan/publish",                                           titleMax: 50,  bodyMax: 0,     tagMax: 10, cover: "optional" },
+  douyin:      { name: "抖音图文",      editor: "https://creator.douyin.com/creator-micro/content/post/image",                   titleMax: 20,  bodyMax: 1000,  tagMax: 10, cover: "required" },
+  kuaishou:    { name: "快手图文",      editor: "https://cp.kuaishou.com/article/publish/image",                                 titleMax: 20,  bodyMax: 0,     tagMax: 10, cover: "required" },
+  // ⚠️ 2026-08-11 probe:xueqiu 旧入口 /zhuanlan/publish 已 404(真实入口待登录后重 probe);
+  // tonghuashun media.10jqka.com.cn 302 跳 t.10jqka.com.cn/newcircle/creation/adviserEnterGuide/(投顾入驻引导)。
+  // 两者 editor 字段保留作登录入口,发文入口以 references/<p>.md 为准。
+  xueqiu:      { name: "雪球",          editor: "https://xueqiu.com/",                                                           titleMax: 50,  bodyMax: 0,     tagMax: 10, cover: "optional" },
   eastmoney:   { name: "东方财富号",     editor: "https://mp.eastmoney.com/collect/pc_article/index.html#/",                titleMax: 30,  bodyMax: 0,     tagMax: 10, cover: "optional" },
   tonghuashun: { name: "同花顺财经号",   editor: "https://media.10jqka.com.cn/",                                                  titleMax: 30,  bodyMax: 0,     tagMax: 10, cover: "optional" },
   toutiao:     { name: "今日头条",        editor: "https://mp.toutiao.com/profile_v4/graphic/publish",                            titleMax: 30,  bodyMax: 0,     tagMax: 10, cover: "optional" },
@@ -83,42 +72,11 @@ const PLATFORMS = {
   weibo:       { name: "微博",          editor: "https://weibo.com/newblog",                                                    titleMax: 140, bodyMax: 10000, tagMax: 10, cover: "optional" },
 };
 
-// ─── helpers ──────────────────────────────────────────
-function truncate(s, max) {
-  if (!max || !s || s.length <= max) return s ?? "";
-  return s.slice(0, max - 1) + "…";
-}
-function stripMd(md) {
-  return (md || "")
-    .replace(/^---[\s\S]*?---/m, "")   // front matter
-    .replace(/`{1,3}[^`]*`{1,3}/g, "") // inline/code
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "") // images
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // links -> text
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/[*_>#~-]/g, "")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
-}
-/** markdown -> 纯文本,但保留代码块内容(安装命令等),给不吃 markdown 的平台用 */
-function mdToPlain(md) {
-  return (md || "")
-    .replace(/^---[\s\S]*?---/m, "")
-    .replace(/```[a-zA-Z]*\n([\s\S]*?)```/g, "$1") // 代码块:去围栏留内容
-    .replace(/`([^`\n]+)`/g, "$1")                 // 行内代码
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")          // 图片
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")       // 链接
-    .replace(/^#{1,6}\s+/gm, "")                   // 标题井号
-    .replace(/^\s*[-*+]\s+/gm, "• ")               // 无序列表
-    .replace(/^\s*\d+\.\s+/gm, "")                 // 有序列表
-    .replace(/[*_~]{1,2}/g, "")                    // 粗斜体删除线
-    .replace(/^>\s?/gm, "")                        // 引用
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-function summarize(md, n = 120) {
-  const t = stripMd(md);
-  return t.length > n ? t.slice(0, n - 1) + "…" : t;
-}
+// ─── 上游覆盖的图文平台(vendored social-auto-upload 有 Note 实现) ───
+// 原则:上游有就走 note_adapter.py(复用上游 XiaoHongShuNote/DouYinNote/KSNote,
+// cookie 与视频发布共享);不在此表的平台才用自己的 heredoc/patchright 逻辑。
+const UPSTREAM_NOTE = new Set(["xiaohongshu", "douyin", "kuaishou"]);
+const NOTE_ADAPTER = path.join(VAAS, ".agents", "skills", "fd-vaas-publish-docs", "scripts", "note_adapter.py");
 
 // ─── RECORD 模式:回写 distribution[] + history.md ──────
 if (recordMode) {
@@ -240,7 +198,27 @@ function resolveCoverForPlatform(p) {
     if (xhs.length) return xhs.join(",");
     return exists(cover) || exists("cover-h.jpg");
   }
+  if (p === "douyin" || p === "kuaishou") {
+    const dy = [1, 2, 3, 4].map((n) => exists(`${p}-${n}.jpg`)).filter(Boolean);
+    if (dy.length) return dy.join(",");
+    // 图文图片平台无关:没有 <p>-*.jpg 就复用 xhs-*.jpg
+    const xhs = [1, 2, 3, 4].map((n) => exists(`xhs-${n}.jpg`)).filter(Boolean);
+    if (xhs.length) return xhs.join(",");
+    return exists(cover) || exists("cover-h.jpg");
+  }
   return exists(cover) || exists("cover-h.jpg");
+}
+
+// 上游图文平台(xiaohongshu/douyin)统一走 note_adapter.py 的参数组装
+function buildNoteArgv(dir) {
+  return [
+    NOTE_ADAPTER,
+    "--platform", path.basename(dir),
+    "--title", fs.readFileSync(path.join(dir, "title.txt"), "utf8").trim(),
+    "--note-file", path.join(dir, "body.txt"),
+    "--tags", fs.readFileSync(path.join(dir, "tags.txt"), "utf8").trim(),
+    "--images", fs.readFileSync(path.join(dir, "cover.txt"), "utf8").trim(),
+  ];
 }
 
 // ─── 按平台适配 ────────────────────────────────────────
@@ -250,7 +228,7 @@ function adapt(p) {
   const P = p.toUpperCase();
   // 用 _DOC_TAGS 后缀,避免和视频 skill(fd-vaas-publish)的 *_TAGS 在同一个 .env 里撞车
   const platTags = env[`${P}_DOC_TAGS`] ?? globalTags;
-  const tagList = platTags.split(",").map((s) => s.trim()).filter(Boolean).slice(0, spec.tagMax);
+  const tagList = limitTags(platTags, spec.tagMax);
   const t = truncate(title, spec.titleMax);
   const sum = summary || summarize(body, 120);
   let b = body;
@@ -273,7 +251,7 @@ const plan = platforms.map((p) => ({ platform: p, ...(adapt(p) || {}) })).filter
 
 if (!plan.length) {
   console.error("❌ 没有有效平台。--platforms 或 .env PLATFORMS_DOCS 至少给一个有效值。");
-  console.error("   可选:zhihu,weixin,xiaohongshu,xueqiu,eastmoney,tonghuashun,toutiao,baijiahao,weibo");
+  console.error("   可选:zhihu,weixin,xiaohongshu,douyin,kuaishou,xueqiu,eastmoney,tonghuashun,toutiao,baijiahao,weibo");
   process.exit(1);
 }
 
@@ -310,14 +288,19 @@ for (const item of plan) {
   fs.writeFileSync(path.join(dir, "cover.txt"), c || "");
   fs.writeFileSync(path.join(dir, "summary.txt"), s);
 
-  // ego 模式打印 heredoc export 行(patchright 模式不需要)
+  // ego 模式打印发布入口(上游图文平台给 note_adapter 命令,其余给 heredoc export 行)
   if (runtime !== "patchright") {
-    console.log(`  ── heredoc 环境变量 ──`);
-    console.log(`  export DOC_TITLE="$(cat ${path.join(dir, "title.txt")})" \\`);
-    console.log(`         DOC_BODY="$(cat ${path.join(dir, "body.md")})" \\`);
-    console.log(`         DOC_TAGS="$(cat ${path.join(dir, "tags.txt")})" \\`);
-    console.log(`         DOC_COVER="$(cat ${path.join(dir, "cover.txt")})" \\`);
-    console.log(`         DOC_SUMMARY="$(cat ${path.join(dir, "summary.txt")})"`);
+    if (UPSTREAM_NOTE.has(platform)) {
+      console.log(`  ── 上游图文(note_adapter.py,cookie 与视频发布共享) ──`);
+      console.log("  " + ["python3", ...buildNoteArgv(dir).map((a) => (a.includes(" ") ? `"${a}"` : a))].join(" "));
+    } else {
+      console.log(`  ── heredoc 环境变量 ──`);
+      console.log(`  export DOC_TITLE="$(cat ${path.join(dir, "title.txt")})" \\`);
+      console.log(`         DOC_BODY="$(cat ${path.join(dir, "body.md")})" \\`);
+      console.log(`         DOC_TAGS="$(cat ${path.join(dir, "tags.txt")})" \\`);
+      console.log(`         DOC_COVER="$(cat ${path.join(dir, "cover.txt")})" \\`);
+      console.log(`         DOC_SUMMARY="$(cat ${path.join(dir, "summary.txt")})"`);
+    }
   }
 }
 
@@ -326,10 +309,28 @@ if (runtime === "patchright" && !dryRun) {
   const PYTHON = env.PYTHON || "python3";
   const PLATFORMS_DIR = path.join(VAAS, ".agents", "skills", "fd-vaas-publish-docs", "scripts", "platforms");
   console.log(`\n🚀 patchright 运行时:逐平台 spawnSync (${PYTHON}) 串行`);
-  console.log(`   发布前确认:Claude 看到脚本输出「等待确认」后问你,你说确认 -> touch /tmp/vaas-doc-<platform>.go 放行\n`);
+  console.log(`   路由:xiaohongshu/douyin/kuaishou → note_adapter.py(上游 Note 实现);其余 → platforms/<p>.py(自有逻辑)`);
+  console.log(`   发布前确认(仅自有逻辑平台):Claude 看到「等待确认」后问你,你说确认 -> touch /tmp/vaas-doc-<platform>.go 放行\n`);
   for (const item of plan) {
     const { platform, spec } = item;
     const dir = path.join(adaptedDir, platform);
+
+    // 上游图文平台 → note_adapter.py(复用 vendored 上游 Note 实现)
+    if (UPSTREAM_NOTE.has(platform)) {
+      const argv = buildNoteArgv(dir);
+      if (headless) argv.push("--headless");
+      console.log(`\n▶▶ ${platform} (${spec.name}) [上游 Note]`);
+      console.log("  " + [PYTHON, ...argv.map((a) => (a.includes(" ") ? `"${a}"` : a))].join(" "));
+      const res = spawnSync(PYTHON, argv, {
+        cwd: VAAS,
+        stdio: "inherit",
+        env: { ...process.env, VAAS_ROOT: VAAS },
+      });
+      console.log(`${res.status === 0 ? "✅" : "❌"} ${platform} exit ${res.status}`);
+      continue;
+    }
+
+    // 自有逻辑平台 → platforms/<p>.py
     const script = path.join(PLATFORMS_DIR, `${platform}.py`);
     if (!fs.existsSync(script)) { console.error(`⚠️  无 ${script},跳过 ${platform}`); continue; }
     const bodyFile = spec.markdown ? path.join(dir, "body.md") : path.join(dir, "body.txt");
@@ -366,7 +367,8 @@ if (dryRun) {
   console.log("   node publish.mjs --slug <name> --record --platforms <已发> --title \"...\"");
 } else {
   console.log("✅ 适配内容已写入 .adapted/<platform>/。");
-  console.log("   下一步:对每个平台先跑 references/probe.md 核选择器(首次必做),");
+  console.log("   下一步:上游图文平台(xiaohongshu/douyin/kuaishou)直接跑上面打印的 note_adapter.py 命令;");
+  console.log("   自有逻辑平台先跑 references/probe.md 核选择器(首次必做),");
   console.log("   再按 references/<platform>.md 的 heredoc 发布(用上面打印的 export 行)。");
   console.log("   或:node publish.mjs --slug <name> --runtime patchright --platforms <p>");
   console.log("   发完逐平台回写:node publish.mjs --slug <name> --record --platforms <已发> --title \"...\"");

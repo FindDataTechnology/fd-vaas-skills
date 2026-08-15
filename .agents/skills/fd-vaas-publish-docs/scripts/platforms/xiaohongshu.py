@@ -11,7 +11,8 @@ import re
 import sys
 import argparse
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+from _publish_path import add_publish_path  # noqa: E402
+add_publish_path()
 from browser_utils import (  # noqa: E402
     Browser, cli_log, wait,
     default_profile_dir, paste_text, fill_title, upload_images,

@@ -15,9 +15,35 @@ import os
 import sys
 import json
 import argparse
+from datetime import date
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+from _publish_path import add_publish_path  # noqa: E402
+_shared_dir = add_publish_path()
 from browser_utils import Browser, cli_log, wait, handoff, default_profile_dir  # noqa: E402
+
+REGISTRY = os.path.join(_shared_dir, "platform-registry.json")
+
+
+def writeback(status):
+    """回写 platform-registry.json 的 selectorStatus / lastVerified(单一可机读源)。"""
+    if not args.platform or args.platform == "probe":
+        return
+    try:
+        with open(REGISTRY, "r", encoding="utf-8") as f:
+            reg = json.load(f)
+    except FileNotFoundError:
+        cli_log(f"⚠️ 未找到 {REGISTRY},跳过回写")
+        return
+    entry = reg.get("platforms", {}).get(args.platform)
+    if entry is None:
+        cli_log(f"⚠️ {args.platform} 不在 registry,跳过回写")
+        return
+    entry["selectorStatus"] = status
+    entry["lastVerified"] = date.today().isoformat()
+    with open(REGISTRY, "w", encoding="utf-8") as f:
+        json.dump(reg, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    cli_log(f"📝 已回写 registry: {args.platform} -> {status} ({entry['lastVerified']})")
 
 EDITORS = {
     "zhihu": "https://zhuanlan.zhihu.com/write",
@@ -35,6 +61,7 @@ ap = argparse.ArgumentParser(description="选择器核对 (patchright)")
 ap.add_argument("platform", nargs="?", help="平台名(zhihu/weixin/...)")
 ap.add_argument("--url", help="自定义编辑器 URL(覆盖 platform)")
 ap.add_argument("--headless", action="store_true")
+ap.add_argument("--mark-broken", action="store_true", help="回写 selectorStatus=broken(入口 404/302 等)")
 args = ap.parse_args()
 
 url = args.url or EDITORS.get(args.platform or "")
@@ -125,4 +152,5 @@ with Browser(profile, headless=args.headless) as b:
 
     b.screenshot()
     cli_log("\n✅ dump 完成。照输出找标题/正文/封面/发布按钮选择器,改回 <platform>.py。")
+    writeback("broken" if args.mark_broken else "verified")
     handoff("回车关闭浏览器")

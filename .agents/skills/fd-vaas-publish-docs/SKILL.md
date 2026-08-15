@@ -1,6 +1,6 @@
 ---
 name: fd-vaas-publish-docs
-description: 把一篇文章/图文一键分发到主流图文平台(知乎、微信公众号、小红书、雪球、东方财富号、同花顺财经号、今日头条、百家号、微博)。**只做编排 -- 平台差异化文案/字数/标签/封面 + 内容适配 + 发布记录**。两条浏览器运行时:**默认 ego-browser**(由 references/<platform>.md heredoc 驱动,复用 Chrome 登录态);**`--runtime patchright`**(scripts/platforms/<p>.py,stealth Playwright,独立 profile,跨平台 macOS/Windows)。触发场景:用户说"把这篇文章发到知乎/公众号/雪球/东财/同花顺/小红书"、"多平台发图文"、"分发这篇文章"、"把这篇图文发出去"、"publish the article/doc"、"post this article to...",或者刚写好一篇 `downloads/fd-docs/<slug>/` 里的文章、要走下一步分发时。**发布前必须让用户确认**(发出去撤不回来);各平台浏览器选择器多为页面结构推断、未在登录态下实机验证,**首次发布前必须用 `references/probe.md` 或 `scripts/platforms/probe.py` 核对选择器再驱动**。不要用本 skill 做文档写作本身。
+description: 把一篇文章/图文一键分发到主流图文平台(知乎、微信公众号、小红书、抖音图文、快手图文、雪球、东方财富号、同花顺财经号、今日头条、百家号、微博)。**只做编排 -- 平台差异化文案/字数/标签/封面 + 内容适配 + 发布记录**。**上游优先原则**:vendored social-auto-upload(在 fd-vaas-publish-videos skill 里)有图文(Note)实现的平台(小红书、抖音图文、快手图文)走 `scripts/note_adapter.py` 复用上游,cookie 与视频发布共享;上游没有的平台才用自己的逻辑:**默认 ego-browser**(references/<platform>.md heredoc,复用 Chrome 登录态)或 **`--runtime patchright`**(scripts/platforms/<p>.py,stealth Playwright,独立 profile,跨平台 macOS/Windows)。触发场景:用户说"把这篇文章发到知乎/公众号/雪球/东财/同花顺/小红书/抖音图文"、"多平台发图文"、"分发这篇文章"、"把这篇图文发出去"、"publish the article/doc"、"post this article to...",或者刚写好一篇 `downloads/fd-docs/<slug>/` 里的文章、要走下一步分发时。**发布前必须让用户确认**(发出去撤不回来);自有逻辑平台的选择器多为页面结构推断、未在登录态下实机验证,**首次发布前必须用 `references/probe.md` 或 `scripts/platforms/probe.py` 核对选择器再驱动**。不要用本 skill 做文档写作本身。
 compatibility: Node.js 18+;ego-browser 已装(`which ego-browser`);目标平台在 ego-browser 继承的 Chrome 登录态里已登录(没登录走 references 里各平台的 handoff 扫码);文档已写好(`downloads/fd-docs/<slug>/article.md` + `meta.json`,或 CLI 直传 `--title --body`)。
 ---
 
@@ -10,25 +10,30 @@ compatibility: Node.js 18+;ego-browser 已装(`which ego-browser`);目标平台�
 
 ## 发布路由
 
-本 skill 不调用任何外部 CLI(sau / playwright_upload.py 都不用)。每个平台的浏览器自动化 heredoc 直接写在 `references/<platform>.md` 里,你(Claude)读出来用 `ego-browser nodejs` 跑。
+**上游优先**:vendored social-auto-upload(在 fd-vaas-publish-videos skill 的 `scripts/upstream/`)有图文(Note)实现的平台,走 `scripts/note_adapter.py` 复用上游 `XiaoHongShuNote` / `DouYinNote` / `KSNote` —— 选择器、上传、定时全由上游维护,**cookie 与视频发布共享同一个 account.json**(fd-vaas-login 扫一次码,视频+图文通用)。上游没有的(或只有 skeleton 的,如视频号 TencentNote)才用自己的逻辑。
 
-| 平台 | references | 编辑器入口 | 登录态 | 选择器验证 |
+> 平台**路由 + 选择器验证状态**的单一可机读源是 `.agents/skills/_shared/publish/platform-registry.json`(图文+视频共用)。下表从它渲染,改状态用 `scripts/platforms/probe.py <platform> [--mark-broken]` 回写,别手改 registry。
+
+| 平台 | 路由 | 编辑器入口 | 登录态 | 选择器验证 |
 |---|---|---|---|---|
-| 知乎 zhihu | `references/zhihu.md` | `https://zhuanlan.zhihu.com/write` | ego-browser 继承 | ⚠️ 未实机验证,首次 probe |
-| 微信公众号 weixin | `references/weixin.md` | `https://mp.weixin.qq.com/` → 新建图文 | ego-browser 继承(扫码) | ⚠️ 未实机验证,首次 probe |
-| 小红书 xiaohongshu | `references/xiaohongshu.md` | `https://creator.xiaohongshu.com/publish/publish?from=homepage&target=image` | ego-browser 继承 | ✅ 部分实机确认(复用 xiaohongshu-upload) |
-| 雪球 xueqiu | `references/xueqiu.md` | `https://xueqiu.com/zhuanlan/publish` | ego-browser 继承 | ⚠️ 未实机验证,首次 probe |
-| 东方财富号 eastmoney | `references/eastmoney.md` | `https://mp.eastmoney.com/collect/pc_article/index.html#/` | ego-browser 继承 | ⚠️ 未实机验证,首次 probe |
-| 同花顺财经号 tonghuashun | `references/tonghuashun.md` | `https://media.10jqka.com.cn/`(媒体开放平台) | ego-browser 继承 | ⚠️ 未实机验证,首次 probe |
-| 今日头条 toutiao | `references/toutiao.md` | `https://mp.toutiao.com/profile_v4/graphic/publish` | ego-browser 继承 | ⚠️ 未实机验证,首次 probe |
-| 百家号 baijiahao | `references/baijiahao.md` | `https://baijiahao.baidu.com/builder/rc/edit` | ego-browser 继承 | ⚠️ 未实机验证,首次 probe |
-| 微博 weibo | `references/weibo.md` | `https://weibo.com/newblog`(长文) | ego-browser 继承 | ⚠️ 未实机验证,首次 probe |
+| 小红书 xiaohongshu | **上游** `note_adapter.py`(XiaoHongShuNote) | `https://creator.xiaohongshu.com/publish/publish?from=homepage&target=image` | 与视频发布共享 account.json | ✅ 上游维护 |
+| 抖音图文 douyin | **上游** `note_adapter.py`(DouYinNote) | `https://creator.douyin.com/creator-micro/content/post/image` | 与视频发布共享 account.json | ✅ 上游维护 |
+| 快手图文 kuaishou | **上游** `note_adapter.py`(KSNote) | `https://cp.kuaishou.com/article/publish/image` | 与视频发布共享 kuaishou_creator.json | ✅ 上游维护 |
+| 知乎 zhihu | 自有 `references/zhihu.md` | `https://zhuanlan.zhihu.com/write` | ego-browser 继承 | ⚠️ 未实机验证,首次 probe |
+| 微信公众号 weixin | 自有 `references/weixin.md` | `mp.weixin.qq.com/cgi-bin/appmsg?...&type=77&token=<T>`(直拼,不走「新的创作」下拉) | ego-browser 继承(扫码) | ✅ 2026-07-30 实测(patchright) |
+| 雪球 xueqiu | 自有 `references/xueqiu.md` | ⚠️ 旧入口 `xueqiu.com/zhuanlan/publish` 已 404(2026-08 probe);真实入口待登录后重 probe | ego-browser 继承 | ⚠️ 未实机验证,先登录再 probe |
+| 东方财富号 eastmoney | 自有 `references/eastmoney.md` | `https://mp.eastmoney.com/collect/pc_article/index.html#/` | ego-browser 继承 | ⚠️ 未实机验证,首次 probe |
+| 同花顺财经号 tonghuashun | 自有 `references/tonghuashun.md` | `https://media.10jqka.com.cn/` ⚠️ 302 跳投顾入驻引导(2026-08 probe);发文入口待登录后重 probe | ego-browser 继承 | ⚠️ 未实机验证,先登录再 probe |
+| 今日头条 toutiao | 自有 `references/toutiao.md` | `https://mp.toutiao.com/profile_v4/graphic/publish` | ego-browser 继承 | ⚠️ 未实机验证,首次 probe |
+| 百家号 baijiahao | 自有 `references/baijiahao.md` | `https://baijiahao.baidu.com/builder/rc/edit` | ego-browser 继承 | ⚠️ 未实机验证,首次 probe |
+| 微博 weibo | 自有 `references/weibo.md` | `https://weibo.com/newblog`(长文) | ego-browser 继承 | ⚠️ 未实机验证,首次 probe |
 
 ## 核心边界
 
-- **浏览器自动化 = ego-browser**(本 skill 内)。登录、扫码、填表、上传封面、点发布 -- 100% 走 `references/<platform>.md` 里的 heredoc。碰到"选择器失效"、"页面改版"、"风控验证码" -- 先跑 `references/probe.md` 重新 snapshot 定位,再改 heredoc 里的选择器;别在本 skill 之外另造。
+- **上游图文平台(小红书/抖音图文/快手图文) = note_adapter.py**。发布、登录、cookie 校验全走 `scripts/note_adapter.py --platform <p>`,它 import fd-vaas-publish-videos 里 vendored 的上游 Note 类。选择器失效/平台改版 → 跑 fd-vaas-publish-videos 的 `sync-upstream.sh` 同步上游,别在本地另造小红书/抖音/快手图文逻辑。
+- **自有逻辑平台 = ego-browser**(本 skill 内)。登录、扫码、填表、上传封面、点发布 -- 100% 走 `references/<platform>.md` 里的 heredoc。碰到"选择器失效"、"页面改版"、"风控验证码" -- 先跑 `references/probe.md` 重新 snapshot 定位,再改 heredoc 里的选择器;别在本 skill 之外另造。
 - **文档产出 = 用户 / fd-docs task dir**。本 skill 只读 `downloads/fd-docs/<slug>/article.md` 里的正文 + `meta.json` 里的标题/标签/封面,不写文章。要改文章回去改 `article.md`。
-- **本 skill 只做**:读 .env 合并偏好 -> publish.mjs 按平台适配内容(写 `.adapted/<platform>/`) -> 你按 references 逐平台跑 heredoc -> 跑完用 publish.mjs `--record` 回写 `meta.json` 的 `distribution[]`。
+- **本 skill 只做**:读 .env 合并偏好 -> publish.mjs 按平台适配内容(写 `.adapted/<platform>/`) -> 逐平台发布(上游平台跑 note_adapter 命令,自有平台跑 heredoc) -> 跑完用 publish.mjs `--record` 回写 `meta.json` 的 `distribution[]`。
 
 ## ⚠️ 硬性发布前流程(必须遵守)
 
@@ -94,8 +99,8 @@ $EDITOR .env   # 改 PLATFORMS_DOCS 和各平台 XXX_DOC_TAGS
 ```
 
 关键项:
-- `PLATFORMS_DOCS`:逗号分隔,默认发到哪些图文平台。CLI `--platforms` 覆盖。可选:`zhihu,weixin,xiaohongshu,xueqiu,eastmoney,tonghuashun,toutiao,baijiahao,weibo`
-- **登录**:ego-browser 直接继承用户 Chrome 的登录态,**没有 cookie 文件、没有 account**。每个平台登一次(在自己的 Chrome 里登进对应创作者后台),后续 ego-browser 复用。没登录时 references 里各平台的 heredoc 会检测到登录页 -> `handOffTaskSpace` 交还给你扫码。
+- `PLATFORMS_DOCS`:逗号分隔,默认发到哪些图文平台。CLI `--platforms` 覆盖。可选:`zhihu,weixin,xiaohongshu,douyin,kuaishou,xueqiu,eastmoney,tonghuashun,toutiao,baijiahao,weibo`
+- **登录**:自有逻辑平台用 ego-browser 直接继承用户 Chrome 登录态,**没有 cookie 文件**(在自己的 Chrome 里登进对应创作者后台一次即可;没登录时 heredoc 会检测登录页 -> `handOffTaskSpace` 交还扫码)。上游图文平台(小红书/抖音图文/快手图文)用 `cookies/<platform>_uploader/account.json`(快手是 `cookies/kuaishou_creator.json`),**与视频发布共享** —— 在 fd-vaas-login(localhost:8766)扫过一次码就两边通用。
 - `DOC_SCHEDULE`:全局默认定时,一般留空(立即发)。
 - `DOC_HEADLESS`:`true`(默认)无头;首次登录或调试改 `false`。
 
@@ -128,9 +133,19 @@ publish.mjs `--plan` 会:
 
 `--dry-run` 只打印计划、不写 `.adapted/`、不真发。
 
-### 第二步:逐平台跑 heredoc 发布
+### 第二步:逐平台发布
 
-对每个目标平台:先 `references/probe.md` 核选择器(首次必做),再读 `references/<platform>.md`,把第一步打印的 `export` 行跑一遍,然后跑该平台的 heredoc。heredoc 里正文/标题/标签/封面全从环境变量 `DOC_TITLE` `DOC_BODY` `DOC_TAGS` `DOC_COVER` 读,不在 heredoc 里硬编码(避免长正文转义炸):
+**上游图文平台(小红书/抖音图文/快手图文)**:`--plan` 已直接打印 note_adapter 命令,跑它即可(cookie 复用视频发布的 account.json,没登录先去 fd-vaas-login 扫码):
+
+```bash
+python3 $SKILL/note_adapter.py --platform xiaohongshu \
+  --title "$(cat .adapted/xiaohongshu/title.txt)" \
+  --note-file .adapted/xiaohongshu/body.txt \
+  --tags "$(cat .adapted/xiaohongshu/tags.txt)" \
+  --images "$(cat .adapted/xiaohongshu/cover.txt)"
+```
+
+**自有逻辑平台**:先 `references/probe.md` 核选择器(首次必做),再读 `references/<platform>.md`,把第一步打印的 `export` 行跑一遍,然后跑该平台的 heredoc。heredoc 里正文/标题/标签/封面全从环境变量 `DOC_TITLE` `DOC_BODY` `DOC_TAGS` `DOC_COVER` 读,不在 heredoc 里硬编码(避免长正文转义炸):
 
 ```bash
 # 例:发知乎(完整 heredoc 见 references/zhihu.md)
@@ -163,7 +178,7 @@ node $SKILL/publish.mjs --slug finddata-open-data --record --platforms zhihu,wei
 
 默认 `--runtime ego`:本 skill 只 plan/record,浏览器自动化由你按 `references/<platform>.md` 的 heredoc 用 ego-browser 手跑(复用 Chrome 登录态)。
 
-`--runtime patchright`:plan 写 `.adapted/<p>/` 后,`publish.mjs` 逐平台 `spawnSync('python3', ['platforms/<p>.py', ...])`,用 **patchright(stealth Playwright)** 自动开浏览器、登录、填表、传封面、点发布。跨平台(macOS/Windows 都行),是 ego-browser 没有 Windows 版时的替代链路,也可在本机 macOS 直接跑。
+`--runtime patchright`:plan 写 `.adapted/<p>/` 后,`publish.mjs` 逐平台 spawnSync:**上游图文平台(小红书/抖音图文/快手图文)走 `note_adapter.py`,其余走 `platforms/<p>.py`**,用 **patchright(stealth Playwright)** 自动开浏览器、登录、填表、传封面、点发布。跨平台(macOS/Windows 都行),是 ego-browser 没有 Windows 版时的替代链路,也可在本机 macOS 直接跑。
 
 ```bash
 # 单平台发布(推荐先单平台打通)
@@ -176,9 +191,9 @@ node $SKILL/publish.mjs --slug <name> --runtime patchright --platforms zhihu,wei
 ```
 
 **文件**:
-- `scripts/platforms/lib/browser_utils.py` -- patchright sync API 封装(Browser 持久 context、login_or_wait 轮询登录、paste_text 剪贴板灌正文、confirm_gate 发布前确认门、publish_and_verify)
+- `.agents/skills/_shared/publish/browser_utils.py` -- patchright sync API 封装(Browser 持久 context、login_or_wait 轮询登录、paste_text 剪贴板灌正文、confirm_gate 发布前确认门、publish_and_verify),图文/视频共用单一实现
 - `scripts/platforms/<platform>.py` × 9 -- 每平台发文流程,CLI 统一:`--title --body-file --tags --cover --summary --dry-run --auto-publish --headless --markdown --confirm-file --preview`
-- `scripts/platforms/probe.py` -- 选择器核对(打开编辑器 dump 可交互元素 + file input + iframe),8 个未验证平台首次必跑
+- `scripts/platforms/probe.py` -- 选择器核对(打开编辑器 dump 可交互元素 + file input + iframe),未验证平台(xueqiu/tonghuashun)首次必跑;跑完回写 `platform-registry.json` 的 selectorStatus/lastVerified
 - `scripts/platforms/requirements.txt` -- `patchright`
 
 **登录态**:patchright 用**独立持久 profile** `VAAS/.profiles/<platform>/`,**不复用 Chrome 登录态**(和 ego-browser 的关键差异)。每平台首次发布要在 patchright 浏览器窗口里扫码/登录一次,profile 存下来后续复用。`login_or_wait` 轮询 URL 检测登录完成(无 stdin 依赖)。
@@ -187,9 +202,10 @@ node $SKILL/publish.mjs --slug <name> --runtime patchright --platforms zhihu,wei
 
 **正文灌入**:`paste_text` 优先剪贴板粘贴(瞬时、保留换行;知乎专栏还能渲染 markdown -> `--markdown` 走 `body.md`,其余平台走 `body.txt` = mdToPlain 去符号但**保留代码块**),失败回退 `execCommand('insertText')` -> 逐行 `typeText`。
 
-**选择器验证状态**(见各 `references/<platform>.md` 底部):
-- ✅ 已验证:zhihu、xiaohongshu、toutiao、baijiahao、weibo(2026-07-29/30)、eastmoney(部分,需财经号)
-- ⚠️ 待 probe:weixin、xueqiu、tonghuashun -- 首次发布前**必须**跑 `probe.py <platform>` 核对选择器再改 `.py`
+**选择器验证状态**:单一可机读源 = `.agents/skills/_shared/publish/platform-registry.json` 的 `selectorStatus` / `lastVerified`。跑 `probe.py <platform>` 后自动回写:
+- ✅ `verified`:zhihu、toutiao、baijiahao、weibo(2026-07-29/30)、weixin(2026-07-30,patchright 链路实测存草稿)、eastmoney(部分,需财经号)
+- ❌ `broken`:xueqiu、tonghuashun -- **两者入口 URL 已失效**(2026-08-11 probe:雪球旧入口 404、同花顺 302 跳投顾入驻引导;当时均未登录)-- 首次发布前**必须先登录,确认真实发文入口,再跑 `probe.py <platform>`** 核对选择器(核对失败加 `--mark-broken`)
+- 上游平台(小红书/抖音/快手)状态为 `upstream`,由 vendored 上游维护,不在本地 probe 范围内
 
 **安装**:
 ```bash
@@ -204,8 +220,10 @@ patchright install chromium   # macOS 走 https_proxy=http://127.0.0.1:7892(见 
 | 平台 | 正文形态 | 标题字数 | 正文上限 | 标签 | 封面 | 特殊坑 |
 |---|---|---|---|---|---|---|
 | 知乎 | 专栏长文(富文本,可粘 markdown) | ~100 | ~50000 | 话题 5 个 | 可选,横 16:9 | 标题别超 100;正文支持 markdown 粘贴渲染 |
-| 公众号 | 图文(富文本 ueditor) | 64 | 20000 | 无标签,用合集 | **必填** 900×500 | **摘要必填**;默认存草稿不群发;原创声明可选 |
-| 小红书 | 图文笔记(纯文字不行) | **20** | 1000 | 话题 **≤10** | **必填** ≥1 张,竖 3:4 | 笔记体短段;话题放末尾;复用 xiaohongshu-upload 选择器 |
+| 公众号 | 图文(富文本 **ProseMirror**,非 ueditor) | 64 | 20000 | 无标签,用合集 | **必填** 900×500 | **摘要必填**(#js_description);默认存草稿不群发;标题 #title 是 hidden 需 js 赋值;正文按行转 `<p>` 粘 HTML 保换行 |
+| 小红书 | 图文笔记(纯文字不行) | **20** | 1000 | 话题 **≤10** | **必填** ≥1 张,竖 3:4 | **上游 XiaoHongShuNote**;笔记体短段;话题放末尾 |
+| 抖音图文 | 图文笔记 | **20** | 1000 | 话题 ≤10 | **必填** ≥1 张(≤35) | **上游 DouYinNote**;无 douyin-*.jpg 时自动复用 xhs-*.jpg;可带 bgm |
+| 快手图文 | 图文笔记 | **20** | 无硬限 | 话题 ≤10 | **必填** ≥1 张 | **上游 KSNote**;cookie 与快手视频共享 `kuaishou_creator.json`;无 kuaishou-*.jpg 时自动复用 xhs-*.jpg |
 | 雪球 | 长文(富文本) | ~50 | 无硬限 | 股票 `$代码` + 话题 | 可选 | 长文入口在个人页「写长文」;可关联股票 |
 | 东方财富号 | 文章(富文本) | ~30 | 无硬限 | 标签 | 可选 | 走 oa.eastmoney.com 创作者后台;需财经号资质 |
 | 同花顺财经号 | 文章(富文本) | ~30 | 无硬限 | 标签 | 可选 | 走 media.10jqka.com.cn 媒体开放平台;需财经号资质 |
@@ -229,8 +247,9 @@ patchright install chromium   # macOS 走 https_proxy=http://127.0.0.1:7892(见 
 
 - `$VAAS/.env.example` -- 项目根统一配置样板(含 `fd-vaas-publish-docs` 段)
 - `references/platform-quirks.md` -- 各图文平台内容规格坑(字数/图片/标签/原创/排版/风控)
-- `references/probe.md` -- 选择器核对流程(snapshotText dump + 定位),首次发布前必跑
-- `references/{zhihu,weixin,xiaohongshu,xueqiu,eastmoney,tonghuashun}.md` -- 各平台登录 + 发文 heredoc 骨架
+- `references/probe.md` -- 选择器核对流程(snapshotText dump + 定位),自有逻辑平台首次发布前必跑
+- `references/{zhihu,weixin,xueqiu,eastmoney,tonghuashun,toutiao,baijiahao,weibo}.md` -- 自有逻辑平台的登录 + 发文 heredoc 骨架
 - `scripts/publish.mjs` -- 主入口(`--plan` 出适配内容 / `--dry-run` / `--record` 回写)
+- `scripts/note_adapter.py` -- 上游图文薄适配层(小红书 XiaoHongShuNote / 抖音 DouYinNote / 快手 KSNote,cookie 与视频发布共享)
+- **fd-vaas-publish-videos skill** -- vendored social-auto-upload 上游所在地(`scripts/upstream/`),note_adapter 从这里 import
 - **fd-cover-image skill** -- 封面生成(Remotion 方案,优先用)
-- **xiaohongshu-upload skill** -- 小红书图文选择器来源(`.claude/skills/xiaohongshu-upload/references/`)

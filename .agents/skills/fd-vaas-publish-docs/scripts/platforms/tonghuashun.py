@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
 同花顺财经号发文 (patchright 版) ⚠️ 全部选择器待 probe;需财经号资质
-- 媒体开放平台 https://media.10jqka.com.cn/ -> 后台「发文章」
+- 入口 https://media.10jqka.com.cn/ ⚠️ 2026-08-11 probe 实测:302 跳
+  t.10jqka.com.cn/newcircle/creation/adviserEnterGuide/(投顾入驻引导页)
+- 未登录/无财经号资质落投顾引导页 -> logged_in 判 adviserEnterGuide;发文编辑器入口待登录后重 probe
 - 非交互:login_or_wait 轮询登录;--confirm-file 发布前确认
 """
 
@@ -10,19 +12,27 @@ import re
 import sys
 import argparse
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+from _publish_path import add_publish_path  # noqa: E402
+add_publish_path()
 from browser_utils import (  # noqa: E402
     Browser, cli_log, wait,
     default_profile_dir, paste_text, fill_title, upload_images,
     click_by_text, login_or_wait, publish_and_verify,
 )
 
+# ⚠️ 2026-08-11 probe 实测:302 -> t.10jqka.com.cn/newcircle/creation/adviserEnterGuide/(投顾入驻引导)
 HOME = "https://media.10jqka.com.cn/"
 URL_OK = re.compile(r"(article|content|发布成功|manage)", re.I)
 
 
 def logged_in(b):
-    return not re.search(r"/(login|upass|passport)", b.page.url, re.I)
+    url = b.page.url
+    if re.search(r"/(login|upass|passport)", url, re.I):
+        return False
+    # 2026-08 probe:未登录/无财经号资质会被引到投顾入驻引导页
+    if "adviserEnterGuide" in url:
+        return False
+    return True
 
 
 ap = argparse.ArgumentParser(description="同花顺财经号发文 (patchright)")

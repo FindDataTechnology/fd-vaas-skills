@@ -28,6 +28,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
+import { loadEnv, truncate, ensureSeconds } from "../../_shared/publish/publish-common.mjs";
 
 // ─── args ──────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -58,23 +59,6 @@ if (!slug || !cliTitle) {
     "        [--dry-run] [--no-cover] [--cover-only]",
   );
   process.exit(1);
-}
-
-// ─── env loading (very small dotenv, no deps) ──────────
-function loadEnv(file) {
-  if (!fs.existsSync(file)) return {};
-  const out = {};
-  for (const raw of fs.readFileSync(file, "utf8").split("\n")) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    const eq = line.indexOf("=");
-    if (eq < 0) continue;
-    const k = line.slice(0, eq).trim();
-    let v = line.slice(eq + 1).trim();
-    if (v.startsWith('"') && v.endsWith('"')) v = v.slice(1, -1);
-    out[k] = v;
-  }
-  return out;
 }
 
 // VAAS 仓库根 = 本脚本上四级(.agents/skills/<skill>/scripts/)，可用 VAAS_ROOT 环境变量覆盖
@@ -137,15 +121,6 @@ function platformConfig(p) {
     visibility: env[`${P}_VISIBILITY`],
     descMax: env[`${P}_DESC_MAX`] ? parseInt(env[`${P}_DESC_MAX`]) : null,
   };
-}
-
-// ─── helpers ──────────────────────────────────────────
-function truncate(s, max) {
-  if (!max || !s || s.length <= max) return s;
-  return s.slice(0, max - 1) + "…";
-}
-function ensureSeconds(s) {
-  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(s) ? s + ":00" : s;
 }
 
 // ─── 检测平台 CLI 是否存在 ─────────────────────────

@@ -2,21 +2,21 @@
 
 同花顺媒体开放平台(财经号)发文。**需要先开通财经号/媒体号资质**,没开通无发文入口。编辑器富文本,不吃 markdown。
 
-## 入口(⚠️ URL 待实机确认)
+## 入口(⚠️ 2026-08-11 probe:域名 302 跳转)
 
 | 项 | URL / 值 |
 |---|---|
-| 媒体开放平台 | `https://media.10jqka.com.cn/`(或 `https://open.10jqka.com.cn/`) |
+| 媒体开放平台 | `https://media.10jqka.com.cn/` ⚠️ probe 实测 **302 跳** `https://t.10jqka.com.cn/newcircle/creation/adviserEnterGuide/`(投顾入驻引导页) |
 | 登录 | `https://upass.10jqka.com.cn/`(同花顺通行证) |
-| 发文入口 | 后台「内容管理」->「发文章」/「写文章」 |
+| 发文入口 | ⚠️ 未确认 —— 需登录且已开通财经号后,从创作中心找「发文章」;probe 时账号未登录,落在投顾入驻引导页 |
 
-> ⚠️ 同花顺开放平台域名多个(`media.10jqka.com.cn` / `open.10jqka.com.cn` / `i.10jqka.com.cn`),以你账号能进的那个为准。probe 时先开后台看实际 URL。
+> ⚠️ 同花顺开放平台域名多个(`media.10jqka.com.cn` / `open.10jqka.com.cn` / `t.10jqka.com.cn/newcircle/creation/`),以你账号登录后实际能进的为准。**先登录,确认真实发文入口后回填本表**。
 
-## 0) 首次:probe 核选择器
+## 0) 首次:登录后 probe 核选择器
 
 ```bash
 export PROBE_URL="https://media.10jqka.com.cn/"
-# 跑 references/probe.md;同花顺编辑器未实机验证,必跑
+# ⚠️ 会 302 跳 t.10jqka.com.cn/newcircle/creation/...;先登录(需财经号资质),确认真实发文入口后把 PROBE_URL 换成编辑器 URL 再跑 references/probe.md
 ```
 
 ## 1) 登录态校验
@@ -27,9 +27,10 @@ const task = await useOrCreateTaskSpace('docs-publish-tonghuashun')
 await openOrReuseTab('https://media.10jqka.com.cn/', { wait: true, timeout: 40 })
 await wait(4)
 const info = await pageInfo()
-const loggedIn = !/\/(login|upass|passport)\b/i.test(info.url)
+// 未登录/无财经号资质会被引到 adviserEnterGuide(投顾入驻引导页)
+const loggedIn = !/\/(login|upass|passport)\b/i.test(info.url) && !info.url.includes('adviserEnterGuide')
 cliLog(JSON.stringify({ url: info.url, loggedIn }))
-if (!loggedIn) cliLog('⚠️ 若已登录仍跳转,可能未开通财经号,先去后台申请')
+if (!loggedIn) cliLog('⚠️ 落在投顾入驻引导页 = 未登录或未开通财经号;若已登录仍跳转,先去申请财经号资质')
 EOF
 ```
 
@@ -72,8 +73,9 @@ const COVER = process.env.DOC_COVER || ''
 
 await openOrReuseTab('https://media.10jqka.com.cn/', { wait: true, timeout: 40 })
 await wait(4)
+// ⚠️ 302 跳 t.10jqka.com.cn/newcircle/creation/...;落在 adviserEnterGuide = 未登录/无资质,别硬点
 
-// 进发文编辑器 ⚠️ 待 probe
+// 进发文编辑器 ⚠️ 待 probe(需登录后从创作中心找「发文章」)
 try { await click('xpath=//*[contains(text(),"发文章") or contains(text(),"写文章") or contains(text(),"发布内容")]') } catch (e) {}
 await wait(4)
 
@@ -134,4 +136,4 @@ EOF
 
 ## ⚠️ 验证状态
 
-**全部选择器 + 后台 URL 均未实机验证**(推断自同花顺开放平台通用结构)。首次发布前**必须**跑 `references/probe.md`,且确认账号已开通财经号。确认后改 ✅ + 日期。
+**全部选择器 + 后台 URL 均未实机验证**(推断自同花顺开放平台通用结构)。2026-08-11 probe 实测:`media.10jqka.com.cn` **302 跳投顾入驻引导页**,当时账号未登录。**先登录(需已开通财经号),确认真实发文入口,重跑 `references/probe.md`**,确认后改 ✅ + 日期。

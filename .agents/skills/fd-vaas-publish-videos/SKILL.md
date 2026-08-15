@@ -40,6 +40,9 @@ vendor 让我们免费获得上游的 bugfix，`sync-upstream.sh` 一键同步�
 
 ## 支持平台
 
+> 平台**路由**(sau_adapter→upstream / bilibili.py 自有)+ **选择器验证状态**的单一可机读源是
+> `.agents/skills/_shared/publish/platform-registry.json`(图文+视频共用)。下表从它渲染。
+
 | 平台 | 上传路径 | 核心技术挑战 |
 |---|---|---|
 | 抖音 (douyin) | sau_adapter → upstream | 标准 DOM，无特殊框架 |
@@ -310,7 +313,8 @@ python3 $SKILL/platforms/sau_adapter.py --platform douyin --login
   - `conf.py` — VAAS 本地 conf 覆盖（headed/proxy；sync 不覆盖）
   - `cookies/<platform>_uploader/account.json` — 运行态登录态（gitignored）
 - `scripts/platforms/bilibili.py` — bilibili 上传（上游用 biliup 二进制，独立实现）
-- `scripts/platforms/lib/browser_utils.py` — bilibili.py 用的 patchright 共享工具
+- `.agents/skills/_shared/publish/browser_utils.py` — bilibili.py 用的 patchright 共享工具（图文/视频共用单一实现）
+- `.agents/skills/_shared/publish/platform-registry.json` — 平台路由 + 选择器验证状态单一可机读源（图文/视频共用）
 - `references/<platform>.md` — 各平台核心挑战档案（shadow DOM 结构、字数限制等运行时无关事实）
 - **fd-cover-image skill** — 封面生成（Remotion 方案，优先用）
 - **fd-vaas-video-creator skill** — 视频产出（本 skill 只读成片，不生成视频）

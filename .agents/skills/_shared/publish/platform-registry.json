@@ -1,0 +1,86 @@
+{
+  "platforms": {
+    "xiaohongshu": {
+      "docs": { "route": "upstream-note" },
+      "videos": { "route": "upstream" },
+      "selectorStatus": "upstream",
+      "lastVerified": null,
+      "notes": "上游 XiaoHongShuNote 维护;图文/视频 cookie 共享 account.json"
+    },
+    "douyin": {
+      "docs": { "route": "upstream-note" },
+      "videos": { "route": "upstream" },
+      "selectorStatus": "upstream",
+      "lastVerified": null,
+      "notes": "上游 DouYinNote 维护;无 douyin-*.jpg 时复用 xhs-*.jpg"
+    },
+    "kuaishou": {
+      "docs": { "route": "upstream-note" },
+      "videos": { "route": "upstream" },
+      "selectorStatus": "upstream",
+      "lastVerified": null,
+      "notes": "上游 KSNote 维护;cookie 共享 kuaishou_creator.json"
+    },
+    "zhihu": {
+      "docs": { "route": "own" },
+      "selectorStatus": "verified",
+      "lastVerified": "2026-07-29",
+      "notes": "标题 textarea[placeholder*=请输入标题]、正文可粘 markdown;ego + patchright 均实测"
+    },
+    "weixin": {
+      "docs": { "route": "own" },
+      "videos": { "route": "upstream" },
+      "selectorStatus": "verified",
+      "lastVerified": "2026-07-30",
+      "notes": "公众号 appmsg URL;标题 #title hidden 需 js;正文 .ProseMirror 粘 HTML;摘要 #js_description;patchright 实测存草稿"
+    },
+    "xueqiu": {
+      "docs": { "route": "own" },
+      "selectorStatus": "broken",
+      "lastVerified": "2026-08-11",
+      "notes": "旧入口 xueqiu.com/zhuanlan/publish 已 404;真实发文入口待登录后重 probe"
+    },
+    "eastmoney": {
+      "docs": { "route": "own" },
+      "selectorStatus": "verified",
+      "lastVerified": "2026-07-29",
+      "notes": "oa.eastmoney.com 创作者后台;需财经号资质(部分验证)"
+    },
+    "tonghuashun": {
+      "docs": { "route": "own" },
+      "selectorStatus": "broken",
+      "lastVerified": "2026-08-11",
+      "notes": "media.10jqka.com.cn 302 跳投顾入驻引导;发文入口待登录后重 probe"
+    },
+    "toutiao": {
+      "docs": { "route": "own" },
+      "selectorStatus": "verified",
+      "lastVerified": "2026-07-29",
+      "notes": "mp.toutiao.com 头条号;标题控制在 30 字内"
+    },
+    "baijiahao": {
+      "docs": { "route": "own" },
+      "selectorStatus": "verified",
+      "lastVerified": "2026-07-29",
+      "notes": "baijiahao.baidu.com;封面必填;需选分类"
+    },
+    "weibo": {
+      "docs": { "route": "own" },
+      "selectorStatus": "verified",
+      "lastVerified": "2026-07-29",
+      "notes": "weibo.com/newblog 长文;标签以 #话题# 形式放正文"
+    },
+    "youtube": {
+      "videos": { "route": "upstream" },
+      "selectorStatus": "upstream",
+      "lastVerified": null,
+      "notes": "上游 YouTube 实现(sau_adapter);无 publish_date 故不支持 --schedule"
+    },
+    "bilibili": {
+      "videos": { "route": "own" },
+      "selectorStatus": "unverified",
+      "lastVerified": null,
+      "notes": "bilibili.py;上游用 biliup 二进制而非 Playwright;未在真实登录态实机验证"
+    }
+  }
+}
