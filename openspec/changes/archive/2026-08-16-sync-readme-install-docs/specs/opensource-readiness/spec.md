@@ -1,23 +1,6 @@
-# opensource-readiness Specification
+# Delta Spec: opensource-readiness
 
-## Purpose
-TBD - created by archiving change opensource-readiness. Update Purpose after archive.
-## Requirements
-### Requirement: 渲染源码公开可用
-
-公开仓库 SHALL 包含渲染一支口播视频所需的全部 Remotion 源码（`remotion-app/src/`、构建配置、渲染必需的品牌资产）。运行时产物（node_modules、out、生成的配音/字幕文件）MUST NOT 被跟踪。任何敏感信息（密钥、内部 URL、个人路径）MUST NOT 进入公开历史。
-
-#### Scenario: 新用户克隆后可渲染
-
-- **WHEN** 新用户 clone 公开仓库并完成依赖安装
-- **THEN** `remotion-app/src/` 中 `VoiceoverVideo` composition 存在且可渲染
-- **AND** 无需从 references 手工重建任何组件
-
-#### Scenario: 运行时产物不入库
-
-- **WHEN** 用户本地生成了配音 mp3、captions json、渲染产物
-- **THEN** `git status` 不将这些文件列为变更
-- **AND** `vaas.db`、`.profiles/`、`downloads/`、`*.bak` 均保持忽略
+## MODIFIED Requirements
 
 ### Requirement: 一键安装与自检
 
@@ -76,4 +59,3 @@ README SHALL 在顶部提供「5 分钟第一支视频」路径：安装 → 填
 
 - **WHEN** 对比 README.md 与 README.en.md 的架构、平台矩阵、技能清单小节
 - **THEN** 两者信息等价（仅语言不同）
-

@@ -69,26 +69,36 @@ else
     warn "缺少 ffmpeg/ffprobe（封面合成、片头嵌入需要）。macOS: brew install ffmpeg；Ubuntu: sudo apt install ffmpeg；Windows: winget install ffmpeg"
 fi
 
-# 平台特定工具
+# 分发运行时（全平台必需：视频/图文发布统一走 py/patchright + cookie 登录）
+if command -v python3 &>/dev/null; then
+    ok "python3 $(python3 --version 2>/dev/null | awk '{print $2}')"
+else
+    warn "未安装 python3（分发运行时必需）。macOS: brew install python@3.12；Ubuntu: sudo apt install python3"
+fi
+if command -v uv &>/dev/null; then
+    ok "uv $(uv --version | awk '{print $2}')"
+else
+    warn "未安装 uv（分发 Python 依赖管理用）。安装: curl -LsSf https://astral.sh/uv/install.sh | sh（Windows: powershell -c \"irm https://astral.sh/uv/install.ps1 | iex\"）"
+fi
+if python3 -c "import patchright" 2>/dev/null || command -v patchright &>/dev/null; then
+    ok "patchright 已安装"
+else
+    warn "未检测到 patchright（全平台发布运行时必需）。安装: uv pip install patchright && patchright install chromium"
+fi
+
+# 可选工具（macOS）：仅录屏 / 图文自有逻辑平台默认运行时需要
 if [ "$IS_WINDOWS" -eq 1 ]; then
-    info "检测到 Windows：浏览器自动化走 patchright（Python）运行时"
-    if command -v uv &>/dev/null; then
-        ok "uv $(uv --version | awk '{print $2}')"
-    else
-        warn "未安装 uv（patchright 依赖管理用）。安装: powershell -c \"irm https://astral.sh/uv/install.ps1 | iex\""
-    fi
-    info "patchright 安装: uv pip install patchright && patchright install chromium"
-    info "（详见 .agents/skills/fd-vaas-publish-videos/SKILL.md）"
+    info "Windows：ego-browser/cap 无 Windows 构建（仅录屏用，发布不受影响）"
 elif [ "$OS" = "Darwin" ]; then
     for tool in ego-browser cap officecli; do
         if command -v "$tool" &>/dev/null || [ -x "$HOME/.local/bin/$tool" ]; then
-            ok "$tool 已安装"
+            ok "$tool 已安装（可选）"
         else
-            warn "未检测到 ${tool}（浏览器发布/录屏/文档转换需要），安装方式见 README「依赖工具」节"
+            warn "未检测到 ${tool}（可选：仅录屏/图文自有逻辑平台需要），安装方式见 README「前置条件」节"
         fi
     done
 else
-    info "Linux：ego-browser/cap 无 Linux 构建，发布类技能不可用；视频生成管线可正常使用"
+    info "Linux：ego-browser/cap 无 Linux 构建（仅录屏用，发布不受影响）"
 fi
 echo ""
 
@@ -128,7 +138,7 @@ echo ""
 echo "── 3/5 技能链接 ───────────────────────────"
 
 # 需要暴露给 Claude Code 的技能清单（与仓库现有子集一致）
-SKILLS_TO_LINK="fd-browser-record fd-coding-wifi-tunnel fd-cover-image fd-vaas-brainstorm fd-vaas-dashboard fd-vaas-dashboard-sharing fd-vaas-publish-docs fd-vaas-publish-videos fd-vaas-video-creator"
+SKILLS_TO_LINK="fd-browser-record fd-coding-wifi-tunnel fd-cover-image fd-vaas-brainstorm fd-vaas-dashboard fd-vaas-dashboard-sharing fd-vaas-login fd-vaas-publish-docs fd-vaas-publish-videos fd-vaas-video-creator"
 
 mkdir -p .claude/skills
 
@@ -194,7 +204,9 @@ fi
 echo ""
 echo "📖 下一步:"
 echo "   1. 编辑 $ROOT/.env，填入火山引擎 Ark API Key"
-echo "   2. 看 README「5 分钟第一支视频」快速路径"
-echo "   3. cd $ROOT && claude   （在 Claude Code 中使用 /fd-* 技能）"
+echo "   2. 平台登录：运行 /fd-vaas-login（或 python3 .agents/skills/fd-vaas-login/scripts/login-manager.py），"
+echo "      浏览器打开 http://localhost:8766 扫码完成各平台登录（视频与图文共享 cookie）"
+echo "   3. 看 README「5 分钟第一支视频」快速路径"
+echo "   4. cd $ROOT && claude   （在 Claude Code 中使用 /fd-* 技能）"
 echo ""
 echo "🔗 项目地址: https://github.com/FindDataTechnology/fd-vaas-skills"
