@@ -76,6 +76,7 @@ via its built-in uploaders under `scripts/platforms/` (thin adapter `sau_adapter
 | `fd-vaas-publish-docs` | one article -> 9 图文 platforms (ego-browser instruction-driven) | repo skill | `/fd-vaas-publish-docs` |
 | `fd-vaas-dashboard` | content dashboard: lists generated articles + videos | repo skill | `/dashboard` |
 | `fd-vaas-dashboard-sharing` | share the dashboard (tunnel) | repo skill | `/share-dashboard` |
+| `fd-vaas-login` | QR scan-login portal: 6 video platforms status overview + live QR display | repo skill | `/login` · `.agents/skills/fd-vaas-login/` |
 | `remotion-*` (7) | scaffold / compose / caption / render Remotion videos | repo skills | `/remotion-create` etc. · `.agents/skills/remotion-*` |
 
 Each skill's `SKILL.md` is the authoritative contract - read it before driving the tool. `officecli`

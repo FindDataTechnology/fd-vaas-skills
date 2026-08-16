@@ -32,6 +32,8 @@ vaas.db
 
 # Browser profiles & runtime state (logged-in sessions - NEVER commit)
 .profiles/
+# 图文平台登录检测结果落盘（login-manager 面板状态）
+.agents/skills/fd-vaas-login/scripts/.docs_state.json
 # vendored social-auto-upload runtime state (cookies = live logins, logs = per-platform)
 .agents/skills/fd-vaas-publish-videos/scripts/upstream/cookies/
 .agents/skills/fd-vaas-publish-videos/scripts/upstream/logs/
