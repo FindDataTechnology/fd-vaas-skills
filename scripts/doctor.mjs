@@ -54,6 +54,7 @@ const SKILL_LINKS = [
   "fd-browser-record", "fd-coding-wifi-tunnel", "fd-cover-image",
   "fd-vaas-brainstorm", "fd-vaas-dashboard", "fd-vaas-dashboard-sharing",
   "fd-vaas-publish-docs", "fd-vaas-publish-videos", "fd-vaas-video-creator",
+  "ppt-master",
 ];
 
 const CHECKS = [

@@ -63,6 +63,9 @@ remotion-app/public/*-meta.json
 remotion-app/public/*-data.json
 remotion-app/public/*-keywords.json
 
+# ppt-master: 按需从上游 sparse-clone 的重资产技能（~98MB），薄壳 SKILL.md 已 git 跟踪
+.agents/skills/ppt-master/upstream/
+
 # Temp
 tmp/
 temp/

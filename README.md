@@ -224,7 +224,7 @@ curl -fsSL https://d.officecli.ai/install.sh | bash      # macOS / Linux
 officecli --version
 ```
 
-`ppt-master` 是仓库内的工作流（不是外部二进制）。如果用到它的生图步骤，按 `.agents/skills/ppt-master/requirements.txt` 装依赖。
+`ppt-master` 是仓库内的工作流（不是外部二进制），但 VAAS 只签入**薄壳**——首次用 `/ppt-master` 前先拉取上游：`bash scripts/fetch-ppt-master.sh`（~98 MB，落在 gitignore 的 `.agents/skills/ppt-master/upstream/`）。如果用到它的生图步骤，按 `upstream/requirements.txt` 装依赖。
 
 ### 3. Remotion 视频项目
 

@@ -61,7 +61,7 @@ via its built-in uploaders under `scripts/platforms/` (thin adapter `sau_adapter
 
 | Skill | Produces | Type | Entry |
 |---|---|---|---|
-| `ppt-master` | SVG deck -> exported `.pptx` (strategist -> executor -> QC pipeline) | repo workflow | `/ppt-master` · `.agents/skills/ppt-master/` |
+| `ppt-master` | SVG deck -> exported `.pptx` (strategist -> executor -> QC pipeline) | thin-shell workflow | `/ppt-master` · `.agents/skills/ppt-master/` (stub; run `bash scripts/fetch-ppt-master.sh` to pull the ~98 MB upstream tree into gitignored `upstream/`) |
 | `officecli` | `.docx`/`.xlsx`/`.pptx` create+edit (L1 read -> L2 DOM -> L3 XML) | external CLI | `/officecli` · `~/.local/bin/officecli` |
 | `cap` | screen recording / screenshots -> `.mp4`/`.gif` + shareable link | external CLI | `/cap` · `~/.local/bin/cap` |
 | `ego-browser` | browser automation (isolated agent space, reuses Chrome login) | repo skill | `ego-browser` CLI · `.agents/skills/ego-browser/` |

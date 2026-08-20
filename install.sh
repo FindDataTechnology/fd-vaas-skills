@@ -137,8 +137,8 @@ echo ""
 # ---------- 3. 技能链接（.claude/skills → .agents/skills） ----------
 echo "── 3/5 技能链接 ───────────────────────────"
 
-# 需要暴露给 Claude Code 的技能清单（与仓库现有子集一致）
-SKILLS_TO_LINK="fd-browser-record fd-coding-wifi-tunnel fd-cover-image fd-vaas-brainstorm fd-vaas-dashboard fd-vaas-dashboard-sharing fd-vaas-login fd-vaas-publish-docs fd-vaas-publish-videos fd-vaas-video-creator"
+# 需要暴露给 Claude Code 的技能清单（ppt-master 是薄壳，调用 /ppt-master 时提示按需 fetch）
+SKILLS_TO_LINK="fd-browser-record fd-coding-wifi-tunnel fd-cover-image fd-vaas-brainstorm fd-vaas-dashboard fd-vaas-dashboard-sharing fd-vaas-login fd-vaas-publish-docs fd-vaas-publish-videos fd-vaas-video-creator ppt-master"
 
 mkdir -p .claude/skills
 

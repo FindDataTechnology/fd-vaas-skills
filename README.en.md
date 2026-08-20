@@ -224,7 +224,7 @@ curl -fsSL https://d.officecli.ai/install.sh | bash      # macOS / Linux
 officecli --version
 ```
 
-`ppt-master` is an in-repo workflow (not an external binary). If a route uses its image-generation step, install its Python deps from `.agents/skills/ppt-master/requirements.txt`.
+`ppt-master` is an in-repo workflow (not an external binary), but VAAS ships only a **thin shell** — fetch the upstream before first using `/ppt-master`: `bash scripts/fetch-ppt-master.sh` (~98 MB, lands in the gitignored `.agents/skills/ppt-master/upstream/`). If a route uses its image-generation step, install its Python deps from `upstream/requirements.txt`.
 
 ### 3. Remotion video project
 
