@@ -1,5 +1,7 @@
 # VAAS - Variable Asset Authoring & Syndication
 
+> **Facet (谦面) product line** · the content-creation line of [FindData](https://www.finddatatech.cloud/products/facet) — natural-language video creation and multi-platform publishing skills.
+
 > **🌐 Language:** [简体中文](README.md) · English (this file)
 
 > 🚀 **One-line install:** `curl -fsSL https://raw.githubusercontent.com/FindDataTechnology/fd-vaas-skills/main/install.sh | bash`
