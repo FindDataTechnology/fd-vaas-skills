@@ -52,5 +52,5 @@
 
 ## 8. 跨切验收
 
-- [ ] 8.1 本地 stdio 全量回归：发布面/Remotion/ppt-master 链路行为与本 change 前一致；验证：既有测试全绿 + 一次真实封面生成
+- [x] 8.1 本地 stdio 全量回归：发布面/Remotion/ppt-master 链路行为与本 change 前一致；验证：既有测试全绿 + 一次真实封面生成
 - [ ] 8.2 `openspec validate vaas-mcp-platform-onboarding --strict` 通过并归档；验证：validate 无 error

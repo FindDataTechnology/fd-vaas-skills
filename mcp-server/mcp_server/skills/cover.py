@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from ..db import insert_content, generate_id
+from ..db import insert_content, generate_id, record_usage
 from ..hosting import current_owner
 from ..utils import generate_slug, ensure_directory_rel, get_relative_path, VAAS_ROOT
 
@@ -126,6 +126,7 @@ def create_cover(
         "height": height,
     }
 
+    owner = current_owner()
     insert_content(
         id=content_id,
         type="image",
@@ -133,8 +134,11 @@ def create_cover(
         file_path=get_relative_path("images", slug, filename),
         metadata=metadata,
         status="rendered",
-        owner=current_owner(),
+        owner=owner,
     )
+
+    record_usage(owner, "generate_cover", "remotion", None, 1, "render", "env",
+                 asset_id=content_id)
 
     return {
         "id": content_id,

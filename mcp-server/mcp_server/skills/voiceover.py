@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from ..db import insert_content, generate_id, update_content_status
+from ..db import insert_content, generate_id, update_content_status, record_usage
 from ..hosting import current_owner
 from ..utils import generate_slug, ensure_directory_rel, get_relative_path, VAAS_ROOT
 
@@ -146,6 +146,7 @@ def create_voiceover_video(
         "task_json": task_json,
     }
 
+    owner = current_owner()
     insert_content(
         id=content_id,
         type="video",
@@ -153,8 +154,11 @@ def create_voiceover_video(
         file_path=get_relative_path("videos", slug, f"{slug}.mp4"),
         metadata=metadata,
         status="rendered",
-        owner=current_owner(),
+        owner=owner,
     )
+
+    record_usage(owner, "orchestrate_voiceover", "remotion", None, 1, "render", "env",
+                 asset_id=content_id)
 
     return {
         "id": content_id,
