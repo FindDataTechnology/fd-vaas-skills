@@ -138,3 +138,19 @@ def create_downloads_structure() -> None:
     """
     for type in VALID_TYPES:
         (DOWNLOADS_DIR / type).mkdir(parents=True, exist_ok=True)
+
+
+def ensure_directory_rel(*parts: str) -> Path:
+    """
+    Create and return downloads/<parts...> without the VALID_TYPES gate.
+
+    Generators use plural layout prefixes ("videos/", "images/") that predate
+    the VALID_TYPES allowlist; historical file_path rows keep those prefixes,
+    so directory creation must not re-validate them.
+    """
+    for part in parts:
+        if ".." in part or "/" in part or "\\" in part:
+            raise ValueError(f"Invalid path segment: {part}")
+    base = DOWNLOADS_DIR.joinpath(*parts)
+    base.mkdir(parents=True, exist_ok=True)
+    return base

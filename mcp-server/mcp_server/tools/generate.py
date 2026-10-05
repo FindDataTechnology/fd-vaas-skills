@@ -5,6 +5,36 @@ generate_* namespace: asset generation, dispatched through the generation regist
 from typing import Optional
 
 from ..registry import dispatch
+from ..generators.video import submit as _video_submit, poll as _video_poll
+
+
+def generate_video_submit(
+    prompt: str,
+    duration: Optional[int] = None,
+    ratio: Optional[str] = None,
+    resolution: Optional[str] = None,
+    first_frame: Optional[str] = None,
+    last_frame: Optional[str] = None,
+    slug: Optional[str] = None,
+    name: str = "seedance",
+) -> dict:
+    """Submit an async video job; returns a job id in seconds (registry method: seedance).
+
+    Poll video_job_status until succeeded/failed. Client timeouts may safely
+    retry this call's sibling status tool — never resubmit.
+    """
+    return _video_submit(
+        prompt=prompt, duration=duration, ratio=ratio, resolution=resolution,
+        first_frame=first_frame, last_frame=last_frame, slug=slug,
+    )
+
+
+def video_job_status(job_id: str) -> dict:
+    """Poll one async video job by id (running/succeeded/failed/expired).
+
+    On success the returned payload carries asset_id and a signed download_url.
+    """
+    return _video_poll(job_id)
 
 
 def generate_voice(

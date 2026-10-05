@@ -16,6 +16,7 @@ def list_assets(
     type: Optional[str] = None,
     stage: Optional[str] = None,
     limit: int = 100,
+    owner: Optional[str] = None,
 ) -> dict:
     """
     List asset summaries with optional filters.
@@ -28,7 +29,7 @@ def list_assets(
     Returns:
         Dict with items[] containing asset summaries
     """
-    items = db_list_assets(type=type, stage=stage, limit=limit)
+    items = db_list_assets(type=type, stage=stage, limit=limit, owner=owner)
     simplified = [{
         "id": i["id"],
         "slug": i["slug"],
@@ -41,7 +42,8 @@ def list_assets(
     return {"items": simplified, "count": len(simplified)}
 
 
-def get_asset(id: Optional[str] = None, slug: Optional[str] = None) -> dict:
+def get_asset(id: Optional[str] = None, slug: Optional[str] = None,
+              owner: Optional[str] = None) -> dict:
     """
     Get full asset details including lineage, variants, and distribution history.
 
@@ -58,7 +60,8 @@ def get_asset(id: Optional[str] = None, slug: Optional[str] = None) -> dict:
     if not id and not slug:
         raise ValueError("Either id or slug must be provided")
 
-    asset = db_get_asset(id) if id else db_get_asset_by_slug(slug)
+    asset = (db_get_asset(id, owner=owner) if id
+             else db_get_asset_by_slug(slug, owner=owner))
     if not asset:
         raise ValueError(f"Asset not found: {id or slug}")
     return asset

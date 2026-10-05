@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..db import get_asset_stats as _db_stats
+from ..hosting import current_owner
 from ..skills.query import list_assets as _skill_list_assets
 from ..skills.query import get_asset as _skill_get_asset
 from ..utils import VAAS_ROOT
@@ -19,21 +20,24 @@ SRC_DIR = VAAS_ROOT / "remotion-app" / "src"
 
 
 # ─── Asset store queries ───────────────────────────────────────────────────
+# Content-store queries are owner-scoped in hosted mode; the Remotion
+# discovery tools below are platform brand assets and stay unfiltered.
 
 def assets_list(type: Optional[str] = None, stage: Optional[str] = None,
                 limit: int = 100) -> dict:
-    """List asset summaries with optional filters."""
-    return _skill_list_assets(type=type, stage=stage, limit=limit)
+    """List asset summaries with optional filters (own assets only in hosted mode)."""
+    return _skill_list_assets(type=type, stage=stage, limit=limit,
+                              owner=current_owner())
 
 
 def assets_get(id: Optional[str] = None, slug: Optional[str] = None) -> dict:
-    """Get full asset details (lineage, variants, distribution)."""
-    return _skill_get_asset(id=id, slug=slug)
+    """Get full asset details (lineage, variants, distribution); own assets only in hosted mode."""
+    return _skill_get_asset(id=id, slug=slug, owner=current_owner())
 
 
 def assets_stats() -> dict:
-    """Aggregate stats by asset type/stage and platform."""
-    return _db_stats()
+    """Aggregate stats by asset type/stage and platform (own assets in hosted mode)."""
+    return _db_stats(owner=current_owner())
 
 
 # ─── Remotion asset discovery (from former vaas-video-assets) ──────────────

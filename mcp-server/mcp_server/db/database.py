@@ -127,6 +127,7 @@ def init_schema(db_path: Optional[Path] = None) -> None:
             file_path TEXT,
             metadata JSON,
             video_id INTEGER REFERENCES videos(id),
+            owner TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
@@ -134,6 +135,7 @@ def init_schema(db_path: Optional[Path] = None) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_lineage ON assets(lineage_root, stage)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type, created_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_slug ON assets(slug)")
+    _migrate_assets_owner(conn)
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS variants (
@@ -178,8 +180,60 @@ def init_schema(db_path: Optional[Path] = None) -> None:
         )
     """)
 
+    # ─── Hosted mode: async generation jobs (video) ──────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS generation_jobs (
+            id TEXT PRIMARY KEY,
+            owner TEXT NOT NULL,
+            kind TEXT NOT NULL,                -- video
+            status TEXT NOT NULL DEFAULT 'queued', -- queued|running|succeeded|failed|expired
+            provider_task_id TEXT,
+            slug TEXT,
+            asset_id TEXT REFERENCES assets(id),
+            error TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_owner ON generation_jobs(owner, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_expires ON generation_jobs(expires_at)")
+
+    # ─── Hosted mode: per-call usage metering ────────────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS generation_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner TEXT NOT NULL,
+            tool TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            model TEXT,
+            units REAL NOT NULL DEFAULT 1,
+            unit_type TEXT NOT NULL,           -- image|char|second|render
+            credential_source TEXT NOT NULL,   -- pool|default|env
+            asset_id TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_usage_owner ON generation_usage(owner, created_at)")
+
     conn.commit()
     conn.close()
+
+
+def _migrate_assets_owner(conn: sqlite3.Connection) -> None:
+    """
+    Add the `owner` column to a pre-existing assets table (idempotent).
+
+    Fresh databases create the column directly in the DDL above; legacy
+    databases get the additive ALTER plus a backfill to the service owner.
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(assets)").fetchall()}
+    if not columns:
+        return  # table does not exist yet (fresh create runs after this anyway)
+    if "owner" not in columns:
+        conn.execute("ALTER TABLE assets ADD COLUMN owner TEXT")
+    conn.execute("UPDATE assets SET owner = 'service' WHERE owner IS NULL")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_assets_owner ON assets(owner)")
 
 
 def ensure_db_exists(db_path: Optional[Path] = None) -> None:

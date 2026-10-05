@@ -2,6 +2,7 @@
 
 from .database import get_connection, init_schema, ensure_db_exists, DB_PATH
 from .models import (
+    SERVICE_OWNER,
     generate_id,
     insert_asset,
     insert_content,
@@ -20,6 +21,12 @@ from .models import (
     get_distribution_by_asset,
     get_distribution_by_content,
     get_asset_stats,
+    insert_job,
+    get_job,
+    update_job,
+    expire_stale_jobs,
+    record_usage,
+    usage_summary,
 )
 
 __all__ = [
@@ -27,6 +34,7 @@ __all__ = [
     "init_schema",
     "ensure_db_exists",
     "DB_PATH",
+    "SERVICE_OWNER",
     "generate_id",
     "insert_asset",
     "insert_content",
@@ -45,4 +53,10 @@ __all__ = [
     "get_distribution_by_asset",
     "get_distribution_by_content",
     "get_asset_stats",
+    "insert_job",
+    "get_job",
+    "update_job",
+    "expire_stale_jobs",
+    "record_usage",
+    "usage_summary",
 ]

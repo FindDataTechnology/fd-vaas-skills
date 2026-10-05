@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..db import insert_content, generate_id
+from ..hosting import current_owner
 from ..utils import generate_slug, ensure_directory, get_relative_path, VAAS_ROOT
 
 # Path to Remotion project and cover generation script
@@ -131,7 +132,8 @@ def create_cover(
         slug=slug,
         file_path=get_relative_path("images", slug, filename),
         metadata=metadata,
-        status="rendered"
+        status="rendered",
+        owner=current_owner(),
     )
 
     return {

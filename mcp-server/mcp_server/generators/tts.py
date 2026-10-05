@@ -11,6 +11,7 @@ from typing import Optional
 
 from ..db import insert_content, generate_id
 from ..utils import generate_slug, ensure_directory, get_relative_path, VAAS_ROOT
+from .runtime import finish, prepare, run_bridge
 
 # Path to litellm-bridge.py
 SCRIPTS_DIR = VAAS_ROOT / "scripts"
@@ -96,21 +97,20 @@ def synthesize(
     if not enable_subtitles:
         cmd.append("--no-subtitle")
 
+    # Tenant + credential context (guards params first)
+    ctx = prepare("tts", "volcengine", {
+        "text": text, "file_path": file_path, "voice": voice, "slug": slug,
+    })
+
     # Execute subprocess
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=str(SCRIPTS_DIR)
-        )
+        stdout = run_bridge(cmd, ctx)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"TTS synthesis failed: {e.stderr}")
 
     # Parse output
     try:
-        output = json.loads(result.stdout)
+        output = json.loads(stdout)
     except json.JSONDecodeError as e:
         raise RuntimeError(f"Failed to parse TTS output: {e}")
 
@@ -130,15 +130,20 @@ def synthesize(
         slug=slug,
         file_path=get_relative_path("audio", slug, f"{slug}.{format}"),
         metadata=metadata,
-        status="rendered"
+        status="rendered",
+        owner=ctx["owner"],
     )
 
-    return {
+    chars = float(len(text)) if text else float(metadata["text_length"] or 0)
+    result = {
         "id": content_id,
         "slug": slug,
         "file_path": get_relative_path("audio", slug, f"{slug}.{format}"),
         "duration_ms": output.get("api_latency_ms"),  # Note: actual duration not in output
         "captions_path": get_relative_path("audio", slug, "captions.json") if captions_path and captions_path.exists() else None,
         "voice": output.get("voice"),
-        "model": output.get("model")
+        "model": output.get("model"),
     }
+    result.update(finish(ctx, "generate_voice", "volcengine",
+                         output.get("model"), chars, "char", content_id))
+    return result

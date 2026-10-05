@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Optional
 
 from ..db import insert_content, generate_id
-from ..utils import generate_slug, ensure_directory, get_relative_path, VAAS_ROOT
+from ..utils import generate_slug, ensure_directory_rel, get_relative_path, VAAS_ROOT
+from .runtime import finish, prepare, run_bridge
 
 # Path to litellm-bridge.py
 SCRIPTS_DIR = VAAS_ROOT / "scripts"
@@ -54,6 +55,10 @@ def generate(
     if n < 1 or n > 15:
         raise ValueError("n must be between 1 and 15")
 
+    ctx = prepare("image", "volcengine", {
+        "prompt": prompt, "reference_image": reference_image, "slug": slug,
+    })
+
     # Generate slug if not provided
     if not slug:
         prefix = prompt[:20].lower().replace(" ", "-")
@@ -61,7 +66,7 @@ def generate(
         slug = generate_slug(prefix or "image")
 
     # Create output directory
-    output_dir = ensure_directory("images", slug)
+    output_dir = ensure_directory_rel("images", slug)
 
     # Build command
     cmd = [
@@ -84,19 +89,13 @@ def generate(
 
     # Execute subprocess
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=str(SCRIPTS_DIR)
-        )
+        stdout = run_bridge(cmd, ctx)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Image generation failed: {e.stderr}")
 
     # Parse output
     try:
-        output = json.loads(result.stdout)
+        output = json.loads(stdout)
     except json.JSONDecodeError as e:
         raise RuntimeError(f"Failed to parse image generation output: {e}")
 
@@ -137,13 +136,17 @@ def generate(
         slug=slug,
         file_path=file_paths[0] if file_paths else "",
         metadata=metadata,
-        status="rendered"
+        status="rendered",
+        owner=ctx["owner"],
     )
 
-    return {
+    result = {
         "id": content_id,
         "slug": slug,
         "file_paths": file_paths,
         "count": len(file_paths),
-        "model": output.get("model")
+        "model": output.get("model"),
     }
+    result.update(finish(ctx, "generate_image", "volcengine",
+                         output.get("model"), len(file_paths), "image", content_id))
+    return result

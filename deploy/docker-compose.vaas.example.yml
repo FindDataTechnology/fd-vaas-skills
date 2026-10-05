@@ -1,0 +1,35 @@
+# VAAS 生成面托管栈（示例：萬星试点实例，cheap-1 与网关同宿）。
+# 真实值全部走部署侧 env/secret，不入仓。
+services:
+  vaas-wanxing:
+    container_name: vaas-wanxing
+    build:
+      context: ..
+      dockerfile: deploy/mcp-server.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:30950:30950"   # 仅内网/同宿网关可达
+    environment:
+      VAAS_HOSTED: "1"
+      VAAS_LINE: "wanxing"
+      VAAS_PORT: "30950"
+      VAAS_BIND: "0.0.0.0"
+      VAAS_BEARER_TOKEN: "${VAAS_BEARER_TOKEN:?set in .env}"
+      OPENBAO_ADDR: "http://openbao:8200"
+      OPENBAO_TOKEN: "${VAAS_OPENBAO_TOKEN:?set in .env}"
+      VAAS_PUBLIC_URL: "${VAAS_PUBLIC_URL:?set in .env}"
+      VAAS_PRICING_FILE: "/run-config/pricing.json"
+    volumes:
+      - vaas-data:/app/data
+      - vaas-downloads:/app/downloads
+      - ../mcp-server/pricing.example.json:/run-config/pricing.json:ro
+    networks:
+      - mcp-registry_default   # 与网关/OpenBAO 同网络（按宿主机实际栈名调整）
+
+volumes:
+  vaas-data:
+  vaas-downloads:
+
+networks:
+  mcp-registry_default:
+    external: true

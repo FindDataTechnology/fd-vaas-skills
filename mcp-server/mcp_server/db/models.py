@@ -9,10 +9,13 @@ remain as thin aliases so existing generators/skills keep working.
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from .database import get_connection
+
+SERVICE_OWNER = "service"
+JOB_TTL_HOURS = 24
 
 
 def generate_id() -> str:
@@ -34,6 +37,7 @@ def insert_asset(
     lineage_root: Optional[str] = None,
     provider: Optional[str] = None,
     video_id: Optional[int] = None,
+    owner: str = SERVICE_OWNER,
 ) -> str:
     """
     Insert a new asset record.
@@ -50,6 +54,7 @@ def insert_asset(
         lineage_root: Root id of the lineage tree (defaults to self id)
         provider: Which generator provider produced this asset
         video_id: Optional link to the video detail row
+        owner: Tenant owner ('service' for local/internal rows)
 
     Returns:
         The asset ID
@@ -62,11 +67,11 @@ def insert_asset(
     conn.execute(
         """
         INSERT INTO assets (id, slug, type, stage, title, parent_id, lineage_root,
-                            provider, file_path, metadata, video_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            provider, file_path, metadata, video_id, owner)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (asset_id, slug, type, stage, title, parent_id, lineage_root,
-         provider, file_path, json.dumps(metadata) if metadata else None, video_id)
+         provider, file_path, json.dumps(metadata) if metadata else None, video_id, owner)
     )
     conn.commit()
     conn.close()
@@ -82,10 +87,11 @@ def insert_content(
     metadata: Optional[dict] = None,
     status: str = "draft",
     id: Optional[str] = None,
+    owner: str = SERVICE_OWNER,
 ) -> str:
     return insert_asset(
         type=type, slug=slug, file_path=file_path,
-        metadata=metadata, stage=status, id=id, title=slug,
+        metadata=metadata, stage=status, id=id, title=slug, owner=owner,
     )
 
 
@@ -122,22 +128,29 @@ def _lineage_nodes(conn, asset_id: str) -> list[dict]:
         "WHERE lineage_root = ? ORDER BY created_at", (root,))]
 
 
-def get_asset(asset_id: str) -> Optional[dict]:
+def _owner_visible(row, owner: Optional[str]) -> bool:
+    """owner=None (local/admin) sees everything; a tenant only sees its own rows."""
+    if owner is None:
+        return True
+    return (row["owner"] or SERVICE_OWNER) == owner
+
+
+def get_asset(asset_id: str, owner: Optional[str] = None) -> Optional[dict]:
     """Get a full asset record (with variants/distribution/lineage) by ID."""
     conn = get_connection()
     row = conn.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
     conn.close()
-    if not row:
+    if not row or not _owner_visible(row, owner):
         return None
     return _enrich(_parse(row))
 
 
-def get_asset_by_slug(slug: str) -> Optional[dict]:
+def get_asset_by_slug(slug: str, owner: Optional[str] = None) -> Optional[dict]:
     """Get a full asset record by slug."""
     conn = get_connection()
     row = conn.execute("SELECT * FROM assets WHERE slug = ?", (slug,)).fetchone()
     conn.close()
-    if not row:
+    if not row or not _owner_visible(row, owner):
         return None
     return _enrich(_parse(row))
 
@@ -155,8 +168,9 @@ def list_assets(
     type: Optional[str] = None,
     stage: Optional[str] = None,
     limit: int = 100,
+    owner: Optional[str] = None,
 ) -> list[dict]:
-    """List asset summaries with optional filters."""
+    """List asset summaries with optional filters (owner=None sees all rows)."""
     conn = get_connection()
     query = "SELECT * FROM assets"
     params = []
@@ -167,6 +181,9 @@ def list_assets(
     if stage:
         conditions.append("stage = ?")
         params.append(stage)
+    if owner is not None:
+        conditions.append("owner = ?")
+        params.append(owner)
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY created_at DESC LIMIT ?"
@@ -306,13 +323,16 @@ def get_distribution_by_content(content_id: str) -> list[dict]:
     return get_distribution_by_asset(content_id)
 
 
-def get_asset_stats() -> dict:
-    """Aggregate stats: counts by type/stage and by platform."""
+def get_asset_stats(owner: Optional[str] = None) -> dict:
+    """Aggregate stats: counts by type/stage and by platform (owner=None sees all)."""
     conn = get_connection()
+    owner_cond, owner_param = ("WHERE owner = ?", [owner]) if owner is not None else ("", [])
     by_type = [dict(r) for r in conn.execute(
-        "SELECT type, COUNT(*) count FROM assets GROUP BY type ORDER BY count DESC")]
+        f"SELECT type, COUNT(*) count FROM assets {owner_cond} GROUP BY type ORDER BY count DESC",
+        owner_param)]
     by_stage = [dict(r) for r in conn.execute(
-        "SELECT stage, COUNT(*) count FROM assets GROUP BY stage ORDER BY count DESC")]
+        f"SELECT stage, COUNT(*) count FROM assets {owner_cond} GROUP BY stage ORDER BY count DESC",
+        owner_param)]
     by_platform = [dict(r) for r in conn.execute(
         "SELECT platform, COUNT(*) count FROM distribution GROUP BY platform ORDER BY count DESC")]
     conn.close()
@@ -323,3 +343,120 @@ def get_asset_stats() -> dict:
         "by_stage": by_stage,
         "by_platform": by_platform,
     }
+
+
+# ─── Generation jobs (hosted async video) ──────────────────────────────────
+
+def insert_job(
+    owner: str,
+    kind: str,
+    provider_task_id: str,
+    slug: Optional[str] = None,
+    ttl_hours: int = JOB_TTL_HOURS,
+    job_id: Optional[str] = None,
+) -> str:
+    job_id = job_id or generate_id()
+    expires = (
+        datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
+    ).isoformat()
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO generation_jobs (id, owner, kind, status, provider_task_id, slug, expires_at) "
+        "VALUES (?, ?, ?, 'running', ?, ?, ?)",
+        (job_id, owner, kind, provider_task_id, slug, expires))
+    conn.commit()
+    conn.close()
+    return job_id
+
+
+def get_job(job_id: str, owner: Optional[str] = None) -> Optional[dict]:
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM generation_jobs WHERE id = ?", (job_id,)).fetchone()
+    conn.close()
+    if not row or not _owner_visible(row, owner):
+        return None
+    return dict(row)
+
+
+def update_job(
+    job_id: str,
+    status: Optional[str] = None,
+    asset_id: Optional[str] = None,
+    error: Optional[str] = None,
+) -> None:
+    sets, params = ["updated_at = CURRENT_TIMESTAMP"], []
+    if status is not None:
+        sets.append("status = ?")
+        params.append(status)
+    if asset_id is not None:
+        sets.append("asset_id = ?")
+        params.append(asset_id)
+    if error is not None:
+        sets.append("error = ?")
+        params.append(error)
+    params.append(job_id)
+    conn = get_connection()
+    conn.execute(f"UPDATE generation_jobs SET {', '.join(sets)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+
+
+def expire_stale_jobs(now: Optional[datetime] = None) -> int:
+    """Flip non-terminal jobs past their expires_at to 'expired'; returns count."""
+    stamp = (now or datetime.now(timezone.utc)).isoformat()
+    conn = get_connection()
+    cur = conn.execute(
+        "UPDATE generation_jobs SET status = 'expired', updated_at = CURRENT_TIMESTAMP "
+        "WHERE expires_at < ? AND status IN ('queued', 'running')", (stamp,))
+    conn.commit()
+    count = cur.rowcount
+    conn.close()
+    return count
+
+
+# ─── Usage metering ─────────────────────────────────────────────────────────
+
+def record_usage(
+    owner: str,
+    tool: str,
+    provider: str,
+    model: Optional[str],
+    units: float,
+    unit_type: str,
+    credential_source: str,
+    asset_id: Optional[str] = None,
+) -> None:
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO generation_usage (owner, tool, provider, model, units, unit_type, "
+        "credential_source, asset_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (owner, tool, provider, model, units, unit_type, credential_source, asset_id))
+    conn.commit()
+    conn.close()
+
+
+def usage_summary(
+    owner: Optional[str] = None,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
+) -> list[dict]:
+    """Aggregate usage by (owner, tool, credential_source) with optional window."""
+    conn = get_connection()
+    conditions, params = [], []
+    if owner is not None:
+        conditions.append("owner = ?")
+        params.append(owner)
+    if since:
+        conditions.append("created_at >= ?")
+        params.append(since)
+    if until:
+        conditions.append("created_at <= ?")
+        params.append(until)
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    rows = [dict(r) for r in conn.execute(
+        f"SELECT owner, tool, provider, credential_source, COUNT(*) calls, "
+        f"SUM(units) units, unit_type FROM generation_usage {where} "
+        f"GROUP BY owner, tool, provider, credential_source, unit_type "
+        f"ORDER BY owner, tool", params)]
+    conn.close()
+    return rows

@@ -264,15 +264,16 @@ def cmd_image(args: argparse.Namespace) -> int:
 
 
 def cmd_video(args: argparse.Namespace) -> int:
-    if not args.prompt:
-        print("Error: --prompt is required", file=sys.stderr)
+    if not args.prompt and not args.status_task_id:
+        print("Error: --prompt (or --status) is required", file=sys.stderr)
         return 2
 
     model = args.model or env_get("VIDEO_MODEL", "doubao-seedance-2.0")
     provider = env_get("VIDEO_PROVIDER", "volcengine").lower()
 
-    out_path = Path(args.output)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path = Path(args.output or "")
+    if out_path != Path(""):
+        out_path.parent.mkdir(parents=True, exist_ok=True)
 
     start = time.time()
 
@@ -280,6 +281,29 @@ def cmd_video(args: argparse.Namespace) -> int:
         # ponytail: volcengine video is async Agent Plan API — not covered by litellm.
         # Direct call via our own helper, with polling.
         from _volcengine_video import generate as volc_video  # type: ignore
+        from _volcengine_video import task_status as volc_status  # type: ignore
+
+        api_key = (
+            args.api_key
+            or env_get("vol_agent_api_key")
+            or env_get("ARK_API_KEY")
+            or ""
+        )
+        base_url = (
+            args.base_url
+            or env_get("SEEDANCE_BASE_URL")
+            or "https://ark.cn-beijing.volces.com/api/plan/v3"
+        )
+
+        if args.status_task_id:
+            result = volc_status(
+                task_id=args.status_task_id,
+                api_key=api_key,
+                base_url=base_url,
+                output_path=out_path if out_path != Path("") else None,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
 
         result = volc_video(
             prompt=args.prompt,
@@ -287,13 +311,8 @@ def cmd_video(args: argparse.Namespace) -> int:
             duration=args.duration or 5,
             ratio=args.ratio or "adaptive",
             resolution=args.resolution or "720p",
-            api_key=args.api_key
-            or env_get("vol_agent_api_key")
-            or env_get("ARK_API_KEY")
-            or "",
-            base_url=args.base_url
-            or env_get("SEEDANCE_BASE_URL")
-            or "https://ark.cn-beijing.volces.com/api/plan/v3",
+            api_key=api_key,
+            base_url=base_url,
             output_path=out_path,
             wait=not args.async_mode,
             timeout=args.timeout or 600,
@@ -365,13 +384,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     # --- video ---
     v = sub.add_parser("video", help="Video generation")
-    v.add_argument("--prompt", required=True, help="Video description")
+    v.add_argument("--prompt", help="Video description")
     v.add_argument("--model", help="Model name")
     v.add_argument("--duration", type=int, help="Video duration in seconds")
     v.add_argument("--ratio", help="Aspect ratio (16:9, 9:16, 1:1, etc.)")
     v.add_argument("--resolution", help="Resolution (480p, 720p, 1080p, 4k)")
-    v.add_argument("--output", required=True, help="Output video file path")
+    v.add_argument("--output", help="Output video file path")
     v.add_argument("--async", dest="async_mode", action="store_true", help="Submit only, don't wait")
+    v.add_argument("--status", dest="status_task_id", help="Query task status by task id (no submission)")
     v.add_argument("--timeout", type=int, help="Max wait time in seconds")
     v.add_argument("--api-key", help="API key override")
     v.add_argument("--base-url", help="API base URL override")

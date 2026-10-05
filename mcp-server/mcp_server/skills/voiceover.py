@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..db import insert_content, generate_id, update_content_status
+from ..hosting import current_owner
 from ..utils import generate_slug, ensure_directory, get_relative_path, VAAS_ROOT
 
 # Path to video creator scripts
@@ -151,7 +152,8 @@ def create_voiceover_video(
         slug=slug,
         file_path=get_relative_path("videos", slug, f"{slug}.mp4"),
         metadata=metadata,
-        status="rendered"
+        status="rendered",
+        owner=current_owner(),
     )
 
     return {

@@ -5,7 +5,7 @@ description = "MCP server for VAAS content generation and publishing"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "fastmcp>=0.4.0",
+    "fastmcp>=3,<4",
     "pydantic>=2.0.0",
     "aiosqlite>=0.19.0",
     "python-dotenv>=1.0.0",

@@ -1,0 +1,9 @@
+{
+  "_comment": "Pricing table for /usage/summary (deploy-side config, not code contract). Rates = currency per unit; copy to VAAS_PRICING_FILE and fill from the provider price list.",
+  "currency": "CNY",
+  "generate_image": {"image": 0.0},
+  "generate_voice": {"char": 0.0},
+  "generate_video": {"second": 0.0},
+  "generate_video_submit": {"second": 0.0},
+  "generate_cover": {"render": 0.0}
+}

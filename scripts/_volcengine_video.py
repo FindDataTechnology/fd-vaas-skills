@@ -143,6 +143,46 @@ def _get_task_status(task: dict) -> str:
     return "unknown"
 
 
+def task_status(
+    *,
+    task_id: str,
+    api_key: str,
+    base_url: str,
+    output_path: Path | None = None,
+) -> dict:
+    """Query one video task; download the result when it succeeded."""
+    status_url = base_url.rstrip("/") + f"/contents/generations/tasks/{task_id}"
+    req = urllib.request.Request(
+        status_url,
+        headers={"Authorization": f"Bearer {api_key}"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            task = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Video task status HTTP {e.code}: {err_body[:500]}") from e
+
+    status = _get_task_status(task)
+    result: dict = {
+        "ok": True,
+        "task_id": task_id,
+        "status": status,
+    }
+    if status in ("failed", "error", "cancelled"):
+        result["error"] = task.get("error", task)
+
+    outputs = _extract_outputs(task)
+    if outputs:
+        result["video_url"] = outputs[0].get("url")
+        if status in ("succeeded", "completed", "success", "done") and output_path:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            _download(outputs[0]["url"], output_path)
+            result["local_path"] = str(output_path)
+    return result
+
+
 def _extract_outputs(task: dict) -> list[dict]:
     """Extract output files from task response (flexible — API shape varies)."""
     # Common shapes
