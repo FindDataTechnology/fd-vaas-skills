@@ -8,14 +8,14 @@ services:
       dockerfile: deploy/mcp-server.Dockerfile
     restart: unless-stopped
     ports:
-      - "127.0.0.1:30950:30950"   # 仅内网/同宿网关可达
+      - "100.64.0.16:30950:30950" # 只绑本机 tailnet IP
     environment:
       VAAS_HOSTED: "1"
       VAAS_LINE: "wanxing"
       VAAS_PORT: "30950"
       VAAS_BIND: "0.0.0.0"
       VAAS_BEARER_TOKEN: "${VAAS_BEARER_TOKEN:?set in .env}"
-      OPENBAO_ADDR: "http://openbao:8200"
+      OPENBAO_ADDR: "http://100.64.0.11:8200" # 跨机走 tailnet
       OPENBAO_TOKEN: "${VAAS_OPENBAO_TOKEN:?set in .env}"
       VAAS_PUBLIC_URL: "${VAAS_PUBLIC_URL:?set in .env}"
       VAAS_PRICING_FILE: "/run-config/pricing.json"
