@@ -31,16 +31,16 @@
 
 ## 5. registry fork 身份转发补丁（~/code/mcp-gateway-registry）
 
-- [ ] 5.1 server 注册 schema 加 opt-in `identity_forwarding` 布尔旗（默认 false）；验证：该仓 pytest 注册项 schema 测试
-- [ ] 5.2 `mcp_proxy` 跳：旗开且 claims 已验证时注入 `X-Forwarded-User: <sub>`，旗关行为不变；验证：该仓 pytest 覆盖 旗开注入/旗关剥离/未验证不注入
-- [ ] 5.3 补丁过该仓全量单测并出 diff 提交（私有侧部署编排引用该 commit）；验证：pytest 全绿 + commit hash 记录于部署说明
+- [x] 5.1 server 注册 schema 加 opt-in `identity_forwarding` 布尔旗（默认 false）；验证：该仓 pytest 注册项 schema 测试
+- [x] 5.2 `mcp_proxy` 跳：旗开且 claims 已验证时注入 `X-Forwarded-User: <sub>`，旗关行为不变；验证：该仓 pytest 覆盖 旗开注入/旗关剥离/未验证不注入
+- [x] 5.3 补丁过该仓全量单测并出 diff 提交（私有侧部署编排引用该 commit）；验证：pytest 全绿 + commit hash 记录于部署说明
 
 ## 6. OpenBAO 生产化与凭证 seed（生产变更，低峰执行）
 
-- [ ] 6.1 cheap-1 上导出在役 KV 全量快照（dev 模式内存数据），演练回滚路径；验证：快照可完整列出全部既有路径
-- [ ] 6.2 切 file backend + 数据卷 + 重启，重 seed 快照并验证栈服务读回；验证：registry 栈健康检查通过 + 抽查 3 个既有 secret 读回一致
-- [ ] 6.3 签发 VAAS 专用 policy token（仅 `vaas/*` 路径）；验证：该 token 可读写 vaas/*、读不到其他路径
-- [ ] 6.4 seed 萬星线池凭证（新轮换的 ARK key，不回 `.env`）与服务默认凭证（含 download-hmac）；验证：经 policy token 读到且旧 key 已吊销失效
+- [x] 6.1 cheap-1 上导出在役 KV 全量快照（dev 模式内存数据），演练回滚路径；验证：快照可完整列出全部既有路径
+- [x] 6.2 切 file backend + 数据卷 + 重启，重 seed 快照并验证栈服务读回；验证：registry 栈健康检查通过 + 抽查 3 个既有 secret 读回一致
+- [x] 6.3 签发 VAAS 专用 policy token（仅 `vaas/*` 路径）；验证：该 token 可读写 vaas/*、读不到其他路径
+- [x] 6.4 seed 萬星线池凭证（新轮换的 ARK key，不回 `.env`）与服务默认凭证（含 download-hmac）；验证：经 policy token 读到且旧 key 已吊销失效
 
 ## 7. 容器化与部署（萬星试点）
 

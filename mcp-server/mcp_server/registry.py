@@ -29,7 +29,11 @@ DRIVERS: dict[str, Callable] = {
     "brainstorm": _driver_brainstorm,
 }
 
-REGISTRY_PATH = Path(__file__).parent.parent / "registry.json"
+# registry.json ships inside the package (package-data); fall back to the
+# repo layout (mcp-server/registry.json) for editable/legacy checkouts.
+REGISTRY_PATH = Path(__file__).parent / "registry.json"
+if not REGISTRY_PATH.exists():
+    REGISTRY_PATH = Path(__file__).parent.parent / "registry.json"
 
 _ENV_REF = re.compile(r"\$\{([A-Z0-9_]+)\}")
 

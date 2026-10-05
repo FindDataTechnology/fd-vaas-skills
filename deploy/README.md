@@ -33,7 +33,9 @@ secret/vaas/service/default/download-hmac  # 下载签名密钥 {value}
 ## 謙面注册（`/vaas-wanxing` 先行）
 
 1. registry server 注册：proxy_pass_url 指向实例 `/mcp`；egress 凭据 =
-   `VAAS_BEARER_TOKEN` 同值；**`identity_forwarding: true`**（fork 补丁，任务组 5）。
+   `VAAS_BEARER_TOKEN` 同值；**`identity_forwarding: true`**（fork 补丁已实现：
+   `~/code/mcp-gateway-registry` 分支 `fd-i18n-ui` commit `9e63c091`，2026-10-06，
+   7537 tests passed；生产部署须先让 cheap-1 栈滚到含此 commit 的镜像）。
 2. Logto group 可见性：仅目标线租户 group 可见。
 3. 网关保守限流（成本保险丝）。
 4. 冒烟：客户 token 经网关 initialize/tools/list（无 publish 工具）→ 生成 →
