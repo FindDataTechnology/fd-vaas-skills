@@ -11,7 +11,7 @@ from typing import Optional
 
 from ..db import insert_content, generate_id
 from ..hosting import current_owner
-from ..utils import generate_slug, ensure_directory, get_relative_path, VAAS_ROOT
+from ..utils import generate_slug, ensure_directory_rel, get_relative_path, VAAS_ROOT
 
 # Path to Remotion project and cover generation script
 REMOTION_APP = VAAS_ROOT / "remotion-app"
@@ -61,7 +61,7 @@ def create_cover(
         slug = generate_slug(prefix or "cover")
 
     # Create output directory
-    output_dir = ensure_directory("images", slug)
+    output_dir = ensure_directory_rel("images", slug)
 
     # Determine output filename based on orientation
     if orientation == "vertical":

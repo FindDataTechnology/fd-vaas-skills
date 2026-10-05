@@ -11,7 +11,7 @@ from typing import Optional
 
 from ..db import insert_content, generate_id, update_content_status
 from ..hosting import current_owner
-from ..utils import generate_slug, ensure_directory, get_relative_path, VAAS_ROOT
+from ..utils import generate_slug, ensure_directory_rel, get_relative_path, VAAS_ROOT
 
 # Path to video creator scripts
 VIDEO_CREATOR_SCRIPTS = VAAS_ROOT / ".agents" / "skills" / "fd-vaas-video-creator" / "scripts"
@@ -67,7 +67,7 @@ def create_voiceover_video(
             slug = generate_slug("video")
 
     # Create task directory
-    task_dir = ensure_directory("videos", slug)
+    task_dir = ensure_directory_rel("videos", slug)
 
     # Copy script to task directory
     script_dest = task_dir / "script.txt"
