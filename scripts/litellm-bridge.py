@@ -121,42 +121,27 @@ def cmd_tts(args: argparse.Namespace) -> int:
             output_path=out_path,
         )
     else:
-        # litellm path — providers: openai, azure, vertex_ai, elevenlabs, minimax, polly
-        from litellm import speech  # type: ignore
+        # OpenAI-compatible caliber (萬星·词元 relay and friends): stdlib HTTP,
+        # no SDK — see _openai_compat.py.
+        from _openai_compat import speech_synthesize  # type: ignore
 
-        # Same openai-compatible routing as images: bare model names get the
-        # openai/ prefix so api_base/key env overrides apply.
-        if not model.startswith("openai/"):
-            model = f"openai/{model}"
-
-        kwargs: dict = {}
-        if args.speed is not None:
-            kwargs["speed"] = float(args.speed)
-        if args.format:
-            kwargs["response_format"] = args.format
-        if args.api_key:
-            kwargs["api_key"] = args.api_key
-        if args.base_url:
-            kwargs["api_base"] = args.base_url
-
-        response = speech(
+        result = speech_synthesize(
+            text=text,
             model=model,
+            api_key=args.api_key
+            or env_get("OPENAI_API_KEY")
+            or env_get("TTS_API_KEY")
+            or "",
+            base_url=args.base_url
+            or env_get("OPENAI_BASE_URL")
+            or env_get("TTS_BASE_URL")
+            or "https://token.finddatatech.cloud/v1",
             voice=voice,
-            input=text,
-            **kwargs,
+            output_format=args.format or "mp3",
+            speed=args.speed,
+            output_path=out_path,
         )
-        response.stream_to_file(str(out_path))
-
-        result = {
-            "ok": True,
-            "provider": provider,
-            "model": model,
-            "voice": voice,
-            "text": text,
-            "local_path": str(out_path),
-            "file_size_bytes": out_path.stat().st_size,
-            "api_latency_ms": round((time.time() - start) * 1000),
-        }
+        result["text"] = text
 
     # Write captions if requested and available
     if result.get("captions") and args.captions:
@@ -210,60 +195,26 @@ def cmd_image(args: argparse.Namespace) -> int:
             output_path=out_path,
         )
     else:
-        from litellm import image_generation  # type: ignore
+        # OpenAI-compatible caliber (萬星·词元 relay and friends): stdlib HTTP,
+        # no SDK — see _openai_compat.py.
+        from _openai_compat import image_generate  # type: ignore
 
-        # Any non-volcengine caliber here rides the litellm openai-compatible
-        # path (e.g. 萬星·词元 relay): prefix bare model names so litellm routes
-        # to openai/ regardless of what IMAGE_PROVIDER said.
-        if not model.startswith("openai/"):
-            model = f"openai/{model}"
-
-        kwargs: dict = {}
-        if args.size:
-            kwargs["size"] = args.size
-        if args.output_format:
-            kwargs["response_format"] = args.output_format
-        if args.n:
-            kwargs["n"] = args.n
-        if args.api_key:
-            kwargs["api_key"] = args.api_key
-        if args.base_url:
-            kwargs["api_base"] = args.base_url
-
-        response = image_generation(prompt=args.prompt, model=model, **kwargs)
-
-        # Save first image
-        images = []
-        if hasattr(response, "data") and response.data:
-            for i, img in enumerate(response.data):
-                img_path = out_path
-                if len(response.data) > 1:
-                    img_path = out_path.with_name(f"{out_path.stem}_{i:02d}{out_path.suffix}")
-                if img.url:
-                    import urllib.request
-
-                    urllib.request.urlretrieve(img.url, img_path)
-                elif img.b64_json:
-                    import base64
-
-                    img_path.write_bytes(base64.b64decode(img.b64_json))
-                images.append(
-                    {
-                        "local_path": str(img_path),
-                        "url": img.url if img.url else None,
-                    }
-                )
-
-        result = {
-            "ok": True,
-            "provider": provider,
-            "model": model,
-            "prompt": args.prompt,
-            "size": args.size,
-            "count": len(images),
-            "images": images,
-            "api_latency_ms": round((time.time() - start) * 1000),
-        }
+        result = image_generate(
+            prompt=args.prompt,
+            model=model,
+            api_key=args.api_key
+            or env_get("OPENAI_API_KEY")
+            or env_get("IMAGE_API_KEY")
+            or "",
+            base_url=args.base_url
+            or env_get("OPENAI_BASE_URL")
+            or env_get("IMAGE_BASE_URL")
+            or "https://token.finddatatech.cloud/v1",
+            size=args.size,
+            output_format=args.output_format or "jpeg",
+            n=args.n or 1,
+            output_path=out_path,
+        )
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
@@ -329,27 +280,14 @@ def cmd_video(args: argparse.Namespace) -> int:
             timeout=args.timeout or 600,
         )
     else:
-        # For non-volcengine providers, try litellm.video_generation if available,
-        # otherwise error out with a clear message.
-        try:
-            from litellm import video_generation  # type: ignore
-        except ImportError:
-            print(
-                f"Error: video generation via litellm not available for provider '{provider}'. "
-                "Use VIDEO_PROVIDER=volcengine or check litellm docs.",
-                file=sys.stderr,
-            )
-            return 3
-
-        response = video_generation(prompt=args.prompt, model=model)
-        result = {
-            "ok": True,
-            "provider": provider,
-            "model": model,
-            "prompt": args.prompt,
-            "response": str(response),
-            "api_latency_ms": round((time.time() - start) * 1000),
-        }
+        # Non-volcengine video providers are not wired up yet (the hosted
+        # caliber is volcengine-only today); fail with a clear message.
+        print(
+            f"Error: video generation for provider '{provider}' is not supported. "
+            "Use VIDEO_PROVIDER=volcengine.",
+            file=sys.stderr,
+        )
+        return 3
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
