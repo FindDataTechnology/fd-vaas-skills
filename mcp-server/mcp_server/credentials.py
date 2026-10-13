@@ -29,10 +29,22 @@ CACHE_TTL_SECONDS = int(os.getenv("VAAS_CRED_TTL", "300"))
 LINE = os.getenv("VAAS_LINE", "wanxing")
 
 # kind -> (env names for api key / base url / model override)
+# Two provider calibers share the vault schema: the record's `provider` field
+# picks the bridge path, not hardcoded volcengine assumptions.
+#   volcengine  — ARK direct (video today; image/tts until a standard key lands)
+#   openai      — any OpenAI-compatible relay (萬星·词元 token.finddatatech.cloud);
+#                 bridge routes via litellm with the model prefixed openai/
 _KIND_ENV = {
     "tts": {"key": ["vol_agent_api_key", "ARK_API_KEY"], "base": "ARK_TTS_BASE_URL", "model": "TTS_MODEL"},
     "image": {"key": ["vol_agent_api_key", "ARK_API_KEY"], "base": "SEEDREAM_BASE_URL", "model": "IMAGE_MODEL"},
     "video": {"key": ["vol_agent_api_key", "ARK_API_KEY"], "base": "SEEDANCE_BASE_URL", "model": "VIDEO_MODEL"},
+}
+
+# OpenAI-compatible relay env names (provider="openai" records).
+_OPENAI_ENV = {
+    "tts": {"key": "OPENAI_API_KEY", "base": "OPENAI_BASE_URL", "model": "TTS_MODEL", "provider_env": "TTS_PROVIDER"},
+    "image": {"key": "OPENAI_API_KEY", "base": "OPENAI_BASE_URL", "model": "IMAGE_MODEL", "provider_env": "IMAGE_PROVIDER"},
+    "video": {"key": "OPENAI_API_KEY", "base": "OPENAI_BASE_URL", "model": "VIDEO_MODEL", "provider_env": "VIDEO_PROVIDER"},
 }
 
 _SECRET_PATTERNS = [
@@ -109,6 +121,7 @@ def _resolve_entry(path: str) -> Optional[dict]:
         "api_key": raw.get("api_key") or "",
         "base_url": raw.get("base_url") or None,
         "model": raw.get("model") or None,
+        "provider": (raw.get("provider") or "volcengine").lower(),
         "path": f"vaas/{path}",
     }
     if not entry["api_key"]:
@@ -156,6 +169,21 @@ def subprocess_env(resolved: dict, kind: str) -> dict:
     """Env overlay that carries the resolved credential into the bridge subprocess."""
     if resolved.get("source") == "env":
         return {}
+    if resolved.get("provider") == "openai":
+        # OpenAI-compatible relay: bridge takes the litellm path (TTS_PROVIDER/
+        # IMAGE_PROVIDER=openai, model prefixed openai/, base/key via the
+        # standard OpenAI env names).
+        mapping = _OPENAI_ENV[kind]
+        env = {
+            mapping["key"]: resolved["api_key"],
+            mapping["provider_env"]: "openai",
+        }
+        if resolved.get("base_url"):
+            env[mapping["base"]] = resolved["base_url"]
+        if resolved.get("model"):
+            env[mapping["model"]] = resolved["model"]
+        return env
+    # Volcengine caliber (default): ARK env names.
     mapping = _KIND_ENV[kind]
     env: dict[str, str] = {}
     for key_name in mapping["key"]:

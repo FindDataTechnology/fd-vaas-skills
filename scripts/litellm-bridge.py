@@ -124,6 +124,11 @@ def cmd_tts(args: argparse.Namespace) -> int:
         # litellm path — providers: openai, azure, vertex_ai, elevenlabs, minimax, polly
         from litellm import speech  # type: ignore
 
+        # Same openai-compatible routing as images: bare model names get the
+        # openai/ prefix so api_base/key env overrides apply.
+        if not model.startswith("openai/"):
+            model = f"openai/{model}"
+
         kwargs: dict = {}
         if args.speed is not None:
             kwargs["speed"] = float(args.speed)
@@ -206,6 +211,12 @@ def cmd_image(args: argparse.Namespace) -> int:
         )
     else:
         from litellm import image_generation  # type: ignore
+
+        # Any non-volcengine caliber here rides the litellm openai-compatible
+        # path (e.g. 萬星·词元 relay): prefix bare model names so litellm routes
+        # to openai/ regardless of what IMAGE_PROVIDER said.
+        if not model.startswith("openai/"):
+            model = f"openai/{model}"
 
         kwargs: dict = {}
         if args.size:
