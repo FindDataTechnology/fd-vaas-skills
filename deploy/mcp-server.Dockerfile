@@ -16,8 +16,9 @@ COPY mcp-server/ /app/mcp-server/
 COPY scripts/ /app/scripts/
 
 # Dependencies only — the app itself runs from the copied source tree.
-# litellm is optional (volcengine providers go direct); skip it to stay slim.
-RUN pip install --no-cache-dir "fastmcp>=3,<4" "pydantic>=2" aiosqlite python-dotenv
+# litellm is required by the bridge's openai-compatible caliber (relay relays
+# like 萬星·词元); volcengine providers bypass it.
+RUN pip install --no-cache-dir "fastmcp>=3,<4" "pydantic>=2" aiosqlite python-dotenv litellm
 
 # Runtime layout (volumes):
 #   /app/data/vaas.db        — material store (owner-scoped)
