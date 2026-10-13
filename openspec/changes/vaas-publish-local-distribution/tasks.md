@@ -2,9 +2,9 @@
 
 ## 1. 内容交接通道
 
-- [ ] 1.1 本地新增 `pull-from-cloud` 技能/脚本：输入调用键（或签名 URL）→ 连谦面网关 `/vaas-wanxing` → `assets_list`/`assets_get` 过滤 owner → 下载产物落 `downloads/` 对应目录；验证：用测试调用键端到端拉一张云端生成的图并落盘
-- [ ] 1.2 拉取结果自动生成发布可用的 task 目录结构（`downloads/fd-docs|videos/<slug>/` + meta 骨架），与发布技能的输入契约对齐；验证：拉取产物后 `publish_simulate`（dry-run）能直接跑通
-- [ ] 1.3 无凭据时输出引导文案（如何拿调用键/如何重新生成签名 URL），不抛裸错误；验证：清空调用键运行拉取，输出含指引
+- [x] 1.1 本地新增 `pull-from-cloud` 技能/脚本：输入调用键（或签名 URL）→ 连谦面网关 `/vaas-wanxing` → `assets_list`/`assets_get` 过滤 owner → 下载产物落 `downloads/` 对应目录；验证：用测试调用键端到端拉一张云端生成的图并落盘
+- [x] 1.2 拉取结果自动生成发布可用的 task 目录结构（`downloads/fd-docs|videos/<slug>/` + meta 骨架），与发布技能的输入契约对齐；验证：拉取产物后 `publish_simulate`（dry-run）能直接跑通
+- [x] 1.3 无凭据时输出引导文案（如何拿调用键/如何重新生成签名 URL），不抛裸错误；验证：清空调用键运行拉取，输出含指引
 - [ ] 1.4 发布成功后 `--record` 回执确认能写进本地 vaas.db 的 distribution；验证：一次真实（或 dry-run 模拟）发布后 meta.json 与 distribution 可见
 
 ## 2. 谦面分装 pack

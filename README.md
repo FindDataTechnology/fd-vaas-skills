@@ -1,5 +1,7 @@
 # VAAS - 可变资源创作与分发
 
+> **谦面 Facet 产品线** · [寻数 FindData](https://www.finddatatech.cloud/products/facet) 的内容创作线 —— 自然语言视频创作与多平台分发技能链。
+
 > **🌐 语言：** 简体中文（本文件） · [English](README.en.md)
 
 > 🚀 **一键安装：** `curl -fsSL https://raw.githubusercontent.com/FindDataTechnology/fd-vaas-skills/main/install.sh | bash`
