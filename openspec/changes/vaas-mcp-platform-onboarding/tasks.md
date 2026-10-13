@@ -44,10 +44,10 @@
 
 ## 7. 容器化与部署（萬星试点）
 
-- [ ] 7.1 mcp-server Dockerfile（不含 Remotion 重依赖，生成面镜像）+ TCR 通道构建；验证：镜像在 cheap-1 可拉起 /health 200
-- [ ] 7.2 compose 服务（`vaas-wanxing`）：bootstrap env、内网端口、数据卷（vaas.db + downloads）；验证：容器启动自举建库、日志无凭证明文
-- [ ] 7.3 謙面注册 `/vaas-wanxing`：proxy_pass_url、静态 egress bearer、`identity_forwarding` 旗开、Logto group 可见性、保守限流；验证：经网关带客户 token initialize/tools/list 成功且不含 publish 工具
-- [ ] 7.4 端到端冒烟：经网关生成图片 → 返回下载地址 → 取回文件 → usage/summary 出现该租户记录且凭证来源=线池；验证：冒烟记录归档
+- [x] 7.1 mcp-server Dockerfile（不含 Remotion 重依赖，生成面镜像）+ TCR 通道构建；验证：镜像在 cheap-1 可拉起 /health 200
+- [x] 7.2 compose 服务（`vaas-wanxing`）：bootstrap env、内网端口、数据卷（vaas.db + downloads）；验证：容器启动自举建库、日志无凭证明文
+- [x] 7.3 謙面注册 `/vaas-wanxing`：proxy_pass_url、静态 egress bearer、`identity_forwarding` 旗开、Logto group 可见性、保守限流；验证：经网关带客户 token initialize/tools/list 成功且不含 publish 工具
+- [x] 7.4 端到端冒烟：经网关生成图片 → 返回下载地址 → 取回文件 → usage/summary 出现该租户记录且凭证来源=线池；验证：冒烟记录归档
 - [ ] 7.5 `/vaas-base` 部署任务（**待萬星试点验收后执行**）：照 7.2–7.4 配方换线池路径与注册项；验证：同 7.4 冒烟
 
 ## 8. 跨切验收
