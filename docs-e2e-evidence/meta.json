@@ -1,0 +1,20 @@
+{
+ "title": "云端生成 · 本地发布 全链路演练",
+ "summary": "封面临时由云端生成、拉回本机，走一遍平台适配与发布流程，验证云端生成 + 边缘发布的完整闭环。",
+ "tags": [
+  "自动化",
+  "AI",
+  "内容创作"
+ ],
+ "cover": "cover.jpg",
+ "platforms": [
+  "xiaohongshu",
+  "zhihu"
+ ],
+ "distribution": [],
+ "pulled_from_cloud": {
+  "asset_id": "03102b37-1dd7-4b3f-8dcf-bc0c63957c74",
+  "owner": "e2e-user"
+ },
+ "e2e_note": "full chain exercised except the final publish click: cloud generate -> signed URL -> local pull -> platform adapt -> dry-run plan. Platform cookies expired, needs re-scan before real publish."
+}
