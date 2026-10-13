@@ -73,7 +73,7 @@ def generate(
     if not prompt:
         raise ValueError("prompt is required")
 
-    ctx = prepare("video", "volcengine", {
+    ctx = prepare("video", {
         "prompt": prompt, "first_frame": first_frame, "last_frame": last_frame,
         "slug": slug,
     })
@@ -145,7 +145,7 @@ def submit(
     if not prompt:
         raise ValueError("prompt is required")
 
-    ctx = prepare("video", "volcengine", {
+    ctx = prepare("video", {
         "prompt": prompt, "first_frame": first_frame, "last_frame": last_frame,
         "slug": slug,
     })
@@ -195,7 +195,7 @@ def poll(job_id: str, owner: Optional[str] = None) -> dict:
     if job["status"] in ("succeeded", "failed", "expired"):
         return _job_view(job)
 
-    ctx = prepare("video", "volcengine", {})
+    ctx = prepare("video", {})
     slug = job["slug"] or job_id
     output_path = ensure_directory_rel("videos", slug) / f"{slug}.mp4"
 

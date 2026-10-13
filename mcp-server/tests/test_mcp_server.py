@@ -195,7 +195,7 @@ class TestCredentials:
         calls = []
         def fake_vault_get(path):
             calls.append(path)
-            if path == "pool/wanxing/volcengine":
+            if path == "pool/wanxing/image":
                 return {"api_key": "ark-pool-key", "base_url": "https://pool.example/v3"}
             return None
         monkeypatch.setattr(C, "_vault_get", fake_vault_get)
@@ -205,11 +205,11 @@ class TestCredentials:
         env = C.subprocess_env(r, "image")
         assert env["ARK_API_KEY"] == "ark-pool-key"
         assert env["SEEDREAM_BASE_URL"] == "https://pool.example/v3"
-        assert "pool/wanxing/volcengine" in calls
+        assert "pool/wanxing/image" in calls
 
         monkeypatch.setattr(C, "_cache", {})
         def only_default(path):
-            return {"api_key": "ark-default"} if path == "service/default/volcengine" else None
+            return {"api_key": "ark-default"} if path == "service/default/image" else None
         monkeypatch.setattr(C, "_vault_get", only_default)
         assert C.resolve("image")["source"] == "default"
 

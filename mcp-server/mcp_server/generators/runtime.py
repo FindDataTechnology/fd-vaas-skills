@@ -28,16 +28,17 @@ SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "scripts
 SCRIPTS_DIR = os.path.abspath(SCRIPTS_DIR)
 
 
-def prepare(kind: str, provider: str, params: dict) -> dict:
-    """Guard params, resolve owner + credential, return the call context."""
+def prepare(kind: str, params: dict) -> dict:
+    """Guard params, resolve owner + credential, return the call context.
+
+    kind keys both the vault path (pool/<line>/<kind>) and the bridge env
+    mapping; the vendor (volcengine vs openai-compatible relay) comes from the
+    resolved vault record, not from code.
+    """
     reject_secrets_in_params(params)
     owner = current_owner()
-    if provider == "local":
-        resolved = {"source": "env"}
-        env: dict = {}
-    else:
-        resolved = resolve(kind, provider)
-        env = subprocess_env(resolved, kind)
+    resolved = resolve(kind)
+    env = subprocess_env(resolved, kind)
     return {"owner": owner, "resolved": resolved, "env": env}
 
 

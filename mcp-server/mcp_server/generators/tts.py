@@ -98,7 +98,7 @@ def synthesize(
         cmd.append("--no-subtitle")
 
     # Tenant + credential context (guards params first)
-    ctx = prepare("tts", "volcengine", {
+    ctx = prepare("tts", {
         "text": text, "file_path": file_path, "voice": voice, "slug": slug,
     })
 

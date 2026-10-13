@@ -135,24 +135,29 @@ def resolve(kind: str, provider_hint: str = "volcengine") -> dict:
     """
     Resolve the credential for one generation call.
 
+    Vault paths are keyed by asset KIND (pool/<line>/<kind>, e.g. .../tts,
+    .../image, .../video), never by the upstream vendor — a line's TTS relay
+    and its image relay may be entirely different providers. The record's
+    `provider` field picks the bridge caliber at injection time.
+
     Returns {"source": "env"} in local mode (bridge reads .env itself), or
-    {"source": "pool"|"default", "api_key", "base_url", "model"} in hosted mode.
+    {"source": "pool"|"default", "api_key", "base_url", "model", "provider"}
+    in hosted mode.
     """
     if os.getenv("VAAS_HOSTED", "").strip() != "1":
         return {"source": "env"}
 
-    provider = provider_hint.lower()
     for source, path in (
-        ("pool", f"pool/{LINE}/{provider}"),
-        ("default", f"service/default/{provider}"),
+        ("pool", f"pool/{LINE}/{kind}"),
+        ("default", f"service/default/{kind}"),
     ):
         entry = _resolve_entry(path)
         if entry:
             entry["source"] = source
             return entry
     raise CredentialUnavailable(
-        f"no {provider} credential in vault: pool/{LINE}/{provider} "
-        f"and service/default/{provider} are both missing"
+        f"no {kind} credential in vault: pool/{LINE}/{kind} "
+        f"and service/default/{kind} are both missing"
     )
 
 

@@ -55,7 +55,7 @@ def generate(
     if n < 1 or n > 15:
         raise ValueError("n must be between 1 and 15")
 
-    ctx = prepare("image", "volcengine", {
+    ctx = prepare("image", {
         "prompt": prompt, "reference_image": reference_image, "slug": slug,
     })
 
