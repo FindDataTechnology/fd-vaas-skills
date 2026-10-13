@@ -9,9 +9,9 @@
 
 ## 2. 谦面分装 pack
 
-- [ ] 2.1 按 facet-pack-builder 流程打包：fd-vaas-login + fd-vaas-publish-docs + fd-vaas-publish-videos + `_shared/publish` + 依赖清单 + 云端实例地址配置项（预填 `https://mcp.finddatatech.cloud/vaas-wanxing`）；验证：manifest 校验通过、包内无任何密钥/凭据文件
-- [ ] 2.2 安全说明页随包分发（登录态存哪/谁碰得到/丢了怎么办，三问三答一页纸）；验证：pack 内含说明且渲染正常
-- [ ] 2.3 发布到谦面市场 v1 并记录 pack id；验证：market 安装接口可达（safeline 拦截时按既有判别法处理）
+- [x] 2.1 按 facet-pack-builder 流程打包：fd-vaas-login + fd-vaas-publish-docs + fd-vaas-publish-videos + `_shared/publish` + 依赖清单 + 云端实例地址配置项（预填 `https://mcp.finddatatech.cloud/vaas-wanxing`）；验证：manifest 校验通过、包内无任何密钥/凭据文件
+- [x] 2.2 安全说明页随包分发（登录态存哪/谁碰得到/丢了怎么办，三问三答一页纸）；验证：pack 内含说明且渲染正常
+- [x] 2.3 发布到谦面市场 v1 并记录 pack id；验证：market 安装接口可达（safeline 拦截时按既有判别法处理）
 
 ## 3. 端到端验收与文档
 
