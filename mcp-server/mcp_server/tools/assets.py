@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..db import get_asset_stats as _db_stats
-from ..hosting import current_owner
+from ..hosting import current_owner, download_url, is_hosted
 from ..skills.query import list_assets as _skill_list_assets
 from ..skills.query import get_asset as _skill_get_asset
 from ..utils import VAAS_ROOT
@@ -26,13 +26,28 @@ SRC_DIR = VAAS_ROOT / "remotion-app" / "src"
 def assets_list(type: Optional[str] = None, stage: Optional[str] = None,
                 limit: int = 100) -> dict:
     """List asset summaries with optional filters (own assets only in hosted mode)."""
-    return _skill_list_assets(type=type, stage=stage, limit=limit,
-                              owner=current_owner())
+    result = _skill_list_assets(type=type, stage=stage, limit=limit,
+                                owner=current_owner())
+    if is_hosted():
+        for item in result.get("items", []):
+            url = download_url(item["id"], current_owner())
+            if url:
+                item["download_url"] = url
+    return result
 
 
 def assets_get(id: Optional[str] = None, slug: Optional[str] = None) -> dict:
-    """Get full asset details (lineage, variants, distribution); own assets only in hosted mode."""
-    return _skill_get_asset(id=id, slug=slug, owner=current_owner())
+    """Get full asset details (lineage, variants, distribution); own assets only in hosted mode.
+
+    In hosted mode the response carries a fresh signed download_url so remote
+    tenants can pull the artifact without a generation call.
+    """
+    asset = _skill_get_asset(id=id, slug=slug, owner=current_owner())
+    if asset and is_hosted() and asset.get("file_path"):
+        url = download_url(asset["id"], asset.get("owner") or current_owner())
+        if url:
+            asset["download_url"] = url
+    return asset
 
 
 def assets_stats() -> dict:

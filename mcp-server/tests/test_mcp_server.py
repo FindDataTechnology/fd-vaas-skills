@@ -467,5 +467,31 @@ class TestArtifactGC:
         assert get_asset(dist_id) is not None          # distributed stays
 
 
+class TestAssetsSignedUrl:
+    def test_assets_get_hosted_carries_download_url(self, monkeypatch):
+        """Hosted assets_get attaches a fresh signed URL for pull-from-cloud."""
+        import importlib
+        from mcp_server import hosting as H
+        monkeypatch.setenv("VAAS_HOSTED", "1")
+        monkeypatch.setenv("VAAS_BEARER_TOKEN", "t")
+        monkeypatch.setattr(H, "_request",
+                            lambda: type("R", (), {"base_url": "http://vaas:30950/",
+                                                   "headers": {"x-forwarded-user": "alice"}})())
+        monkeypatch.setattr(H, "_download_hmac_key", lambda: b"k" * 8)
+        monkeypatch.setattr(H, "_bearer_ok", lambda request: True)
+        import mcp_server.tools.assets as amod
+        monkeypatch.setattr(amod, "_skill_get_asset",
+                            lambda id=None, slug=None, owner=None:
+                            {"id": "a-1", "owner": "alice", "type": "image",
+                             "file_path": "images/x/x.jpg"})
+        monkeypatch.setattr(H, "current_owner", lambda: "alice")
+        out = amod.assets_get(id="a-1")
+        assert out["download_url"].startswith("http://vaas:30950/download/a-1?")
+        # local mode (hosted off): no url attached
+        monkeypatch.setenv("VAAS_HOSTED", "")
+        out2 = amod.assets_get(id="a-1")
+        assert "download_url" not in out2
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
