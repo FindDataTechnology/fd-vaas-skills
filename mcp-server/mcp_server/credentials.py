@@ -42,7 +42,7 @@ _KIND_ENV = {
 
 # OpenAI-compatible relay env names (provider="openai" records).
 _OPENAI_ENV = {
-    "tts": {"key": "OPENAI_API_KEY", "base": "OPENAI_BASE_URL", "model": "TTS_MODEL", "provider_env": "TTS_PROVIDER"},
+    "tts": {"key": "OPENAI_API_KEY", "base": "OPENAI_BASE_URL", "model": "TTS_MODEL", "provider_env": "TTS_PROVIDER", "voice": "TTS_VOICE"},
     "image": {"key": "OPENAI_API_KEY", "base": "OPENAI_BASE_URL", "model": "IMAGE_MODEL", "provider_env": "IMAGE_PROVIDER"},
     "video": {"key": "OPENAI_API_KEY", "base": "OPENAI_BASE_URL", "model": "VIDEO_MODEL", "provider_env": "VIDEO_PROVIDER"},
 }
@@ -121,6 +121,7 @@ def _resolve_entry(path: str) -> Optional[dict]:
         "api_key": raw.get("api_key") or "",
         "base_url": raw.get("base_url") or None,
         "model": raw.get("model") or None,
+        "voice": raw.get("voice") or None,
         "provider": (raw.get("provider") or "volcengine").lower(),
         "path": f"vaas/{path}",
     }
@@ -187,6 +188,8 @@ def subprocess_env(resolved: dict, kind: str) -> dict:
             env[mapping["base"]] = resolved["base_url"]
         if resolved.get("model"):
             env[mapping["model"]] = resolved["model"]
+        if mapping.get("voice") and resolved.get("voice"):
+            env[mapping["voice"]] = resolved["voice"]
         return env
     # Volcengine caliber (default): ARK env names.
     mapping = _KIND_ENV[kind]
