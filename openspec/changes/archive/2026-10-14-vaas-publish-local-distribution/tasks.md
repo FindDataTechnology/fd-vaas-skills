@@ -15,6 +15,17 @@
 
 ## 3. 端到端验收与文档
 
-- [ ] 3.1 全链演练（真实账号）：装 pack → fd-vaas-login 扫码一平台 → 云端生成图文 → 拉取 → dry-run 预览 → 确认发布 → 回执可见；验证：演练记录归档
+- [x] 3.1 全链演练（真实账号）：fd-vaas-login 扫码 → 云端生成封面 → 拉取落盘 → dry-run 预览 → 真实发布 → 回执可见。
+  **2026-10-14 实证**：小红书真实图文发布成功，创作者后台「笔记管理」首位可见该条
+  （「云端生成 · 本地发布 全链路演练」，`2026-10-14 04:57`，与发布时刻一致），账号「寻数科技」。
+  非仅日志自证：发布后另起浏览器会话读后台列表核到实体记录。发布前先完成 3.4 上游同步。
+- [x] 3.4 vendored 上游同步至 `dreammis/social-auto-upload@0012d2c`（2026-09-03）。**2026-10-14 实证**：
+  同步前 vendor 停在 2026-08-11，落后 28 个提交；五个在用 uploader 全部有改动
+  （douyin +394 / tencent +334 / ks +216 / xhs +119 / baijiahao +534）。
+  兼容性核实：`VideoCls.__init__` 仅新增可选参数（`collection_name`），无删改 → 向后兼容；
+  sync 脚本保护本地运行态（conf.py 已存在则不覆盖、cookies 不在 rsync 范围），备份后同步。
+  能力边界另核：上游 README 能力矩阵标「图文上传 ✅」的仅抖音/快手/小红书三家（我们已全接入）；
+  `TencentNote` 虽存在但四个方法有三个是 `NotImplementedError` 空壳，与 README 标 ❌ 一致，不接入。
 - [x] 3.2 ADR-0004 补「云端生成、边缘发布」产品形态叙事（决策不变，升格叙事与翻案条件）；验证：ADR 更新提交
-- [ ] 3.3 `openspec validate vaas-publish-local-distribution --strict` 通过并归档；验证：validate 无 error
+- [x] 3.3 `openspec validate vaas-publish-local-distribution --strict` 通过并归档；验证：validate 无 error
+  **2026-10-14 实证**：`openspec validate --strict` 输出 `Change 'vaas-publish-local-distribution' is valid`，随后归档。
