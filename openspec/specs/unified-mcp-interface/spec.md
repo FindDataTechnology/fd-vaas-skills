@@ -3,8 +3,7 @@
 单一 MCP 服务器 + 命名空间化工具面：合并三个旧 server，提供统一、可发现的生成/发布/资产接口。
 
 ## Purpose
-VAAS 能力域规格。
-
+VAAS 统一 MCP 接口面：单服务器命名空间化工具、本地 stdio 与托管 HTTP 双模式、签名下载与计价用量端点的行为契约。
 ## Requirements
 
 ### Requirement: 单一 MCP 服务器

@@ -1,7 +1,8 @@
 # opensource-readiness Specification
 
 ## Purpose
-TBD - created by archiving change opensource-readiness. Update Purpose after archive.
+
+保障 fd-vaas-skills 作为公开仓的可持续开源形态：技能自包含、无平台私货、依赖与许可清晰，使外部用户可独立安装使用。
 ## Requirements
 ### Requirement: 渲染源码公开可用
 

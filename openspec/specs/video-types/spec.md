@@ -2,6 +2,10 @@
 
 视频类型注册表：每种类型声明输入与 pipeline，对应一个 Remotion composition。首批五类型（carousel / listicle / data-viz / kinetic-quote / news-flash）由 `add-video-types-batch-1` 引入。
 
+## Purpose
+VAAS 视频类型注册表：每种视频类型声明输入契约与对应 Remotion composition，支撑可扩展的口播视频模板体系。
+
+## Requirements
 ### Requirement: 图文轮播视频（carousel）
 
 系统 SHALL 提供 carousel 类型：每段口播配一张图片场景（Ken Burns 推拉 + 交叉淡入转场）。输入 SHALL 为口播稿 + 图片列表；图片项 MAY 为本地路径或 seedream 提示词（类型声明 `generate: true` 时自动补图，补图清单 MUST 在渲染前列出供确认）。图片数少于场景数时 SHALL 循环复用且相邻场景不重复同图。

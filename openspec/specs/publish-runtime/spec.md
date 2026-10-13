@@ -2,6 +2,10 @@
 
 统一发布运行时与浏览器自动化共享层。fd-vaas-publish-videos 与 fd-vaas-publish-docs 共用单一浏览器原语库与单一编排纯函数模块；视频发布在所有操作系统上走单一 patchright 运行时。
 
+## Purpose
+VAAS 发布运行时域：fd-vaas-publish-videos 与 fd-vaas-publish-docs 共用的浏览器自动化原语库、patchright 运行时与发布前确认纪律的行为契约。
+
+## Requirements
 ### Requirement: 单一浏览器自动化共享库
 
 `browser_utils.py` SHALL 在仓库里只有一份 canonical 实现，fd-vaas-publish-docs 与 fd-vaas-publish-videos 两个 skill 的平台脚本 MUST 从同一份共享模块 import，MUST NOT 各自维护副本。canonical 版本 SHALL 是包含全部通用原语 + 图文 helper 的超集（含 `Browser.__enter__` 的剪贴板 `grant_permissions`）。
