@@ -24,6 +24,10 @@ def _post(url: str, api_key: str, payload: dict, timeout: int = 300) -> bytes:
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
+            # Relays behind Cloudflare (e.g. api.openai-next.com) challenge the
+            # default python-urllib UA with 403/1010; a browser UA passes.
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+            "Accept": "application/json",
         },
         method="POST",
     )
