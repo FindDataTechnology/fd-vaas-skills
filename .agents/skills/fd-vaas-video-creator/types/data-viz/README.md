@@ -21,7 +21,7 @@
 ```json
 {
   "title": "2026 AI 编程工具市场格局",
-  "source": "寻数科技整理",
+  "source": "你的机构整理",
   "charts": [
     {
       "type": "bar",

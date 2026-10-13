@@ -26,7 +26,7 @@
     { "title": "Cursor", "text": "编辑器深度集成、Tab 补全流畅" },
     { "title": "Claude Code", "text": "终端原生、长上下文、多步自主执行" }
   ],
-  "source": "寻数科技整理"
+  "source": "你的机构整理"
 }
 ```
 

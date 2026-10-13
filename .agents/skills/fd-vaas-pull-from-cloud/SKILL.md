@@ -1,12 +1,12 @@
 ---
 name: fd-vaas-pull-from-cloud
 description: 从 VAAS 托管生成实例拉取租户名下的产物到本机发布目录。三种输入任选其一：谦面调用键（连网关按 owner 过滤）、签名下载 URL（生成响应里带的）、或直接给 asset id + 实例地址。产物自动落 downloads/ 标准目录并生成发布技能可直接消费的 task 目录（article.md + meta.json 骨架）。无凭据时输出获取指引。**本技能只拉内容，不碰任何登录态**（发布登录走 fd-vaas-login，在本机完成）。
-compatibility: Python 3.8+（零第三方依赖）；产物在某个 VAAS 托管实例上（默认 https://mcp.finddatatech.cloud/vaas-wanxing）。
+compatibility: Python 3.8+（零第三方依赖）；需自备 VAAS 托管实例地址（--base 或 VAAS_BASE 环境变量，本技能不含内置地址）。
 ---
 
 # FD VAAS 云端拉取器
 
-云端生成 → 本机发布的第一步。托管实例（cheap-2）上的生成产物按租户（owner）隔离存放，
+云端生成 → 本机发布的第一步。VAAS 托管实例上的生成产物按租户（owner）隔离存放，
 本技能把**你名下的**产物拉到本机 `downloads/` 里，落成发布技能（fd-vaas-publish-docs /
 fd-vaas-publish-videos）直接可用的目录结构。
 
@@ -20,8 +20,10 @@ python3 scripts/pull-from-cloud.py --call-key "$FACET_CALL_KEY" --asset <asset-i
 # 方式 B：签名下载 URL（生成响应里直接给的 download_url）
 python3 scripts/pull_from_cloud.py --url "http://.../download/<asset-id>?owner=...&exp=...&signature=..."
 
-# 方式 C：直连实例（自部署/内网场景）
-python3 scripts/pull_from_cloud.py --base https://mcp.finddatatech.cloud/vaas-wanxing \
+# 方式 C：指定自己的实例（自部署/内网场景）
+#        本技能不含内置实例地址 —— 静默连到别人的服务既不安全也不可预期。
+export VAAS_BASE="https://your-vaas-host/vaas-wanxing"     # 或 --base <url>
+python3 scripts/pull_from_cloud.py --base "$VAAS_BASE" \
     --call-key "$KEY" --asset <asset-id>
 ```
 

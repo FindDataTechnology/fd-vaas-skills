@@ -24,7 +24,21 @@ import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_BASE = "https://mcp.finddatatech.cloud/vaas-wanxing"
+# 不留默认实例地址：该脚本是随技能分发的，硬编码某个具体实例会把用户静默导到
+# 别人的服务上（既是隐私问题也是误用问题）。用户必须显式提供自己的实例地址，
+# 方式任选其一：--base 参数、VAAS_BASE 环境变量，或自己的 .env。
+#
+#   export VAAS_BASE="https://your-vaas-host/vaas-wanxing"
+#
+# 缺省且未给 --call-key/--url 时，脚本会输出 GUIDE 明确提示如何配置（见 BASE_GUIDE）。
+try:
+    from dotenv import load_dotenv  # type: ignore
+
+    load_dotenv()
+except Exception:
+    pass  # 零依赖是硬要求：没有 python-dotenv 时靠 shell 环境变量即可
+
+DEFAULT_BASE = os.environ.get("VAAS_BASE", "")
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
 
 GUIDE = """
@@ -41,7 +55,11 @@ B) 签名下载 URL
    pull_from_cloud.py --url "<download_url>"
 
 C) 自部署/内网实例
-   pull_from_cloud.py --base http://<host>:<port> --call-key ... --asset ...
+   本脚本不含内置实例地址（避免把你静默导到别人的服务上）。显式指定其一：
+     export VAAS_BASE="https://your-vaas-host/vaas-wanxing"
+   或 python3 pull_from_cloud.py --base https://your-vaas-host/vaas-wanxing ...
+   然后：
+     pull_from_cloud.py --base "$VAAS_BASE" --call-key ... --asset ...
 """
 
 
@@ -187,6 +205,17 @@ def main() -> int:
         return 1
 
     base = args.base
+    if not base:
+        # 没有实例地址就没法走 MCP 拉取。这里必须明确报错——若带着内置默认值
+        # 静默跑下去，用户会在毫不知情的情况下面向别人的实例发起请求。
+        print("❌ 未配置 VAAS 实例地址。\n")
+        print("本技能不含内置实例地址（避免静默导到他人的服务）。任选其一：\n")
+        print('  export VAAS_BASE="https://your-vaas-host/vaas-wanxing"')
+        print("  # 或写到 .env：VAAS_BASE=https://your-vaas-host/vaas-wanxing")
+        print("  # 或每次显式传：pull_from_cloud.py --base <url> ...\n")
+        print("实例地址由你的 VAAS 托管实例提供；不确定时问你的服务提供方。")
+        return 1
+
     if args.list or args.all or args.asset:
         session = _mcp_session(base, args.call_key)
         listing = _mcp_call(base, args.call_key, session, "assets_list", {"limit": 100})
