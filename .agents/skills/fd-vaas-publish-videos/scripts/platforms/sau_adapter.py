@@ -80,6 +80,42 @@ REGISTRY = {
         "account_file": "cookies/youtube_uploader/account.json",
         "thumb_mode": "youtube",  # thumbnail_path + visibility
     },
+    # ── 2026-10-14 新增（上游同步到 0012d2c 后可用）：这 4 个平台无定时发布能力，
+    #    上游构造签名没有 publish_strategy，故标 no_strategy 走另一条分支。
+    "weibo": {
+        "module": "uploader.weibo_uploader.main",
+        "video_class": "WeiBoVideo",
+        "login_setup": "weibo_setup",
+        "account_file": "cookies/weibo_uploader/account.json",
+        "thumb_mode": "single",
+        "no_strategy": True,
+    },
+    "baijiahao": {
+        "module": "uploader.baijiahao_uploader.main",
+        "video_class": "BaiJiaHaoVideo",
+        "login_setup": "baijiahao_setup",
+        "account_file": "cookies/baijiahao_uploader/account.json",
+        "thumb_mode": "single",
+        "no_strategy": True,
+    },
+    "alipay": {
+        "module": "uploader.alipay_uploader.main",
+        "video_class": "AlipayVideo",
+        "login_setup": "alipay_setup",
+        "account_file": "cookies/alipay_uploader/account.json",
+        "thumb_mode": "single",
+        # alipay 签名连 publish_date 都没有（实测 __init__ 会 TypeError）
+        "no_strategy": True,
+        "no_publish_date": True,
+    },
+    "hupu": {
+        "module": "uploader.hupu_uploader.main",
+        "video_class": "HuPuVideo",
+        "login_setup": "hupu_setup",
+        "account_file": "cookies/hupu_uploader/account.json",
+        "thumb_mode": "single",
+        "no_strategy": True,
+    },
 }
 
 
@@ -109,6 +145,10 @@ def _resolve_strategy_const(mod, platform: str, strategy_value: str):
         suffix = "IMMEDIATE"
     else:
         suffix = "SCHEDULED"
+    # 无定时发布能力的平台根本不该走到这里：它们没有 *_PUBLISH_STRATEGY_* 常量，
+    # 硬查常量名会 KeyError。do_publish 会先按 no_strategy 分支跳过。
+    if REGISTRY[platform].get("no_strategy"):
+        return None
     # 模块常量前缀：XIAOHONGSHU / DOUYIN / KUAISHOU / TENCENT（weixin 走 tencent）
     prefix_map = {
         "xiaohongshu": "XIAOHONGSHU",
@@ -117,6 +157,11 @@ def _resolve_strategy_const(mod, platform: str, strategy_value: str):
         "weixin": "TENCENT",
         "youtube": "YOUTUBE",
     }
+    if platform not in prefix_map:
+        raise KeyError(
+            f"平台 '{platform}' 缺少 publish_strategy 常量映射；"
+            f"若上游该平台无定时发布能力，应在 REGISTRY 里标 no_strategy"
+        )
     name = f"{prefix_map[platform]}_PUBLISH_STRATEGY_{suffix}"
     return getattr(mod, name, strategy_value)
 
@@ -269,6 +314,16 @@ def do_publish(args) -> int:
         kwargs.pop("publish_strategy")
         kwargs.pop("desc")
         kwargs["description"] = args.desc or ""
+    # 无定时发布能力的平台：上游签名没有 publish_strategy，传了会 TypeError。
+    # 这些平台上游也不吃定时时间，传了 --schedule 要明确拒绝，别让用户以为排上了。
+    if REGISTRY[platform].get("no_strategy"):
+        kwargs.pop("publish_strategy")
+        # alipay 连 publish_date 都不收
+        if REGISTRY[platform].get("no_publish_date"):
+            kwargs.pop("publish_date")
+        if args.schedule:
+            print(f"❌ {platform} 上游不支持定时发布，忽略 --schedule 会是静默错误，已中止")
+            return 2
     # 平台特有封面参数
     kwargs.update(_build_thumb_kwargs(platform, args))
 

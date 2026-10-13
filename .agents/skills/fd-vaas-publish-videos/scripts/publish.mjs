@@ -109,7 +109,11 @@ const newCliScript = (p) => path.join(PLATFORMS_DIR, `${p}.${SCRIPT_EXT}`);
 // bilibili 不在此列——上游 bilibili 用 biliup 二进制而非 Playwright，仍走本地 bilibili.py
 const SAU_ADAPTER = path.join(PLATFORMS_DIR, "sau_adapter.py");
 // py 运行时走适配层的平台（bilibili 除外——上游用 biliup 二进制，不在适配层内）
-const SAU_PLATFORMS = new Set(["xiaohongshu", "douyin", "kuaishou", "weixin", "youtube"]);
+// 后 4 个 2026-10-14 随上游 0012d2c 接入：均为视频，无图文能力、不支持定时发布
+const SAU_PLATFORMS = new Set([
+  "xiaohongshu", "douyin", "kuaishou", "weixin", "youtube",
+  "weibo", "baijiahao", "alipay", "hupu",
+]);
 const usesAdapter = (p) => SAU_PLATFORMS.has(p);
 
 // ─── per-platform config ───────────────────────────────

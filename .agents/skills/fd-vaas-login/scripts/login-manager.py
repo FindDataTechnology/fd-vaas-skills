@@ -76,6 +76,29 @@ PLATFORM_REGISTRY = {
         "type": "video",
         "profile_dir": _ROOT / ".profiles" / "bilibili",
     },
+    # ── 2026-10-14 随上游 0012d2c 接入（视频，无图文能力）─────────────────
+    # 注意：key 必须与 sau_adapter.py 的 --platform 值完全一致（本表的 key 会直接
+    # 拼进 `--platform <key>`），改用别名会 KeyError。显示名走 name 字段。
+    "weibo": {
+        "account_file": _ROOT / ".agents" / "skills" / "fd-vaas-publish-videos" / "scripts" / "upstream" / "cookies" / "weibo_uploader" / "account.json",
+        "name": "微博(视频)",
+        "type": "video",
+    },
+    "baijiahao": {
+        "account_file": _ROOT / ".agents" / "skills" / "fd-vaas-publish-videos" / "scripts" / "upstream" / "cookies" / "baijiahao_uploader" / "account.json",
+        "name": "百家号(视频)",
+        "type": "video",
+    },
+    "alipay": {
+        "account_file": _ROOT / ".agents" / "skills" / "fd-vaas-publish-videos" / "scripts" / "upstream" / "cookies" / "alipay_uploader" / "account.json",
+        "name": "支付宝生活号",
+        "type": "video",
+    },
+    "hupu": {
+        "account_file": _ROOT / ".agents" / "skills" / "fd-vaas-publish-videos" / "scripts" / "upstream" / "cookies" / "hupu_uploader" / "account.json",
+        "name": "虎扑",
+        "type": "video",
+    },
 }
 
 
@@ -129,7 +152,12 @@ def _save_docs_state():
 
 
 def _find_latest_qr(platform: str) -> Path | None:
-    """查找平台最新的 *_login_qrcode_*.png 文件。"""
+    """查找平台最新且**未过期**的 *_login_qrcode_*.png 文件。
+
+    二维码本身有有效期（平台侧通常几十秒到几分钟）。早先的实现只按 mtime 取最新
+    一个，于是登录态过期后页面仍会显示几个月前那张早已失效的二维码 —— 用户扫了
+    没反应，还以为是扫码坏了。这里加上新鲜度闸门，过期的一律不展示。
+    """
     cfg = PLATFORM_REGISTRY[platform]
     if not cfg["account_file"]:
         return None
@@ -140,9 +168,32 @@ def _find_latest_qr(platform: str) -> Path | None:
         files = [f for f in cookies_dir.iterdir() if "_login_qrcode_" in f.name and f.suffix.lower() == ".png"]
         if not files:
             return None
-        return max(files, key=lambda p: p.stat().st_mtime)
+        latest = max(files, key=lambda p: p.stat().st_mtime)
+        age = datetime.now() - datetime.fromtimestamp(latest.stat().st_mtime)
+        if age.total_seconds() > QR_MAX_AGE_SECONDS:
+            return None
+        return latest
     except Exception:
         return None
+
+
+def _has_stale_qr(platform: str) -> bool:
+    """磁盘上有二维码文件、但已超过有效期 → True。用于告诉用户「旧码已失效，请重新生成」。"""
+    cfg = PLATFORM_REGISTRY[platform]
+    if not cfg["account_file"]:
+        return False
+    cookies_dir = cfg["account_file"].parent
+    if not cookies_dir.exists():
+        return False
+    try:
+        files = [f for f in cookies_dir.iterdir() if "_login_qrcode_" in f.name and f.suffix.lower() == ".png"]
+        if not files:
+            return False
+        latest = max(files, key=lambda p: p.stat().st_mtime)
+        age = (datetime.now() - datetime.fromtimestamp(latest.stat().st_mtime)).total_seconds()
+        return age > QR_MAX_AGE_SECONDS
+    except Exception:
+        return False
 
 
 def _run_login(platform: str) -> int:
@@ -405,6 +456,14 @@ def _run_docs_action(platform: str, mode: str) -> int:
     return 0
 
 
+COOKIE_MAX_AGE_DAYS = 30
+# 二维码不是永久有效的：平台侧通常几十秒到几分钟就失效。过期码必须停止展示，
+# 否则用户会一直扫一张死码。
+QR_MAX_AGE_SECONDS = 300
+# 图文侧同理：patchright profile 里的会话也会过期，静态检测结果超过这个天数就不认
+CHECK_MAX_AGE_DAYS = 30
+
+
 def _get_docs_status(platform: str) -> dict:
     """图文平台状态：检测结果（落盘）+ 进行中的子进程 + patchright profile 提示。"""
     cfg = DOCS_REGISTRY[platform]
@@ -425,11 +484,25 @@ def _get_docs_status(platform: str) -> dict:
     profile_dir = _ROOT / ".profiles" / profile_name
     has_profile = profile_dir.exists() and (profile_dir / "Default").exists()
 
+    # 一次「检测通过」不等于现在还登录着：结果是静态落盘的，平台会话会过期。
+    # 带上新鲜度，页面才不会对几个月前的结论显示「已登录」（与视频侧 cookie 同理）。
+    check_age_days = None
+    check_stale = None
+    if persisted.get("checked_at"):
+        try:
+            seen = datetime.strptime(persisted["checked_at"], "%Y-%m-%d %H:%M")
+            check_age_days = (datetime.now() - seen).days
+            check_stale = check_age_days >= CHECK_MAX_AGE_DAYS
+        except ValueError:
+            pass
+
     return {
         "platform": platform,
         "display_name": cfg["name"],
         "logged_in": persisted.get("logged_in"),  # None = 从未检测
         "checked_at": persisted.get("checked_at"),
+        "check_stale": check_stale,
+        "check_age_days": check_age_days,
         "login_state": login_state,
         "mode": mode,
         "has_patchright_profile": has_profile,
@@ -446,7 +519,13 @@ def _get_platform_status(platform: str) -> dict:
     last_login = None
     login_state = "idle"
     qr_available = False
+    qr_expired = False
     last_line = ""
+    # A cookie file existing does NOT mean it is still logged in: platform
+    # sessions expire (and the file can be months stale). Report the real
+    # freshness so the page never shows a false "logged in" state.
+    cookie_expired = None
+    cookie_age_days = None
 
     # cookie / profile 就绪检测
     if account_file and account_file.exists():
@@ -454,6 +533,8 @@ def _get_platform_status(platform: str) -> dict:
         has_cookie = True
         cookie_mtime = stat.st_mtime
         last_login = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+        cookie_age_days = (datetime.now() - datetime.fromtimestamp(stat.st_mtime)).days
+        cookie_expired = cookie_age_days >= COOKIE_MAX_AGE_DAYS
     elif platform == "bilibili":
         profile_dir = cfg.get("profile_dir")
         # patchright 初始化过的 profile 会有 Default 子目录
@@ -462,6 +543,8 @@ def _get_platform_status(platform: str) -> dict:
             has_cookie = True
             cookie_mtime = stat.st_mtime
             last_login = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+            cookie_age_days = (datetime.now() - datetime.fromtimestamp(stat.st_mtime)).days
+            cookie_expired = cookie_age_days >= COOKIE_MAX_AGE_DAYS
 
     # 子进程登录状态（所有平台共用，含 bilibili）
     with _lock:
@@ -473,10 +556,13 @@ def _get_platform_status(platform: str) -> dict:
             login_state = proc_info["state"]
             last_line = proc_info.get("last_output", "")
 
-    # 找 QR 图片
+    # 找 QR 图片（新鲜度已在 _find_latest_qr 内把关）
     qr_path = _find_latest_qr(platform)
     if qr_path and qr_path.exists():
         qr_available = True
+    elif not qr_available and _has_stale_qr(platform):
+        # 有码但过期了 —— 和「从来没有码」区分开，前端才能给正确的引导
+        qr_expired = True
 
     return {
         "platform": platform,
@@ -485,8 +571,11 @@ def _get_platform_status(platform: str) -> dict:
         "cookie_path": str(account_file) if account_file else None,
         "cookie_mtime": cookie_mtime,
         "last_login": last_login,
+        "cookie_age_days": cookie_age_days,
+        "cookie_expired": cookie_expired,
         "login_state": login_state,
         "qr_available": qr_available,
+        "qr_expired": qr_expired,
         "qr_path": str(qr_path) if qr_path else None,
         "bilibili_profile": str(cfg["profile_dir"]) if cfg.get("profile_dir") else None,
         "last_line": last_line,
@@ -923,11 +1012,11 @@ function renderDocs(json) {{
     const sharedContainer = document.getElementById('docs-shared');
     sharedContainer.innerHTML = sharedIds.map(id => {{
         const s = videoStatuses.find(v => v.platform === id) || {{ display_name: id }};
-        const isLoggedIn = s.has_cookie && s.login_state !== 'running';
+        const isLoggedIn = s.has_cookie && s.cookie_expired !== true && s.login_state !== 'running';
         const statusClass = s.login_state === 'running' ? 'status-running'
                           : (isLoggedIn ? 'status-logged-in' : 'status-not-logged-in');
         const statusText = s.login_state === 'running' ? '登录中...'
-                         : (isLoggedIn ? '已登录' : '未登录');
+                         : (s.has_cookie && s.cookie_expired ? `登录态可能已过期（${{s.cookie_age_days}} 天前）` : (isLoggedIn ? '已登录' : '未登录'));
         return `
             <div class="platform-card">
                 <div class="platform-header">
@@ -942,12 +1031,17 @@ function renderDocs(json) {{
     const container = document.getElementById('docs-platforms');
     container.innerHTML = (json.docs || []).map(s => {{
         const running = s.login_state === 'running';
+        // 陈旧检测不可信：昨天 true 不代表今天还登录着。stale 一律降级为「未知」，
+        // 并给用户一键复查的入口，而不是假装没事。
+        const freshLoggedIn = s.logged_in === true && s.check_stale !== true;
         const statusClass = running ? 'status-running'
-                          : (s.logged_in === true ? 'status-logged-in' : 'status-not-logged-in');
+                          : (freshLoggedIn ? 'status-logged-in' : 'status-not-logged-in');
         const statusText = running ? (s.mode === 'check' ? '检测中…' : '登录中…')
-                         : (s.logged_in === true ? '已登录' : (s.logged_in === false ? '未登录' : '未检测'));
+                         : (freshLoggedIn ? '已登录'
+                            : (s.logged_in === true && s.check_stale ? `上次检测已过 ${{s.check_age_days}} 天，请复查`
+                               : (s.logged_in === false ? '未登录' : '未检测')));
 
-        const loginBtn = s.logged_in === true
+        const loginBtn = freshLoggedIn
             ? `<button class="btn" onclick="docsAction('${{s.platform}}', 'login')">重新登录</button>`
             : `<button class="btn btn-primary" onclick="docsAction('${{s.platform}}', 'login')">打开窗口登录</button>`;
         const actions = running
@@ -965,6 +1059,8 @@ function renderDocs(json) {{
             hint = '<div class="hint">⏳ 请在弹出的浏览器窗口中完成登录（扫码 / 密码 / 短信），检测到后会自动关窗，最多等 10 分钟。</div>';
         }} else if (running) {{
             hint = '<div class="hint">⏳ 正在打开窗口检测登录态，检测后自动关窗。</div>';
+        }} else if (s.logged_in === true && s.check_stale) {{
+            hint = `<div class="hint">⚠️ 上次检测是 ${{s.check_age_days}} 天前，登录态可能已失效。<b>发布前请务必点「检查登录态」复查</b>——平台会话会过期，旧结论不能当发布依据。</div>`;
         }} else if (s.logged_in === false) {{
             hint = '<div class="hint">💡 点「打开窗口登录」会弹出 patchright Chromium 窗口，登录一次后登录态由 .profiles 持久保存（macOS / Windows 通用）。</div>';
         }}
@@ -985,11 +1081,11 @@ function renderDocs(json) {{
 function render(statuses) {{
     const container = document.getElementById('platforms');
     container.innerHTML = statuses.map(s => {{
-        const isLoggedIn = s.has_cookie && s.login_state !== 'running';
+        const isLoggedIn = s.has_cookie && s.cookie_expired !== true && s.login_state !== 'running';
         const statusClass = s.login_state === 'running' ? 'status-running'
                           : (isLoggedIn ? 'status-logged-in' : 'status-not-logged-in');
         const statusText = s.login_state === 'running' ? '登录中...'
-                         : (isLoggedIn ? '已登录' : '未登录');
+                         : (s.has_cookie && s.cookie_expired ? `登录态可能已过期（${{s.cookie_age_days}} 天前）` : (isLoggedIn ? '已登录' : '未登录'));
 
         let actions = '';
         if (s.platform === 'bilibili') {{
@@ -1013,6 +1109,13 @@ function render(statuses) {{
                     <img class="qr-image" src="/api/qr?platform=${{s.platform}}" alt="QR Code">
                     <div class="qr-status">请使用手机 APP 扫描上方二维码</div>
                 </div>`;
+        }} else if (s.qr_expired) {{
+            // 磁盘上那张码还在，但已经过期 —— 明确告诉用户别扫旧的，重新生成
+            qrHtml = `
+                <div class="qr-container" style="display:block;">
+                    <div class="qr-status">⏳ 此前的二维码已失效（二维码仅在生成后数分钟内有效）<br/>
+                    请点下方「扫码登录」重新生成一张再扫</div>
+                </div>`;
         }}
 
         let cookieInfo = '';
@@ -1029,6 +1132,13 @@ function render(statuses) {{
         }}
         if (s.login_state === 'running') {{
             hint = '<div class="hint">⏳ 登录进行中，请等待弹窗或继续操作...</div>';
+        }}
+        // 登录态过期：这是「重新获取二维码」的主场景，要明确指到重扫动作上
+        if (!isLoggedIn && s.has_cookie && s.cookie_expired && s.login_state !== 'running') {{
+            hint = `<div class="hint">🔄 登录态已过期（${{s.cookie_age_days}} 天前），需要重新登录。
+                <b>点下方「${{s.platform === 'youtube' ? '用 Chrome 登录' : '扫码登录'}}」</b>重新获取二维码；
+                扫码完成后 cookie 会自动更新。<br/>
+                💡 平台二维码通常几分钟内失效，看到后请尽快扫。</div>`;
         }}
 
         return `
