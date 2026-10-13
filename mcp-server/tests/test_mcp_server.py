@@ -345,7 +345,8 @@ class TestSignedDownloads:
         client = TestClient(main_mod.mcp.http_app())
         # missing/invalid signature -> 403
         assert client.get("/download/asset-9", params={"owner": "alice", "exp": 1, "signature": "x"}).status_code == 403
-        # valid signature but file missing -> 404
+        # valid signature but file missing -> 404 (signature IS the credential;
+        # hosted bearer is deliberately not required on this route — design D19)
         signed = H.sign_download("asset-9", "alice", ttl=60)
         r = client.get("/download/asset-9", params=signed)
         assert r.status_code == 404

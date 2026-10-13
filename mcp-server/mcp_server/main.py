@@ -157,9 +157,11 @@ async def health(request: Request) -> JSONResponse:
 
 @mcp.custom_route("/download/{asset_id}", methods=["GET"])
 async def download_asset(request: Request) -> JSONResponse:
-    """Signed, expiring download for one owned asset."""
-    if not service_auth_ok(request):
-        return JSONResponse({"error": "authentication required"}, status_code=401)
+    """Signed, expiring download for one owned asset.
+
+    The HMAC signature (asset_id+owner+exp) IS the credential here — tenant
+    agents never hold the service bearer (design D19), so no bearer check.
+    """
     asset_id = request.path_params["asset_id"]
     q = request.query_params
     owner, exp, sig = q.get("owner"), q.get("exp"), q.get("signature")
