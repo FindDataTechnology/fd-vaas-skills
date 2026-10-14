@@ -6,11 +6,11 @@ compatibility: Python 3.8+; VAAS root directory
 
 # VAAS 登录管理页 (fd-vaas-login)
 
-**统一的登录门户页面**，管理 6 个视频平台 + 11 个图文平台的登录流程。无需记住命令行参数，浏览器打开即可看到所有平台的登录状态，点击按钮自动弹出有头浏览器并显示二维码。
+**统一的登录门户页面**，管理 10 个视频平台 + 11 个图文平台的登录流程。无需记住命令行参数，浏览器打开即可看到所有平台的登录状态，点击按钮自动弹出有头浏览器并显示二维码。
 
 ## 为什么需要这个技能
 
-`fd-vaas-publish-videos` 对多个平台（douyin/kuaishou/xiaohongshu/weixin/youtube）使用扫码登录：
+`fd-vaas-publish-videos` 对多个平台（douyin/kuaishou/xiaohongshu/weixin/youtube/weibo/baijiahao/alipay/hupu）使用扫码登录：
 - 终端输出的二维码在不同终端中可能不可读 / 字符错位
 - 没有「哪些平台已登录、哪些要重新扫码」的总览视图
 - 新用户（公开项目场景）需要知道每个平台的登录态和触发方式
@@ -30,7 +30,7 @@ python3 .agents/skills/fd-vaas-login/scripts/login-manager.py
 # 2. 浏览器打开 http://localhost:8766
 ```
 
-页面会自动展示 6 大平台的登录状态，并每 3 秒轮询更新。
+页面会自动展示 10 大平台的登录状态，并每 3 秒轮询更新。
 
 ## 核心功能
 
@@ -144,7 +144,7 @@ python3 .agents/skills/fd-vaas-login/scripts/login-manager.py
 - **`fd-vaas-publish-videos`**：共享同一个 `sau_adapter.py` 适配器；发布前确保平台已登录（用本 skill 检查）
 - **`fd-vaas-publish-docs`**：图文分发的登录态在本页「图文平台」区管理；小红书/抖音/快手与视频共享 cookie，其余 8 平台走 `scripts/docs_login.py` + patchright
 - **`fd-vaas-dashboard`**：镜像设计模式（零依赖 stdlib HTTP Server + inline HTML），UI 风格一致（深色主题 #0a0a0a/#2563eb）
-- **patchright**：bilibili / 图文 8 平台的登录均依赖 patchright persistent-context 模型（自带 Chromium，跨平台）；其他 5 个视频平台的扫码流程依赖 vendored upstream 的 `*_setup()` 函数
+- **patchright**：bilibili / 图文 8 平台的登录均依赖 patchright persistent-context 模型（自带 Chromium，跨平台）；其他 9 个视频平台的扫码流程依赖 vendored upstream 的 `*_setup()` 函数
 
 ## 工作流约定
 
