@@ -144,6 +144,6 @@ def synthesize(
         "voice": output.get("voice"),
         "model": output.get("model"),
     }
-    result.update(finish(ctx, "generate_voice", "volcengine",
+    result.update(finish(ctx, "generate_voice", ctx["resolved"].get("provider") or "volcengine",
                          output.get("model"), chars, "char", content_id))
     return result

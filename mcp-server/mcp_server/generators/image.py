@@ -147,6 +147,6 @@ def generate(
         "count": len(file_paths),
         "model": output.get("model"),
     }
-    result.update(finish(ctx, "generate_image", "volcengine",
+    result.update(finish(ctx, "generate_image", ctx["resolved"].get("provider") or "volcengine",
                          output.get("model"), len(file_paths), "image", content_id))
     return result

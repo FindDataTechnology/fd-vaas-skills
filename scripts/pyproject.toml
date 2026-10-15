@@ -1,10 +1,9 @@
 [project]
-name = "vaas-litellm-bridge"
-version = "0.1.0"
-description = "LiteLLM bridge for VAAS — unified TTS / image / video generation"
+name = "vaas-generation-bridge"
+version = "0.2.0"
+description = "VAAS generation bridge — unified TTS / image / video via volcengine or ciyuan (萬星·词元)"
 requires-python = ">=3.9"
 dependencies = [
-    "litellm>=1.81.0",
     "python-dotenv>=1.0.0",
 ]
 

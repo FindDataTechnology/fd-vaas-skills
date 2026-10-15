@@ -123,7 +123,7 @@ def generate(
         "duration_sec": duration,
         "model": output.get("model"),
     }
-    result.update(finish(ctx, "generate_video", "volcengine",
+    result.update(finish(ctx, "generate_video", ctx["resolved"].get("provider") or "volcengine",
                          output.get("model"), seconds, "second", content_id))
     return result
 
@@ -226,7 +226,7 @@ def poll(job_id: str, owner: Optional[str] = None) -> dict:
             owner=job["owner"],
         )
         update_job(job_id, status="succeeded", asset_id=asset_id)
-        extras = finish(ctx, "generate_video_submit", "volcengine",
+        extras = finish(ctx, "generate_video_submit", ctx["resolved"].get("provider") or "volcengine",
                         None, float(5), "second", asset_id)
         view = _job_view(get_job(job_id, owner=owner))
         view.update({"asset_id": asset_id, **extras})

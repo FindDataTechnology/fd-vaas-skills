@@ -83,6 +83,18 @@ def env_get(key: str, default: str = "") -> str:
     return default
 
 
+def _reject_provider(provider: str, kind: str) -> None:
+    """未受支持的 provider 显式拒绝：不静默回落，列出受支持的两条自有路径。
+
+    （历史上此处走 litellm 兜底任意第三方 provider；词元已是自有网关，
+    litellm 已退役——见 openspec change vaas-ciyuan-lane-providers。）
+    """
+    raise SystemExit(
+        f"Error: {kind} provider '{provider}' is not supported. "
+        "Supported providers: volcengine, ciyuan."
+    )
+
+
 # ---------------------------------------------------------------------------
 # TTS
 # ---------------------------------------------------------------------------
@@ -120,28 +132,24 @@ def cmd_tts(args: argparse.Namespace) -> int:
             or "https://openspeech.bytedance.com/api/v3/plan/tts",
             output_path=out_path,
         )
-    else:
-        # OpenAI-compatible caliber (萬星·词元 relay and friends): stdlib HTTP,
-        # no SDK — see _openai_compat.py.
-        from _openai_compat import speech_synthesize  # type: ignore
+    elif provider == "ciyuan":
+        # 萬星·词元车道：POST /v1/audio/speech（OpenAI 音频形状），stdlib HTTP。
+        # 逐字时间戳（captions）是 volcengine 直连专属，此档不可用——如实降级。
+        from _ciyuan_tts import synthesize as ciyuan_synth  # type: ignore
 
-        result = speech_synthesize(
+        result = ciyuan_synth(
             text=text,
             model=model,
-            api_key=args.api_key
-            or env_get("OPENAI_API_KEY")
-            or env_get("TTS_API_KEY")
-            or "",
-            base_url=args.base_url
-            or env_get("OPENAI_BASE_URL")
-            or env_get("TTS_BASE_URL")
-            or "https://token.finddatatech.cloud/v1",
             voice=voice,
-            output_format=args.format or "mp3",
             speed=args.speed,
+            format=args.format or "wav",
+            enable_subtitle=False,
+            api_key=args.api_key or env_get("CIYUAN_API_KEY") or "",
+            base_url=args.base_url or env_get("CIYUAN_BASE_URL") or "",
             output_path=out_path,
         )
-        result["text"] = text
+    else:
+        _reject_provider(provider, "TTS")
 
     # Write captions if requested and available
     if result.get("captions") and args.captions:
@@ -194,27 +202,26 @@ def cmd_image(args: argparse.Namespace) -> int:
             or "https://ark.cn-beijing.volces.com/api/plan/v3",
             output_path=out_path,
         )
-    else:
-        # OpenAI-compatible caliber (萬星·词元 relay and friends): stdlib HTTP,
-        # no SDK — see _openai_compat.py.
-        from _openai_compat import image_generate  # type: ignore
+    elif provider == "ciyuan":
+        # 萬星·词元车道：POST /v1/images/generations，解析 data[].b64_json 落盘。
+        # 多图按 n 拆输出路径；非 JSON 应答（已知 gpt-image-* 返 HTML）在客户端
+        # 内即报错，绝不从 HTML 猜 URL。
+        from _ciyuan_image import generate as ciyuan_img  # type: ignore
 
-        result = image_generate(
+        n = args.n or 1
+        out_paths = [out_path.with_name(f"{out_path.stem}_{i:02d}{out_path.suffix}") for i in range(n)]
+        result = ciyuan_img(
             prompt=args.prompt,
             model=model,
-            api_key=args.api_key
-            or env_get("OPENAI_API_KEY")
-            or env_get("IMAGE_API_KEY")
-            or "",
-            base_url=args.base_url
-            or env_get("OPENAI_BASE_URL")
-            or env_get("IMAGE_BASE_URL")
-            or "https://token.finddatatech.cloud/v1",
             size=args.size,
-            output_format=args.output_format or "jpeg",
-            n=args.n or 1,
-            output_path=out_path,
+            n=n,
+            output_paths=out_paths,
+            api_key=args.api_key or env_get("CIYUAN_API_KEY") or "",
+            base_url=args.base_url or env_get("CIYUAN_BASE_URL") or "",
         )
+        result["model"] = model
+    else:
+        _reject_provider(provider, "image")
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
@@ -279,12 +286,89 @@ def cmd_video(args: argparse.Namespace) -> int:
             wait=not args.async_mode,
             timeout=args.timeout or 600,
         )
+    elif provider == "ciyuan":
+        # 萬星·词元车道：异步任务协议（创建→轮询→下载 video_url），stdlib HTTP。
+        # 两阶段防重复计费：--async 只提交不等待；--status 只查态（客户端超时
+        # 重试的是查询，不是付费的提交）。
+        from _ciyuan_video import submit as ciyuan_submit  # type: ignore
+        from _ciyuan_video import poll as ciyuan_poll  # type: ignore
+        from _ciyuan_video import download as ciyuan_download  # type: ignore
+
+        api_key = args.api_key or env_get("CIYUAN_API_KEY") or ""
+        base_url = args.base_url or env_get("CIYUAN_BASE_URL") or ""
+
+        if args.status_task_id:
+            final = ciyuan_poll(
+                task_id=args.status_task_id,
+                api_key=api_key,
+                base_url=base_url,
+                timeout_seconds=args.timeout or 600,
+                interval_seconds=10,
+            )
+            result = {
+                "ok": final.get("status") == "succeeded",
+                "provider": "ciyuan",
+                "task_id": args.status_task_id,
+                "status": final.get("status"),
+                "model": final.get("model"),
+                "usage": final.get("usage"),
+                "video_url": (final.get("content") or {}).get("video_url"),
+            }
+            if result["ok"] and out_path != Path(""):
+                if not result.get("video_url"):
+                    print("Error: task succeeded but no video_url in response", file=sys.stderr)
+                    return 3
+                result.update(ciyuan_download(video_url=result["video_url"], output_path=out_path))
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+
+        if not args.prompt:
+            print("Error: --prompt is required", file=sys.stderr)
+            return 2
+        sub = ciyuan_submit(
+            prompt=args.prompt,
+            model=model,
+            duration=args.duration,
+            ratio=args.ratio,
+            resolution=args.resolution,
+            first_frame=args.first_frame,
+            last_frame=args.last_frame,
+            api_key=api_key,
+            base_url=base_url,
+        )
+        if args.async_mode:
+            result = {
+                "ok": True, "provider": "ciyuan", "submitted": True,
+                **sub, "api_latency_ms": round((time.time() - start) * 1000),
+            }
+        else:
+            final = ciyuan_poll(
+                task_id=sub["task_id"], api_key=api_key, base_url=base_url,
+                timeout_seconds=args.timeout or 600, interval_seconds=10,
+            )
+            if final.get("status") != "succeeded":
+                print(
+                    json.dumps({"ok": False, "provider": "ciyuan", **sub,
+                                "status": final.get("status"), "detail": final}, ensure_ascii=False)[:1500],
+                    file=sys.stderr,
+                )
+                return 3
+            video_url = (final.get("content") or {}).get("video_url")
+            if not video_url:
+                print("Error: task succeeded but no video_url in response", file=sys.stderr)
+                return 3
+            result = {
+                "ok": True, "provider": "ciyuan", "model": model,
+                "task_id": sub["task_id"], "status": "succeeded",
+                **ciyuan_download(video_url=video_url, output_path=out_path),
+                "usage": final.get("usage"),
+                "api_latency_ms": round((time.time() - start) * 1000),
+            }
     else:
-        # Non-volcengine video providers are not wired up yet (the hosted
-        # caliber is volcengine-only today); fail with a clear message.
+        # 未受支持的 provider：显式拒绝，不静默回落（两条自有路径：volcengine/ciyuan）。
         print(
             f"Error: video generation for provider '{provider}' is not supported. "
-            "Use VIDEO_PROVIDER=volcengine.",
+            "Supported providers: volcengine, ciyuan.",
             file=sys.stderr,
         )
         return 3
@@ -338,6 +422,8 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--duration", type=int, help="Video duration in seconds")
     v.add_argument("--ratio", help="Aspect ratio (16:9, 9:16, 1:1, etc.)")
     v.add_argument("--resolution", help="Resolution (480p, 720p, 1080p, 4k)")
+    v.add_argument("--first-frame", dest="first_frame", help="First frame image URL (ciyuan lane)")
+    v.add_argument("--last-frame", dest="last_frame", help="Last frame image URL (ciyuan lane)")
     v.add_argument("--output", help="Output video file path")
     v.add_argument("--async", dest="async_mode", action="store_true", help="Submit only, don't wait")
     v.add_argument("--status", dest="status_task_id", help="Query task status by task id (no submission)")

@@ -33,11 +33,36 @@
 
 ## OpenBAO 路径约定（KV v2，mount `secret`）
 
+凭证按 **kind**（tts / image / video）分池，`provider` 字段声明后端档位
+（`volcengine` 火山方舟直连 | `ciyuan` 萬星·词元车道；缺失按 volcengine 兼容）：
+
 ```
-secret/vaas/pool/<line>/volcengine         # 线池凭证 {api_key, base_url?, model?}
-secret/vaas/service/default/volcengine     # 服务默认凭证
+secret/vaas/pool/<line>/<kind>             # 线池凭证 {api_key, base_url?, model?, provider?, voice?}
+secret/vaas/service/default/<kind>         # 服务默认凭证（同上形状）
 secret/vaas/service/default/download-hmac  # 下载签名密钥 {value}
 ```
+
+### ciyuan 档记录示例（萬星·词元，2026-10-16 实测可用模型）
+
+```jsonc
+// secret/vaas/pool/wanxing/tts —— 组3 key（chat+三车道分组，用于语音）
+{"api_key": "sk-...", "base_url": "https://router.finddatatech.cloud",
+ "model": "qwen3-tts-flash", "voice": "Cherry", "provider": "ciyuan"}
+
+// secret/vaas/pool/wanxing/image —— 组9 key（图像+视频分组）
+{"api_key": "sk-...", "base_url": "https://router.finddatatech.cloud",
+ "model": "gemini-3-pro-image", "provider": "ciyuan"}
+
+// secret/vaas/pool/wanxing/video —— 组9 key
+{"api_key": "sk-...", "base_url": "https://router.finddatatech.cloud",
+ "model": "doubao-seedance-2-0-fast-260128", "provider": "ciyuan"}
+```
+
+> ⚠️ 词元密钥按「分组」锁能力：**语音一把（组3）、图像+视频一把（组9）**，
+> 一把通吃做不到。配错分组会得到「模型不可路由」类错误，不是密钥错误。
+> 已知缺陷（2026-10-16 实测）：图像 `gpt-image-*` 返回 200 但 body 是 HTML
+> （客户端显式拒绝）；`doubao-seedance-1-0-pro`/`seedance-2-5` 上游 503；
+> ASR 上游账号未配置暂不可用。换模型前先实调。
 
 ## OpenBAO 运维（以 registry 栈所在节点为例）
 

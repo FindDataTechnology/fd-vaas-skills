@@ -66,7 +66,7 @@ VAAS 是架在两半之上的一个**编排层**，自身没有应用代码：
   - [技能一览](#技能一览)
   - [平台支持矩阵](#平台支持矩阵)
   - [端到端使用示例](#端到端使用示例)
-  - [多模态模型配置（LiteLLM Bridge）](#多模态模型配置litellm-bridge)
+  - [生成后端配置（volcengine / ciyuan 双档）](#生成后端配置volcengine--ciyuan-双档)
   - [配置与代理说明](#配置与代理说明)
   - [坑与排错](#坑与排错)
 
@@ -159,7 +159,7 @@ VAAS/
 │                                       #   interactivity、markup、render、saas）
 ├── .claude/skills/                     # 指向 .agents/skills/ 子集的软链接（供 /<name> 调用）
 ├── scripts/                            # 多模态媒体桥
-│   ├── litellm-bridge.py               #   统一多 Provider 入口（TTS / 图像 / 视频）
+│   ├── litellm-bridge.py               #   统一生成入口（TTS / 图像 / 视频；volcengine|ciyuan 两档）
 │   ├── _volcengine_{tts,image,video}.py#   火山方舟直连实现
 │   ├── requirements.txt / pyproject.toml
 ├── remotion-app/                       # Remotion 视频项目（React -> 视频）     [已 gitignore]
@@ -381,55 +381,69 @@ python3 $VAAS/.agents/skills/fd-vaas-login/scripts/login-manager.py
 
 ---
 
-## 多模态模型配置（LiteLLM Bridge）
+## 生成后端配置（volcengine / ciyuan 双档）
 
-`fd-vaas-video-creator` 内置的生成器（TTS / 图像 / 视频）通过根目录 `scripts/litellm-bridge.py` 统一入口，支持多 Provider 切换。模型配置全部在 `.env` 里管理，改 Provider 不需要改代码。**已没有独立的 `voice/image/video-generator` 技能**--它们已合并进 `fd-vaas-video-creator/scripts/generators/`。
+`fd-vaas-video-creator` 内置的生成器（TTS / 图像 / 视频）通过根目录 `scripts/litellm-bridge.py` 统一入口。生成后端是**两条自有路径**（litellm 已退役——詞元本身就是网关，不再需要第三方桥接库）：`volcengine`（火山方舟直连，默认）与 `ciyuan`（萬星·词元车道）。模型配置全部在 `.env` 里管理，改 Provider 不需要改代码。**已没有独立的 `voice/image/video-generator` 技能**--它们已合并进 `fd-vaas-video-creator/scripts/generators/`。
 
-### 支持的 Provider
+### 支持的 Provider（仅两档）
 
-| 模态 | LiteLLM Provider | 火山直连 |
-|------|-----------------|----------|
-| **TTS** | openai、azure、vertex_ai、elevenlabs、minimax、polly | ✅（带逐字时间戳） |
-| **图像** | openai、azure、google-ai-studio、vertex-ai、bedrock、black-forest-labs、recraft、openrouter | ✅（带参考图/联网搜索/批量） |
-| **视频** | 有限支持（litellm video 接口尚在早期） | ✅（带异步轮询/参考媒体） |
+| 模态 | volcengine（Ark 直连） | ciyuan（萬星·词元车道） |
+|------|------------------------|--------------------------|
+| **TTS** | ✅ 带逐字时间戳 | ✅ `POST /v1/audio/speech`（无字幕） |
+| **图像** | ✅ 参考图/联网搜索/批量 | ✅ `POST /v1/images/generations`（b64_json） |
+| **视频** | ✅ 异步轮询/参考媒体 | ✅ 异步任务协议（创建→轮询→下载） |
 
 ### `.env` 配置示例
 
 ```env
 # ─── 语音合成 ───
-TTS_PROVIDER=volcengine        # volcengine | openai | elevenlabs | azure | ...
-TTS_MODEL=seed-tts-2.0         # volcengine 用 plain name；其他用 "provider/model"（如 "openai/tts-1"）
+TTS_PROVIDER=volcengine        # volcengine | ciyuan
+TTS_MODEL=seed-tts-2.0         # volcengine 档
 TTS_VOICE=zh_female_gaolengyujie_uranus_bigtts
 
 # ─── 图像生成 ───
-IMAGE_PROVIDER=volcengine      # volcengine | openai | azure | google-ai-studio | ...
+IMAGE_PROVIDER=volcengine      # volcengine | ciyuan
 IMAGE_MODEL=doubao-seedream-5.0-lite
 
 # ─── 视频生成 ───
-VIDEO_PROVIDER=volcengine      # 推荐用 volcengine（功能最全）
+VIDEO_PROVIDER=volcengine      # volcengine | ciyuan
 VIDEO_MODEL=doubao-seedance-2.0
 
-# 非火山 Provider 的 API Key（按需设置）
-# OPENAI_API_KEY=sk-...
-# ELEVENLABS_API_KEY=...
-# AZURE_API_KEY=...
-# GOOGLE_AI_STUDIO_API_KEY=...
+# ─── ciyuan 档（萬星·词元，router.finddatatech.cloud）──
+# 词元密钥按「分组」划能力：语音一把（组3）、图像+视频一把（组9），需两把 key。
+# 托管模式经 OpenBAO 按 kind 注入；本地模式直接配：
+#CIYUAN_API_KEY=sk-...          # 按 kind 分别注入不同分组的 key
+#CIYUAN_BASE_URL=https://router.finddatatech.cloud
+# 实测可用模型（2026-10-16，见下「词元车道实测白名单」）
+#TTS_MODEL=qwen3-tts-flash
+#TTS_VOICE=Cherry
+#IMAGE_MODEL=gemini-3-pro-image
+#VIDEO_MODEL=doubao-seedance-2-0-fast-260128
 ```
+
+### 词元车道实测白名单（2026-10-16）
+
+`/v1/models` 列出的是「可识别」不是「可服务」——换模型前先实调。实测（VAAS 专用账号）：
+
+- **TTS**：`qwen3-tts-flash` + voice `Cherry` ✅；`tts-1` 502、`gpt-4o-mini-audio-preview`/`speech-1.6` 503。
+- **图像**：`gemini-3-pro-image` ✅（合规 b64_json）。⚠️ `gpt-image-*` 返回 HTTP 200 但 body 是 HTML（上游缺陷，客户端会显式报错拒绝）；`doubao-seedream-*`/`flux-*`/`imagen-4` 400。
+- **视频**：`doubao-seedance-2-0-fast-260128` ✅。⚠️ `doubao-seedance-1-0-pro`/`seedance-2-5` 503、`veo3.1`/`sora-2`/`kling-*` 404（目录挂名不可路由）。
+- **ASR**：词元侧上游账号未配置（503），暂不可用；端点协议已就绪，词元配好后即用。
 
 ### 自动路由
 
-- **`.env` 中 `*_PROVIDER != volcengine`** -> 生成器自动走 LiteLLM bridge，无需加任何 flag。
-- **`--litellm` flag** -> 强制走 bridge（即使 Provider 设的是 volcengine）。
+- **`*_PROVIDER` 只接受 `volcengine` 与 `ciyuan`**；写其他值会被显式拒绝（不再静默兜底第三方）。
 - **volcengine 直连** -> 保留全部高级功能（TTS 逐字时间戳、图像参考图/联网搜索、视频异步任务/参考媒体）。
+- **ciyuan 车道** -> 钱与用量进自家账本（词元按分组计价）；错误含车道标识，如实上抛不换模型兜底。
 
 ### 安装依赖
 
 ```bash
-pip install -r scripts/requirements.txt
+pip install -r scripts/requirements.txt   # 只剩 python-dotenv，三车道全走 stdlib
 # 或：cd scripts && pip install -e .
 ```
 
-> ⚠️ **字幕注意**：只有 volcengine TTS 直连才带官方逐字时间戳（`captions.json`）。切换到其他 Provider 后，`fd-vaas-video-creator` 的字幕功能会降级或不可用。如需字幕，推荐保留 TTS 用 volcengine。
+> ⚠️ **字幕注意**：只有 volcengine TTS 直连才带官方逐字时间戳（`captions.json`）。TTS 切到 ciyuan 档后字幕功能不可用。如需字幕，TTS 保留 volcengine（图像/视频可独立切 ciyuan——三档各自独立配置）。
 
 ---
 
@@ -454,7 +468,7 @@ pip install -r scripts/requirements.txt
 - **分发栈 = vendor 上游 + 薄适配层**：`social-auto-upload` 上游 vendored 在 `fd-vaas-publish-videos/scripts/upstream/`（不是根目录独立目录，别再去找根目录的 `social-auto-upload/`）。同步上游更新用 `scripts/sync-upstream.sh`。改平台选择器状态要回写 `_shared/publish/platform-registry.json`（用 `probe.py`），别手改文档。
 - **cookie 过期要重扫**：发布报登录失败多半是 cookie 过期，用 `/fd-vaas-login` 重扫即可，不用手改 cookie 文件。
 - **patchright 全平台一致**：视频发布不再按 OS 派发，macOS 也要装 patchright。ego-browser 只剩录屏 + 图文自有平台两条用途。
-- **独立的 `voice/image/video-generator` 技能已不存在**--生成器合并进了 `fd-vaas-video-creator/scripts/generators/`。多 Provider 切换仍由根目录 `scripts/litellm-bridge.py` 提供。
+- **独立的 `voice/image/video-generator` 技能已不存在**--生成器合并进了 `fd-vaas-video-creator/scripts/generators/`。后端切换（volcengine|ciyuan）仍由根目录 `scripts/litellm-bridge.py` 提供。
 - **PPTX 幻灯片不能直接当视频上传。** `cap`（屏幕录制）、`fd-vaas-video-creator`、或 `ppt-master` 的导出/渲染步骤，是把幻灯片变成可发布视频的桥。
 - **`fd-vaas-video-creator` 跳过 `fix-tts-timings` 会让字幕错位**--seed-tts-2.0 对 Latin token（英文名、URL）返回假的 `endMs`。流水线会自动跑这步；手工路径必须显式跑。
 - **平台验证状态见矩阵，别凭记忆**：bilibili 未实机验证、xueqiu/tonghuashun 入口已失效。标 ❌/⚠️ 的平台首次发布前用 `references/probe.md` 的 `snapshotText` 流程核对选择器再驱动。

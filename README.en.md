@@ -66,7 +66,7 @@ Article: topic -> /fd-vaas-brainstorm(article mode) -> article -> /fd-vaas-publi
   - [Skill catalog](#skill-catalog)
   - [Platform support matrix](#platform-support-matrix)
   - [End-to-end examples](#end-to-end-examples)
-  - [Multimodal model config (LiteLLM Bridge)](#multimodal-model-config-litellm-bridge)
+  - [Generation backend config (volcengine / ciyuan)](#generation-backend-config-volcengine--ciyuan)
   - [Config & proxy notes](#config--proxy-notes)
   - [Pitfalls & troubleshooting](#pitfalls--troubleshooting)
 
@@ -381,55 +381,70 @@ python3 $VAAS/.agents/skills/fd-vaas-login/scripts/login-manager.py
 
 ---
 
-## Multimodal model config (LiteLLM Bridge)
+## Generation backend config (volcengine / ciyuan)
 
-The generators built into `fd-vaas-video-creator` (TTS / image / video) go through the root `scripts/litellm-bridge.py` unified entry, supporting multi-provider switching. All model config lives in `.env` - changing providers needs no code change. **There are no longer standalone `voice/image/video-generator` skills** - they have been merged into `fd-vaas-video-creator/scripts/generators/`.
+The generators built into `fd-vaas-video-creator` (TTS / image / video) go through the root `scripts/litellm-bridge.py` unified entry. There are exactly **two self-owned backend paths** (litellm is retired — Ciyuan/詞元 itself is the gateway, no third-party bridging library needed): `volcengine` (Ark direct, default) and `ciyuan` (the Wanxing·Ciyuan lane at `router.finddatatech.cloud`). All model config lives in `.env` - changing providers needs no code change. **There are no longer standalone `voice/image/video-generator` skills** - they have been merged into `fd-vaas-video-creator/scripts/generators/`.
 
-### Supported providers
+### Supported providers (two only)
 
-| Modality | LiteLLM Provider | Volcengine Direct |
-|------|-----------------|----------|
-| **TTS** | openai, azure, vertex_ai, elevenlabs, minimax, polly | ✅ (with word-level timestamps) |
-| **Image** | openai, azure, google-ai-studio, vertex-ai, bedrock, black-forest-labs, recraft, openrouter | ✅ (reference image / web search / batch) |
-| **Video** | limited support (litellm video API early) | ✅ (async polling / reference media) |
+| Modality | volcengine (Ark direct) | ciyuan (Wanxing·Ciyuan lane) |
+|------|------------------------|-------------------------------|
+| **TTS** | ✅ word-level timestamps | ✅ `POST /v1/audio/speech` (no captions) |
+| **Image** | ✅ reference image / web search / batch | ✅ `POST /v1/images/generations` (b64_json) |
+| **Video** | ✅ async polling / reference media | ✅ async task protocol (create → poll → download) |
 
 ### `.env` configuration example
 
 ```env
 # ─── TTS ───
-TTS_PROVIDER=volcengine        # volcengine | openai | elevenlabs | azure | ...
-TTS_MODEL=seed-tts-2.0         # volcengine uses plain name; others use "provider/model" (e.g. "openai/tts-1")
+TTS_PROVIDER=volcengine        # volcengine | ciyuan
+TTS_MODEL=seed-tts-2.0         # volcengine caliber
 TTS_VOICE=zh_female_gaolengyujie_uranus_bigtts
 
 # ─── Image ───
-IMAGE_PROVIDER=volcengine      # volcengine | openai | azure | google-ai-studio | ...
+IMAGE_PROVIDER=volcengine      # volcengine | ciyuan
 IMAGE_MODEL=doubao-seedream-5.0-lite
 
 # ─── Video ───
-VIDEO_PROVIDER=volcengine      # recommended: volcengine (most features)
+VIDEO_PROVIDER=volcengine      # volcengine | ciyuan
 VIDEO_MODEL=doubao-seedance-2.0
 
-# API keys for non-Volcengine providers (set as needed)
-# OPENAI_API_KEY=sk-...
-# ELEVENLABS_API_KEY=...
-# AZURE_API_KEY=...
-# GOOGLE_AI_STUDIO_API_KEY=...
+# ─── ciyuan caliber (Wanxing·Ciyuan, router.finddatatech.cloud) ───
+# Ciyuan keys are group-scoped: one key for voice (group 3), one for image+video
+# (group 9) — a single key cannot cover everything. Hosted mode injects per-kind
+# via OpenBAO; local mode configures directly:
+#CIYUAN_API_KEY=sk-...          # inject the group-matching key per kind
+#CIYUAN_BASE_URL=https://router.finddatatech.cloud
+# Verified-serving models (2026-10-16, see "Ciyuan lane verified models" below)
+#TTS_MODEL=qwen3-tts-flash
+#TTS_VOICE=Cherry
+#IMAGE_MODEL=gemini-3-pro-image
+#VIDEO_MODEL=doubao-seedance-2-0-fast-260128
 ```
+
+### Ciyuan lane verified models (2026-10-16)
+
+`/v1/models` lists what is *recognized*, not what *serves* — probe before switching. Verified with the VAAS-dedicated account:
+
+- **TTS**: `qwen3-tts-flash` + voice `Cherry` ✅; `tts-1` 502, `gpt-4o-mini-audio-preview`/`speech-1.6` 503.
+- **Image**: `gemini-3-pro-image` ✅ (well-formed b64_json). ⚠️ `gpt-image-*` returns HTTP 200 with an HTML body (upstream defect; the client rejects it explicitly); `doubao-seedream-*`/`flux-*`/`imagen-4` 400.
+- **Video**: `doubao-seedance-2-0-fast-260128` ✅. ⚠️ `doubao-seedance-1-0-pro`/`seedance-2-5` 503, `veo3.1`/`sora-2`/`kling-*` 404 (listed but not routable).
+- **ASR**: upstream accounts not yet configured on the Ciyuan side (503) — endpoint protocol is wired and will serve once configured.
 
 ### Auto-routing
 
-- **`*_PROVIDER != volcengine` in `.env`** -> generators auto-route through LiteLLM bridge, no flag needed.
-- **`--litellm` flag** -> force bridge even when provider is volcengine.
+- **`*_PROVIDER` accepts only `volcengine` and `ciyuan`**; anything else is rejected explicitly (no silent third-party fallback).
 - **volcengine direct** -> retains all advanced features (TTS word-level timestamps, image reference/web search, video async tasks/reference media).
+- **ciyuan lane** -> spend and usage land in the self-owned ledger (group-priced); errors carry the lane identifier and are surfaced honestly, with no cross-model fallback.
 
 ### Install dependencies
 
 ```bash
-pip install -r scripts/requirements.txt
+pip install -r scripts/requirements.txt   # only python-dotenv remains; all three lanes use stdlib
 # or: cd scripts && pip install -e .
 ```
 
-> ⚠️ **Caption note**: only Volcengine TTS direct provides official word-level timestamps (`captions.json`). Switching to another provider degrades or disables `fd-vaas-video-creator`'s caption feature. For captions, recommend keeping TTS on volcengine.
+> ⚠️ **Caption note**: only Volcengine TTS direct provides official word-level timestamps (`captions.json`). Switching TTS to the ciyuan caliber disables captions. For captions keep TTS on volcengine (image/video can independently switch to ciyuan — the three calibers are configured separately).
 
 ---
 

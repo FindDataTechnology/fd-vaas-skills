@@ -40,11 +40,14 @@ _KIND_ENV = {
     "video": {"key": ["vol_agent_api_key", "ARK_API_KEY"], "base": "SEEDANCE_BASE_URL", "model": "VIDEO_MODEL"},
 }
 
-# OpenAI-compatible relay env names (provider="openai" records).
-_OPENAI_ENV = {
-    "tts": {"key": "OPENAI_API_KEY", "base": "OPENAI_BASE_URL", "model": "TTS_MODEL", "provider_env": "TTS_PROVIDER", "voice": "TTS_VOICE"},
-    "image": {"key": "OPENAI_API_KEY", "base": "OPENAI_BASE_URL", "model": "IMAGE_MODEL", "provider_env": "IMAGE_PROVIDER"},
-    "video": {"key": "OPENAI_API_KEY", "base": "OPENAI_BASE_URL", "model": "VIDEO_MODEL", "provider_env": "VIDEO_PROVIDER"},
+# OpenAI-compatible relay env names (provider="openai" records) — retired:
+# the only OpenAI-compatible relay this line serves is 萬星·词元 itself, which
+# now has its own dedicated caliber ("ciyuan") bound to the measured lane
+# endpoints. See openspec change vaas-ciyuan-lane-providers.
+_CIYUAN_ENV = {
+    "tts": {"key": "CIYUAN_API_KEY", "base": "CIYUAN_BASE_URL", "model": "TTS_MODEL", "provider_env": "TTS_PROVIDER", "voice": "TTS_VOICE"},
+    "image": {"key": "CIYUAN_API_KEY", "base": "CIYUAN_BASE_URL", "model": "IMAGE_MODEL", "provider_env": "IMAGE_PROVIDER"},
+    "video": {"key": "CIYUAN_API_KEY", "base": "CIYUAN_BASE_URL", "model": "VIDEO_MODEL", "provider_env": "VIDEO_PROVIDER"},
 }
 
 _SECRET_PATTERNS = [
@@ -175,14 +178,15 @@ def subprocess_env(resolved: dict, kind: str) -> dict:
     """Env overlay that carries the resolved credential into the bridge subprocess."""
     if resolved.get("source") == "env":
         return {}
-    if resolved.get("provider") == "openai":
-        # OpenAI-compatible relay: bridge takes the litellm path (TTS_PROVIDER/
-        # IMAGE_PROVIDER=openai, model prefixed openai/, base/key via the
-        # standard OpenAI env names).
-        mapping = _OPENAI_ENV[kind]
+    provider = (resolved.get("provider") or "volcengine").lower()
+    if provider == "ciyuan":
+        # 萬星·词元车道：bridge takes the ciyuan path (TTS/IMAGE/VIDEO_PROVIDER=
+        # ciyuan, base/key/model via the CIYUAN_* env names). 词元密钥按分组锁
+        # 能力（语音一把、图像/视频一把），按 kind 分路的凭证链天然适配。
+        mapping = _CIYUAN_ENV[kind]
         env = {
             mapping["key"]: resolved["api_key"],
-            mapping["provider_env"]: "openai",
+            mapping["provider_env"]: "ciyuan",
         }
         if resolved.get("base_url"):
             env[mapping["base"]] = resolved["base_url"]
@@ -191,6 +195,12 @@ def subprocess_env(resolved: dict, kind: str) -> dict:
         if mapping.get("voice") and resolved.get("voice"):
             env[mapping["voice"]] = resolved["voice"]
         return env
+    if provider != "volcengine":
+        # 未知档位显式拒绝：不静默回落到任一可用后端（会把配置错误伪装成随机失败）。
+        raise CredentialUnavailable(
+            f"unsupported provider '{provider}' for {kind} credential "
+            "(supported: volcengine, ciyuan)"
+        )
     # Volcengine caliber (default): ARK env names.
     mapping = _KIND_ENV[kind]
     env: dict[str, str] = {}
