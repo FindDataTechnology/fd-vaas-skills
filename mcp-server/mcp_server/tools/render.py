@@ -123,7 +123,7 @@ def _scene_kenburns_html(scene: dict) -> str:
         raise ValueError("kenburns scene needs non-empty images")
     srcs = []
     for p in imgs:
-        path = Path(p).expanduser()
+        path = _resolve_input_file(p)
         if not path.is_file():
             raise ValueError(f"kenburns image not found: {p}")
         srcs.append(_data_uri(path))
@@ -226,6 +226,23 @@ def _ffmpeg(frames_dir: Path, audio: Optional[Path], out: Path, fps: int) -> Non
         raise RuntimeError(f"ffmpeg compose failed: {proc.stderr[-400:]}")
 
 
+def _resolve_input_file(p: str) -> Path:
+    """解析调用方给的输入文件路径：绝对/家目录直用；相对路径按序试
+    （原样 → downloads/ 相对 → VAAS_ROOT 相对），首个存在者胜。
+    render_still 等工具回的是 downloads 相对路径（如 chart/<slug>/<file>），
+    这里保证 chart→kenburns 的桥不用调用方手算绝对路径。"""
+    from ..utils import VAAS_ROOT, DOWNLOADS_DIR
+
+    path = Path(p).expanduser()
+    if path.is_absolute():
+        return path
+    for base in (None, DOWNLOADS_DIR, VAAS_ROOT):
+        cand = path if base is None else base / path
+        if cand.is_file():
+            return cand
+    return path
+
+
 def _validate_storyboard_assets(storyboard: dict, voice_path: Optional[str],
                                 bgm_path: Optional[str] = None) -> None:
     """Fail fast with ONE error naming every missing input file.
@@ -236,12 +253,12 @@ def _validate_storyboard_assets(storyboard: dict, voice_path: Optional[str],
     missing: list[str] = []
     for i, scene in enumerate(storyboard.get("scenes") or []):
         for p in (scene.get("images") or []):
-            if not Path(p).expanduser().is_file():
+            if not _resolve_input_file(p).is_file():
                 missing.append(f"scenes[{i}].images: {p}")
     vp = voice_path or storyboard.get("voice_path")
-    if vp and not Path(vp).expanduser().is_file():
+    if vp and not _resolve_input_file(vp).is_file():
         missing.append(f"voice_path: {vp}")
-    if bgm_path and not Path(bgm_path).expanduser().is_file():
+    if bgm_path and not _resolve_input_file(bgm_path).is_file():
         missing.append(f"bgm path: {bgm_path}")
     if missing:
         raise ValueError(
@@ -315,6 +332,14 @@ def compose_storyboard(
     if not scenes:
         raise ValueError("storyboard.scenes must not be empty")
     size = storyboard.get("size") or [1080, 1920]
+    # 规格归一：调用方给 {"width":..,"height":..} 与 [w,h] 都收，内部统一 [w,h]
+    if isinstance(size, dict):
+        try:
+            size = [int(size["width"]), int(size["height"])]
+        except (KeyError, TypeError, ValueError):
+            raise ValueError('storyboard.size dict form needs integer "width" and "height"')
+    if not (isinstance(size, (list, tuple)) and len(size) == 2):
+        raise ValueError("storyboard.size must be [width, height] or {\"width\", \"height\"}")
     if voice_path is None:
         voice_path = storyboard.get("voice_path")
 

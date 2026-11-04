@@ -43,10 +43,12 @@
 - [x] W6.4 单测补齐：双模式互斥拒绝、未知 chart/doc 方式报错列可用清单、bgm 跨租户引用拒绝
 
 ### W7 部署与收口
+- [ ] W7.5 生成面凭证池恢复（change 外的 infra 挂账）：用户在词元控制台重出组3(语音)/组9(图像+视频) key → seed `secret/vaas/pool/wanxing/{tts,image,video}`（bao 在 cheap-2 /opt/vaas-bao，root token 在 /opt/vaas-bao/root_token.txt）→ 生成类 E2E 复验
 
-- [ ] W7.1 镜像构建（+echarts vendor、种子曲库；pandoc 不进本版）+ 上产 + 探针全绿
-      - 进度：镜像 sha-d77874a 已上产（cheap-2 compose 已滚，11-05）；hosted 工具面探针 5/5 PASS；in-image 真渲染探针 PASS（chart PNG 落盘、PNG magic 验证、账本+chromium 链路通）
-      - 阻塞（先在故障，非本 change 引入）：OpenBAO 已在 11-04 compose 退役中被 docker-prune 清除（KV 数据失），VAAS 凭证池（tts/image/video）与 download-hmac 无处解析 → 生成类 E2E 与签名下载探针全绿待凭证恢复（需用户在词元控制台重出组3/组9 key 或裁决改 env 回退）
+- [x] W7.1 镜像构建（+echarts vendor、种子曲库；pandoc 不进本版）+ 上产 + 探针全绿
+      - 完成（11-05）：镜像 sha-d77874a 上产（cheap-2 compose）；工具面探针 5/5 PASS；渲染面生产 E2E 全绿——render_still(chart)+签名下载 PNG、render_document(pdf+longimage)、render_video(storyboard chart桥+dict size 归一) mp4 签名下载、generate_voice 诚实失败（凭证缺失按设计报错）
+      - 附带修复两处接缝（随 commit）：render_video 输入路径解析收 downloads 相对路径（render_still→kenburns 桥）；storyboard.size 收 dict 归一
+      - 先在事故处置：OpenBAO 已于 11-04 被退役清理，本 change 在 cheap-2 重建极简 bao（file backend+自解封循环 /opt/vaas-bao，KV v2），seed download-hmac；凭证池等用户重出 key（见 W7.5）
 - [x] W7.2 pricing.json 补 render_video（second）/render_still（张）/render_document（份），本地算力 0.0 计价口径
 - [x] W7.3 README 工具表重写（新命名空间 + hosted/stdio 两面清单）
 - [x] W7.4 外账记录（本仓外，另起会话）：finddata `docs/vaas-trial-intro.md` 工具清单、`docs/vaas-presets/` pack 增补两 skill、`MCP-REGISTRY.md` `/vaas-wanxing` 行；部署后壹座重烘焙 registry 快照
