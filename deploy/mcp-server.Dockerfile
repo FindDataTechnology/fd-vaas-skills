@@ -15,6 +15,10 @@ ENV PYTHONUNBUFFERED=1 \
 COPY mcp-server/ /app/mcp-server/
 COPY scripts/ /app/scripts/
 
+# Video-type registry metadata (type.json listing for templates_list) — the
+# node/Remotion runtime itself stays out per ADR-0004; type MODE is local-only.
+COPY .agents/skills/fd-vaas-video-creator/types/ /app/.agents/skills/fd-vaas-video-creator/types/
+
 # Dependencies only — the app itself runs from the copied source tree.
 # The relay caliber (萬星·词元) is stdlib HTTP (_openai_compat.py); no SDK needed.
 RUN pip install --no-cache-dir "fastmcp>=3,<4" "pydantic>=2" aiosqlite python-dotenv

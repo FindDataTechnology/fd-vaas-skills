@@ -690,7 +690,16 @@ def _render_typed_video(type: str, script: str, inputs: Optional[dict],
     node new-task.mjs 建任务目录（downloads/fd-videos/<slug>/）→
     node task-render.mjs 跑类型 pipeline（tts/scene-align/preflight/render），
     cwd=remotion-app、env 注入凭据 overlay（hosted 模式）。
+
+    hosted 限定：托管镜像按 ADR-0004 不含 node/Remotion 运行时，type 模式
+    仅本地 stdio 实例可用——入口显式报错指路，不让调用方撞 node 缺失的裸错。
     """
+    if is_hosted():
+        raise ValueError(
+            "render_video type 模式仅本地 stdio 实例支持：托管镜像按 ADR-0004 "
+            "不含 node/Remotion 运行时。托管调用请改用 storyboard 模式"
+            "（seek 契约场景，同底座确定性渲染），或自部署 stdio 实例使用类型管线。"
+        )
     known = _list_video_types()
     if known and type not in known:
         raise ValueError(f"unknown video type: {type}. Available: {known}")

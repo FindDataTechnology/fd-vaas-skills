@@ -43,6 +43,7 @@
 - [x] W6.4 单测补齐：双模式互斥拒绝、未知 chart/doc 方式报错列可用清单、bgm 跨租户引用拒绝
 
 ### W7 部署与收口
+- [x] W7.6 hosted type 模式限定收口：render_video(type=...) 托管实例显式报错（ADR-0004 托管镜像无 node/Remotion，指路 storyboard 模式）；templates_list 视频类型加 runtime=local_stdio_only 标注；spec render_video requirement 修订（hosted carve-out + size dict 归一 + 相对路径解析入契约）
 - [ ] W7.5 生成面凭证池恢复（change 外的 infra 挂账）：用户在词元控制台重出组3(语音)/组9(图像+视频) key → seed `secret/vaas/pool/wanxing/{tts,image,video}`（bao 在 cheap-2 /opt/vaas-bao，root token 在 /opt/vaas-bao/root_token.txt）→ 生成类 E2E 复验
 
 - [x] W7.1 镜像构建（+echarts vendor、种子曲库；pandoc 不进本版）+ 上产 + 探针全绿

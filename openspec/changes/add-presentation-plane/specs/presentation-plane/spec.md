@@ -18,7 +18,7 @@ VAAS 作为 finddata 全系统展示层的核心契约：一个渲染底座、�
 
 ### Requirement: render_video 双模式统一视频原语
 
-系统 SHALL 提供唯一视频渲染工具 `render_video`，支持两种互斥模式：(1) `storyboard` 模式——调用方提交场景序列（html_intro/html_outro/kenburns/html_full，遵守 seek 契约），系统逐帧渲染合成；(2) `type` 模式——调用方指定 video-types 注册表中的类型及输入，系统按类型声明渲染。同输入双跑 MUST 产出一致结果（确定性重放）。旁白音频 SHALL 可作为输入混流。
+系统 SHALL 提供唯一视频渲染工具 `render_video`，支持两种互斥模式：(1) `storyboard` 模式——调用方提交场景序列（html_intro/html_outro/kenburns/html_full，遵守 seek 契约），系统逐帧渲染合成；(2) `type` 模式——调用方指定 video-types 注册表中的类型及输入，系统按类型声明渲染。同输入双跑 MUST 产出一致结果（确定性重放）。旁白音频 SHALL 可作为输入混流。type 模式依赖本地类型管线（node/Remotion 运行时），MUST 仅在本地 stdio 实例可用；托管实例收到 type 模式调用 MUST 返回指路 storyboard 模式的明确错误。storyboard 的 size 参数 SHALL 同时接受 `[width, height]` 与 `{width, height}` 两种形态；kenburns 等场景的输入文件路径 SHALL 接受渲染工具返回的 downloads 相对路径。
 
 #### Scenario: storyboard 模式确定性出片
 
@@ -28,7 +28,7 @@ VAAS 作为 finddata 全系统展示层的核心契约：一个渲染底座、�
 
 #### Scenario: type 模式按类型渲染
 
-- **WHEN** 调用方以 `type=listicle` 与合法 items 输入调用 render_video
+- **WHEN** 本地 stdio 实例上调用方以 `type=listicle` 与合法 items 输入调用 render_video
 - **THEN** 系统按 listicle 类型声明渲染 hook/条目/CTA 结构
 - **AND** 类型不匹配错误在渲染前报出（输入校验前置）
 
@@ -36,6 +36,12 @@ VAAS 作为 finddata 全系统展示层的核心契约：一个渲染底座、�
 
 - **WHEN** 调用方同时提交 storyboard 与 type
 - **THEN** 系统拒绝调用并说明两种模式不可混用
+
+#### Scenario: 托管实例 type 模式指路报错
+
+- **WHEN** 托管实例收到 type 模式调用
+- **THEN** 返回明确错误说明 type 模式仅本地 stdio 实例支持（ADR-0004 托管镜像不含 Remotion 运行时）
+- **AND** 错误信息指路 storyboard 模式，不产生任何产物或计费
 
 ### Requirement: render_still 单帧出口
 

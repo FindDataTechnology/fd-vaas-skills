@@ -58,6 +58,9 @@ def _load_video_types() -> list[dict]:
             "name": raw.get("name"),
             "description": raw.get("description"),
             "status": raw.get("status"),
+            # 可用性标注：类型管线依赖本地 node/Remotion（ADR-0004 托管镜像不含），
+            # hosted 实例 type 模式显式报错——列表先把话说清，别让调用方撞墙。
+            "runtime": "local_stdio_only",
         })
     return items
 
