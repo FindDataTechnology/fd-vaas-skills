@@ -44,7 +44,7 @@
 
 ### W7 部署与收口
 - [x] W7.6 hosted type 模式限定收口：render_video(type=...) 托管实例显式报错（ADR-0004 托管镜像无 node/Remotion，指路 storyboard 模式）；templates_list 视频类型加 runtime=local_stdio_only 标注；spec render_video requirement 修订（hosted carve-out + size dict 归一 + 相对路径解析入契约）
-- [ ] W7.5 生成面凭证池恢复（change 外的 infra 挂账）：用户在词元控制台重出组3(语音)/组9(图像+视频) key → seed `secret/vaas/pool/wanxing/{tts,image,video}`（bao 在 cheap-2 /opt/vaas-bao，root token 在 /opt/vaas-bao/root_token.txt）→ 生成类 E2E 复验
+- [ ] W7.5 生成面凭证池恢复——**change 外挂账，不阻归档**（本 change 交付物=展示面渲染链，已全绿；此项是 infra 恢复：等用户在词元控制台重出组3(语音)/组9(图像+视频) key → seed `secret/vaas/pool/wanxing/{tts,image,video}`（bao 在 cheap-2 /opt/vaas-bao，root token 在 /opt/vaas-bao/root_token.txt）→ 生成类 E2E 复验。自力路径已全试毙（旧 ARK key 401 已轮换、FindDataRouter admin API 不可猜、节点无遗留 env），跨 change 追踪于会话记忆）
 
 - [x] W7.1 镜像构建（+echarts vendor、种子曲库；pandoc 不进本版）+ 上产 + 探针全绿
       - 完成（11-05）：镜像 sha-d77874a 上产（cheap-2 compose）；工具面探针 5/5 PASS；渲染面生产 E2E 全绿——render_still(chart)+签名下载 PNG、render_document(pdf+longimage)、render_video(storyboard chart桥+dict size 归一) mp4 签名下载、generate_voice 诚实失败（凭证缺失按设计报错）

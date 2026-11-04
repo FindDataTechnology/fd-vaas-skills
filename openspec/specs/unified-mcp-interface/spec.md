@@ -4,36 +4,32 @@
 
 ## Purpose
 VAAS 统一 MCP 接口面：单服务器命名空间化工具、本地 stdio 与托管 HTTP 双模式、签名下载与计价用量端点的行为契约。
+
 ## Requirements
 
 ### Requirement: 单一 MCP 服务器
+
 系统 SHALL 以唯一一个 MCP 服务器（`.mcp.json` 中一条 `vaas` 注册，指向 `mcp-server/`）暴露全部工具。`vaas-video-assets`（`.claude/mcp/vaas-assets-server.py`）SHALL 被移除，其工具并入统一服务器。规划中的 `vaas-publish` server MUST NOT 另起新进程。
 
 #### Scenario: 客户端仅连一个 server
 - **WHEN** 任意 MCP 客户端配置本项目
 - **THEN** `.mcp.json` 只含一个 vaas 服务器条目
-- **AND** 生成、发布、资产查询、注册表全部工具都来自该服务器
+- **AND** 生成、渲染、发布、资产、模板、注册表全部工具都来自该服务器
 
 #### Scenario: 旧 server 已下线
 - **WHEN** 统一服务器上线后
 - **THEN** `.claude/mcp/vaas-assets-server.py` 不再被 `.mcp.json` 引用
-- **AND** 其素材发现工具（list_common_assets/find_logo/list_compositions/get_scene_templates）可从统一服务器的 `assets.*` 命名空间调用
+- **AND** 通用素材与模板发现经统一服务器的 `assets.*` 与 `templates.*` 命名空间调用
 
 ### Requirement: 工具命名空间
-系统 SHALL 按命名空间组织工具：`generate.*`（voice/image/video/cover）、`orchestrate.*`（voiceover/brainstorm/article）、`publish.*`（video/docs）、`assets.*`（list/get/variants/lineage/stats）、`registry.*`（list_generators/describe_generator）。
+
+系统 SHALL 按命名空间组织工具：`generate.*`（voice/image/video 提交与状态/音色目录）、`render.*`（video/still/document 确定性渲染出口）、`publish.*`（video/docs）、`assets.*`（list/get/stats）、`templates.*`（list/get）、`registry.*`（list_generators/describe_generator）。编排类知识（内容策划、场景撰写、类型选型）MUST NOT 以 MCP 工具形态暴露——它们以技能（skill）载体分发。
 
 #### Scenario: 命名空间可被检索
 - **WHEN** 客户端列出统一服务器的全部工具
 - **THEN** 工具按上述命名空间前缀分组
 - **AND** 每个工具可从其命名空间名推断职责
-
-### Requirement: 向后兼容别名
-统一服务器 SHALL 保留旧工具名（`generate_voice`、`generate_image`、`list_all_content`、`get_content_details` 等）作为别名，行为与命名空间工具一致。别名 SHALL 标记为 deprecated。旧名 MUST 至少保留一个发布周期。
-
-#### Scenario: 旧工具名仍可用
-- **WHEN** 既有脚本调用 `generate_voice`
-- **THEN** 行为与 `generate.voice` 一致
-- **AND** 返回结果含命名空间工具的完整字段
+- **AND** 工具清单中不存在 orchestrate 前缀工具与纯返回提示模板的工具
 
 ### Requirement: 发布编排接口
 `publish.*` 工具 SHALL 提供发布就绪校验（视频/封面/状态检查）、配置读取、模拟发布（dry-run）与真实发布。发布成功后 SHALL 通过统一库记录 `distribution` 与 stage 更新。发布前 SHALL 要求用户确认（不可撤销操作）。
@@ -55,13 +51,13 @@ MCP 服务器 SHALL 支持托管 HTTP 模式（流式 HTTP 传输），供謙面
 #### Scenario: 本地接入不变
 
 - **WHEN** 本机客户端按 `.mcp.json` 以 stdio 连接
-- **THEN** 全部生成/发布/资产/注册表工具照常可用
+- **THEN** 全部生成/渲染/发布/资产/模板/注册表工具照常可用
 - **AND** 不需要密钥库与租户身份
 
 #### Scenario: 托管模式工具面收窄
 
 - **WHEN** 租户经托管实例列出工具
-- **THEN** 可见生成、编排、资产与注册表工具
+- **THEN** 可见生成、渲染、资产、模板与注册表工具
 - **AND** 发布面工具不存在于工具列表且调用被拒绝
 
 ### Requirement: 托管模式身份要求
