@@ -1,0 +1,56 @@
+{
+  "_comment": "Seed BGM library shipped with the image. Every track carries a recorded license and source; the asset tree copies these fields into asset metadata at seed time (duration_seconds / license / source are required).",
+  "attribution_note": "When a seeded track is used in a render, keep the attribution string with the delivered asset (it is propagated into the asset metadata under bgm.attribution).",
+  "tracks": [
+    {
+      "file": "carefree.mp3",
+      "title": "Carefree",
+      "duration_seconds": 15.92,
+      "artist": "Kevin MacLeod",
+      "source": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Carefree.mp3",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Carefree by Kevin MacLeod (incompetech.com), Licensed under Creative Commons: By Attribution 4.0"
+    },
+    {
+      "file": "wallpaper.mp3",
+      "title": "Wallpaper",
+      "duration_seconds": 16.14,
+      "artist": "Kevin MacLeod",
+      "source": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Wallpaper.mp3",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Wallpaper by Kevin MacLeod (incompetech.com), Licensed under Creative Commons: By Attribution 4.0"
+    },
+    {
+      "file": "deliberate-thought.mp3",
+      "title": "Deliberate Thought",
+      "duration_seconds": 15.63,
+      "artist": "Kevin MacLeod",
+      "source": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Deliberate%20Thought.mp3",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Deliberate Thought by Kevin MacLeod (incompetech.com), Licensed under Creative Commons: By Attribution 4.0"
+    },
+    {
+      "file": "floating-cities.mp3",
+      "title": "Floating Cities",
+      "duration_seconds": 16.42,
+      "artist": "Kevin MacLeod",
+      "source": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Floating%20Cities.mp3",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Floating Cities by Kevin MacLeod (incompetech.com), Licensed under Creative Commons: By Attribution 4.0"
+    },
+    {
+      "file": "dreams-become-real.mp3",
+      "title": "Dreams Become Real",
+      "duration_seconds": 36.17,
+      "artist": "Kevin MacLeod",
+      "source": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Dreams%20Become%20Real.mp3",
+      "license": "CC-BY-4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Dreams Become Real by Kevin MacLeod (incompetech.com), Licensed under Creative Commons: By Attribution 4.0"
+    }
+  ]
+}

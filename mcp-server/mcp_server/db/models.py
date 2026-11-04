@@ -18,6 +18,19 @@ SERVICE_OWNER = "service"
 JOB_TTL_HOURS = 24
 
 
+def scoped_asset_slug(slug: str, owner: str) -> str:
+    """Namespace a caller-supplied slug by owner (hosted multi-tenant).
+
+    assets.slug is globally unique; two tenants composing the SAME
+    deterministic plan (identical storyboard/voiceover → same hash slug)
+    would collide without the owner prefixing. Local 'service' owner keeps
+    the raw slug so local/dev and historical rows stay addressable.
+    """
+    if owner in (None, "", SERVICE_OWNER):
+        return slug
+    return f"{owner[:40]}--{slug}"
+
+
 def generate_id() -> str:
     """Generate a UUID for asset records."""
     return str(uuid.uuid4())
@@ -129,10 +142,18 @@ def _lineage_nodes(conn, asset_id: str) -> list[dict]:
 
 
 def _owner_visible(row, owner: Optional[str]) -> bool:
-    """owner=None (local/admin) sees everything; a tenant only sees its own rows."""
+    """owner=None (local/admin) sees everything; a tenant only sees its own rows.
+
+    Exception (W4.1 种子曲库): platform-seeded BGM assets (owner=service) are
+    a global library — every tenant can see/reference/download them. Other
+    service rows and other tenants' assets stay isolated.
+    """
     if owner is None:
         return True
-    return (row["owner"] or SERVICE_OWNER) == owner
+    row_owner = row["owner"] or SERVICE_OWNER
+    if row_owner == owner:
+        return True
+    return row_owner == SERVICE_OWNER and row["type"] == "bgm"
 
 
 def get_asset(asset_id: str, owner: Optional[str] = None) -> Optional[dict]:
@@ -153,6 +174,14 @@ def get_asset_by_slug(slug: str, owner: Optional[str] = None) -> Optional[dict]:
     if not row or not _owner_visible(row, owner):
         return None
     return _enrich(_parse(row))
+
+
+def delete_asset(asset_id: str) -> None:
+    """Delete one asset row (files are reclaimed by the artifact GC)."""
+    conn = get_connection()
+    conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
+    conn.commit()
+    conn.close()
 
 
 # Backward-compat aliases used by skills/query.py and skills/publish.py
@@ -214,6 +243,22 @@ def update_asset_stage(asset_id: str, stage: str, action: Optional[str] = None) 
 
 def update_content_status(content_id: str, status: str) -> None:
     update_asset_stage(content_id, status)
+
+
+def update_asset_metadata(asset_id: str, patch: dict) -> None:
+    """Merge keys into an asset's JSON metadata (read-modify-write, no-op if missing)."""
+    conn = get_connection()
+    row = conn.execute("SELECT metadata FROM assets WHERE id = ?", (asset_id,)).fetchone()
+    if not row:
+        conn.close()
+        return
+    meta = json.loads(row["metadata"]) if row["metadata"] else {}
+    meta.update(patch)
+    conn.execute(
+        "UPDATE assets SET metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (json.dumps(meta), asset_id))
+    conn.commit()
+    conn.close()
 
 
 def record_asset_history(asset_id: str, action: str, details: Optional[str] = None) -> None:

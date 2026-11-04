@@ -1,9 +1,11 @@
 {
-  "_comment": "Pricing table for /usage/summary (deploy-side config, not code contract). Rates = currency per unit; copy to VAAS_PRICING_FILE and fill from the provider price list.",
+  "_comment": "Pricing table for /usage/summary (deploy-side config, not code contract). Rates = currency per unit; copy to VAAS_PRICING_FILE and fill from the provider price list. Local-compute render plane is priced 0.0: render_video per second, render_still per image, render_document per doc. Both the target unit spellings (second/image/doc) and the currently recorded 'render' unit (type-mode video, still, document) are listed so every usage row resolves.",
   "currency": "CNY",
   "generate_image": {"image": 0.0},
   "generate_voice": {"char": 0.0},
-  "generate_video": {"second": 0.0},
   "generate_video_submit": {"second": 0.0},
-  "generate_cover": {"render": 0.0}
+  "generate_cover": {"render": 0.0},
+  "render_video": {"second": 0.0, "render": 0.0},
+  "render_still": {"image": 0.0, "render": 0.0},
+  "render_document": {"doc": 0.0, "render": 0.0}
 }

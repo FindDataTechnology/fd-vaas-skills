@@ -17,7 +17,8 @@ from .generators.image import generate as _driver_image
 from .generators.video import generate as _driver_video
 from .skills.cover import create_cover as _driver_cover
 from .skills.voiceover import create_voiceover_video as _driver_voiceover
-from .skills.brainstorm import brainstorm as _driver_brainstorm
+from .tools.still_chart import render_chart as _driver_chart
+from .tools.doc_render import render_document as _driver_doc
 
 # driver name -> callable (add a line here + a registry.json entry for a new method)
 DRIVERS: dict[str, Callable] = {
@@ -26,7 +27,9 @@ DRIVERS: dict[str, Callable] = {
     "generate_video": _driver_video,
     "create_cover": _driver_cover,
     "create_voiceover": _driver_voiceover,
-    "brainstorm": _driver_brainstorm,
+    # Wave1 占位驱动：函数存在、内核后续波次实现（当前 raise NotImplementedError）
+    "render_chart": _driver_chart,
+    "render_document": _driver_doc,
 }
 
 # registry.json ships inside the package (package-data); fall back to the
@@ -83,7 +86,7 @@ def list_generators(asset_type: Optional[str] = None) -> dict:
     List available generation methods, optionally filtered by asset type.
 
     Args:
-        asset_type: Optional filter (voice/image/video/cover/copy)
+        asset_type: Optional filter (voice/image/video/cover/chart/doc)
 
     Returns:
         Dict with items[] (or a single type's items) listing name/provider/model

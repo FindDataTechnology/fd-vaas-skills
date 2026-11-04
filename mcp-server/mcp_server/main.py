@@ -2,13 +2,19 @@
 VAAS MCP Server — unified material generation, management, and publishing.
 
 Single MCP server exposing namespaced tools:
-  generate_*    voice/image/video/cover generation (via registry)
-  orchestrate_* voiceover / brainstorm pipelines
+  generate_*    voice/image generation + async video submit/status (via registry)
+  render_*      presentation render plane: video (storyboard/type),
+                still (cover/chart/graphic), document (pdf/longimage)
+  templates_*   presentation template discovery (video/cover/doc)
+  models_voices / voiceover_assemble / reference_clips_check
+                voice lane truth table + long-form assembly + ref clips
   publish_*     multi-platform publish + validate/config/simulate/record
-  assets_*      material store queries + Remotion asset discovery
+  assets_*      material store queries (+ brand asset tree via assets_get kind)
   registry_*    generation method discovery
 
-Legacy tool names remain registered as deprecated aliases.
+Wave1 (add-presentation-plane): orchestrate_*/generate_cover/generate_video(同步)/
+Remotion discovery 工具与全部 legacy aliases 已退役；generate_cover 保留为
+render_still(kind="cover") 的内部实现入口。
 
 Transport:
   stdio (default) — full tool surface, local single-user mode.
@@ -33,63 +39,42 @@ from .hosting import (
     current_owner, is_hosted, service_auth_ok, verify_download,
 )
 from .tools.generate import (
-    generate_voice, generate_image, generate_video, generate_cover,
-    generate_video_submit, video_job_status,
+    generate_voice, generate_image, generate_video_submit, video_job_status,
+    models_voices, voiceover_assemble, reference_clips_check,
 )
-from .tools.orchestrate import orchestrate_voiceover, orchestrate_brainstorm
+from .tools.render import render_video, render_still, render_document
+from .tools.templates import templates_list, templates_get
 from .tools.publish import (
     publish_video, publish_article,
     publish_validate_ready, publish_get_config, publish_simulate, publish_record,
 )
-from .tools.assets import (
-    assets_list, assets_get, assets_stats,
-    assets_list_common, assets_find_logo, assets_list_compositions,
-    assets_validate_paths, assets_get_scene_templates,
-)
+from .tools.assets import assets_list, assets_get, assets_stats
 from .tools.registry_tools import registry_list_generators, registry_describe_generator
 
 mcp = FastMCP("VAAS")
 
 # ─── Canonical namespaced tools ────────────────────────────────────────────
-# Hosted surface (ADR-0004): the publish plane never ships multi-tenant, and
-# the synchronous video tool stays local-only (double-billing guard — hosted
-# tenants use generate_video_submit / video_job_status).
+# Hosted surface (ADR-0004): the publish plane never ships multi-tenant.
 HOSTED_EXCLUDED = {
     publish_video, publish_article,
     publish_validate_ready, publish_get_config, publish_simulate, publish_record,
-    generate_video,
 }
 
 CANONICAL_TOOLS = [
-    generate_voice, generate_image, generate_video, generate_cover,
-    generate_video_submit, video_job_status,
-    orchestrate_voiceover, orchestrate_brainstorm,
+    generate_voice, generate_image, generate_video_submit, video_job_status,
+    models_voices, voiceover_assemble, reference_clips_check,
+    render_video, render_still, render_document,
+    templates_list, templates_get,
+    assets_list, assets_get, assets_stats,
+    registry_list_generators, registry_describe_generator,
+    # publish plane: stdio-only (hosted surface excludes it, ADR-0004)
     publish_video, publish_article,
     publish_validate_ready, publish_get_config, publish_simulate, publish_record,
-    assets_list, assets_get, assets_stats,
-    assets_list_common, assets_find_logo, assets_list_compositions,
-    assets_validate_paths, assets_get_scene_templates,
-    registry_list_generators, registry_describe_generator,
 ]
 for fn in CANONICAL_TOOLS:
     if is_hosted() and fn in HOSTED_EXCLUDED:
         continue
     mcp.tool()(fn)
-
-# ─── Deprecated legacy aliases ─────────────────────────────────────────────
-LEGACY_ALIASES = [
-    ("create_cover_image", generate_cover, "Use generate_cover"),
-    ("create_voiceover", orchestrate_voiceover, "Use orchestrate_voiceover"),
-    ("brainstorm_content", orchestrate_brainstorm, "Use orchestrate_brainstorm"),
-    ("publish_video_to_platforms", publish_video, "Use publish_video"),
-    ("publish_article_to_platforms", publish_article, "Use publish_article"),
-    ("list_all_content", assets_list, "Use assets_list"),
-    ("get_content_details", assets_get, "Use assets_get"),
-]
-for name, fn, hint in LEGACY_ALIASES:
-    if is_hosted() and fn in HOSTED_EXCLUDED:
-        continue
-    mcp.tool(name=name, description=f"{fn.__doc__ or ''} (deprecated: {hint})")(fn)
 
 
 # ─── Artifact retention (task 4.5) ─────────────────────────────────────────
@@ -220,6 +205,8 @@ async def usage_report(request: Request) -> JSONResponse:
 def main():
     """Run the MCP server: stdio locally, streamable HTTP in hosted mode."""
     ensure_db_exists()
+    from .tools.render import ensure_bgm_library
+    ensure_bgm_library()  # W4.1: 首启注册种子 BGM 曲库为全局资产（幂等）
     if is_hosted():
         expire_stale_jobs()
         gc_expired_artifacts()

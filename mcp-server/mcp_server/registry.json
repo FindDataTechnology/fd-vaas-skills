@@ -12,7 +12,10 @@
   "cover": [
     { "name": "brand", "provider": "local", "model": "remotion", "driver": "create_cover" }
   ],
-  "copy": [
-    { "name": "brainstorm", "provider": "llm", "model": "claude", "driver": "brainstorm" }
+  "chart": [
+    { "name": "echarts", "provider": "local", "model": "chromium", "driver": "render_chart" }
+  ],
+  "doc": [
+    { "name": "chromium", "provider": "local", "model": "print", "driver": "render_document" }
   ]
 }

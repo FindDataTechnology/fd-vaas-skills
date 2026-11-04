@@ -22,19 +22,19 @@ Register in `.mcp.json`:
 
 ## Tool namespaces
 
-Tool names use `prefix_` namespaces (MCP tool names forbid dots).
+Tool names use `prefix_` namespaces (MCP tool names forbid dots). The hosted
+surface (`VAAS_HOSTED=1`, HTTP transport) exposes **17 tools**; local stdio
+adds the 6-tool publish plane for **23 tools** total (publish never ships
+multi-tenant — workspace ADR-0004).
 
 | Namespace | Tools |
 |---|---|
-| `generate_*` | `generate_voice`, `generate_image`, `generate_video`, `generate_cover` — dispatch through the generation registry |
-| `orchestrate_*` | `orchestrate_voiceover`, `orchestrate_brainstorm` |
-| `publish_*` | `publish_video`, `publish_article`, `publish_validate_ready`, `publish_get_config`, `publish_simulate`, `publish_record` |
-| `assets_*` | `assets_list`, `assets_get`, `assets_stats` + Remotion discovery: `assets_list_common`, `assets_find_logo`, `assets_list_compositions`, `assets_validate_paths`, `assets_get_scene_templates` |
-| `registry_*` | `registry_list_generators`, `registry_describe_generator` |
-
-**Legacy aliases** (deprecated, kept one release): `create_cover_image`,
-`create_voiceover`, `brainstorm_content`, `publish_video_to_platforms`,
-`publish_article_to_platforms`, `list_all_content`, `get_content_details`.
+| `generate_*` | `generate_voice`, `generate_image`, `generate_video_submit` (async submit; poll with `video_job_status`), `models_voices`, `voiceover_assemble`, `reference_clips_check` — cloud lanes dispatch through the generation registry |
+| `render_*` | `render_video` — two mutually exclusive modes: `storyboard={size, scenes:[...]}` (deterministic frame-by-frame) or `type` + `script`/`inputs` (video-creator pipeline); `render_still` (`kind=cover\|chart\|graphic`); `render_document` (`format=pdf\|longimage`) |
+| `templates_*` | `templates_list` / `templates_get` — presentation templates by domain `video\|cover\|doc` |
+| `assets_*` | `assets_list`, `assets_stats`, `assets_get` (by `id`/`slug`; `kind=common` lists shared brand assets, `kind=logo` logo/icon only) |
+| `registry_*` | `registry_list_generators`, `registry_describe_generator` — generation method discovery (`voice\|image\|video\|cover\|chart\|doc`) |
+| `publish_*` (stdio only) | `publish_video`, `publish_article`, `publish_validate_ready`, `publish_get_config`, `publish_simulate`, `publish_record` |
 
 ## Generation registry
 
@@ -53,8 +53,9 @@ from `VAAS/.env`.
 ```
 
 **Add a generation/copy method**: one `registry.json` entry + one driver line.
-No core dispatch changes. `generate_video(name=...)` and friends dispatch by name;
-unknown names error with the available list.
+No core dispatch changes. `generate_voice(name=...)`, `generate_image(name=...)`
+and `generate_video_submit(name=...)` dispatch by name; unknown names error with
+the available list.
 
 ## Database
 
@@ -82,7 +83,8 @@ python mcp-server/scripts/migrate_unify_db.py --dry-run
 
 ## Publishing
 
-`publish_video` / `publish_article` run the skill `publish.mjs`
+Publishing is stdio/local only — the hosted surface excludes the publish plane
+(ADR-0004). `publish_video` / `publish_article` run the skill `publish.mjs`
 (`.agents/skills/fd-vaas-publish-videos` / `fd-vaas-publish-docs`) as subprocesses.
 The skill records successful uploads to `distribution`/`variants` via
 `data/db_writer.py`; the MCP wrapper records per-platform variants upfront and

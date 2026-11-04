@@ -12,7 +12,7 @@ def registry_list_generators(type: Optional[str] = None) -> dict:
     List available generation methods, optionally filtered by asset type.
 
     Args:
-        type: Optional filter (voice/image/video/cover/copy)
+        type: Optional filter (voice/image/video/cover/chart/doc)
 
     Returns:
         Methods grouped by type (or a single type's items), each with
@@ -26,8 +26,8 @@ def registry_describe_generator(type: str, name: str) -> dict:
     Describe a specific generation method.
 
     Args:
-        type: Asset type (voice/image/video/cover/copy)
-        name: Method name (e.g. seedance, voiceover)
+        type: Asset type (voice/image/video/cover/chart/doc)
+        name: Method name (e.g. seedance, voiceover, echarts, chromium)
 
     Raises:
         ValueError: Unknown type or method

@@ -1,0 +1,13 @@
+{
+  "id": "default",
+  "name": "默认文档版式",
+  "description": "markdown/html → pdf/longimage 的基础版式：标题/正文/表格/代码块/引用的通用排版，字体栈覆盖部署镜像 fonts-noto-cjk。",
+  "status": "active",
+  "formats": ["pdf", "longimage"],
+  "page": {
+    "size": "A4",
+    "margin": "24mm"
+  },
+  "content_width": 1080,
+  "fonts": "'PingFang SC','Hiragino Sans GB','Noto Sans CJK SC','Noto Sans SC','Microsoft YaHei',sans-serif"
+}

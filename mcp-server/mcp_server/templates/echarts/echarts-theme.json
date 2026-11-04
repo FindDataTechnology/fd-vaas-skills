@@ -1,0 +1,145 @@
+{
+  "meta": {
+    "source": "remotion-app/src/theme.ts",
+    "echarts": "5.5.1",
+    "generator": "scripts/gen-echarts-theme.mjs",
+    "note": "generated — do not edit by hand; re-run the generator after theme.ts changes"
+  },
+  "palette": [
+    "#58a6ff",
+    "#3fb950",
+    "#bc8cff",
+    "#d29922",
+    "#f85149",
+    "#39c5cf",
+    "#8b949e"
+  ],
+  "brand": {
+    "bg": "#0a0e14",
+    "bg1": "#0d1117",
+    "surface": "#161b22",
+    "border": "#30363d",
+    "text": "#e6edf3",
+    "muted": "#8b949e",
+    "accent": "#58a6ff",
+    "fontSans": "'PingFang SC','Noto Sans CJK SC','Noto Sans SC','Microsoft YaHei','Helvetica Neue',sans-serif",
+    "fontMono": "'SF Mono','Menlo','JetBrains Mono','Consolas','Courier New',monospace"
+  },
+  "theme": {
+    "color": [
+      "#58a6ff",
+      "#3fb950",
+      "#bc8cff",
+      "#d29922",
+      "#f85149",
+      "#39c5cf",
+      "#8b949e"
+    ],
+    "backgroundColor": "transparent",
+    "textStyle": {
+      "color": "#e6edf3",
+      "fontFamily": "'PingFang SC','Noto Sans CJK SC','Noto Sans SC','Microsoft YaHei','Helvetica Neue',sans-serif"
+    },
+    "title": {
+      "textStyle": {
+        "color": "#e6edf3",
+        "fontWeight": 600,
+        "fontFamily": "'PingFang SC','Noto Sans CJK SC','Noto Sans SC','Microsoft YaHei','Helvetica Neue',sans-serif"
+      },
+      "subtextStyle": {
+        "color": "#8b949e",
+        "fontFamily": "'PingFang SC','Noto Sans CJK SC','Noto Sans SC','Microsoft YaHei','Helvetica Neue',sans-serif"
+      }
+    },
+    "legend": {
+      "textStyle": {
+        "color": "#8b949e",
+        "fontFamily": "'PingFang SC','Noto Sans CJK SC','Noto Sans SC','Microsoft YaHei','Helvetica Neue',sans-serif"
+      },
+      "inactiveColor": "#6e7681"
+    },
+    "tooltip": {
+      "backgroundColor": "#161b22",
+      "borderColor": "#30363d",
+      "borderWidth": 1,
+      "textStyle": {
+        "color": "#e6edf3",
+        "fontFamily": "'PingFang SC','Noto Sans CJK SC','Noto Sans SC','Microsoft YaHei','Helvetica Neue',sans-serif"
+      }
+    },
+    "categoryAxis": {
+      "axisLine": {
+        "lineStyle": {
+          "color": "#30363d"
+        }
+      },
+      "axisTick": {
+        "lineStyle": {
+          "color": "#30363d"
+        }
+      },
+      "axisLabel": {
+        "color": "#8b949e"
+      },
+      "splitLine": {
+        "show": false
+      }
+    },
+    "valueAxis": {
+      "axisLine": {
+        "show": false
+      },
+      "axisTick": {
+        "show": false
+      },
+      "axisLabel": {
+        "color": "#8b949e"
+      },
+      "splitLine": {
+        "lineStyle": {
+          "color": "#1c2330"
+        }
+      }
+    },
+    "timeAxis": {
+      "axisLine": {
+        "lineStyle": {
+          "color": "#30363d"
+        }
+      },
+      "axisTick": {
+        "lineStyle": {
+          "color": "#30363d"
+        }
+      },
+      "axisLabel": {
+        "color": "#8b949e"
+      },
+      "splitLine": {
+        "lineStyle": {
+          "color": "#1c2330"
+        }
+      }
+    },
+    "logAxis": {
+      "axisLine": {
+        "lineStyle": {
+          "color": "#30363d"
+        }
+      },
+      "axisTick": {
+        "lineStyle": {
+          "color": "#30363d"
+        }
+      },
+      "axisLabel": {
+        "color": "#8b949e"
+      },
+      "splitLine": {
+        "lineStyle": {
+          "color": "#1c2330"
+        }
+      }
+    }
+  }
+}

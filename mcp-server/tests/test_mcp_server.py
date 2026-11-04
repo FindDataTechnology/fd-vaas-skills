@@ -98,6 +98,14 @@ class TestRegistry:
         assert any(g["name"] == "seedance" for g in video)
         assert any(g["name"] == "voiceover" for g in video)
 
+    def test_wave1_chart_doc_registered(self):
+        chart = list_generators("chart")["items"]
+        assert any(g["name"] == "echarts" and g["driver"] == "render_chart"
+                   for g in chart)
+        doc = list_generators("doc")["items"]
+        assert any(g["name"] == "chromium" and g["driver"] == "render_document"
+                   for g in doc)
+
     def test_dispatch_unknown_raises_with_list(self):
         with pytest.raises(ValueError) as exc:
             dispatch("video", "nonexistent", {})
@@ -106,6 +114,7 @@ class TestRegistry:
 
 class TestToolSurface:
     def test_all_tools_registered(self):
+        """Wave1 canonical surface: 17 hosted tools + 6 publish (stdio 23), no aliases."""
         import importlib
         main_mod = importlib.import_module("mcp_server.main")
 
@@ -113,15 +122,31 @@ class TestToolSurface:
             return sorted(t.name for t in await main_mod.mcp.list_tools())
 
         tools = asyncio.run(names())
-        for expected in ["assets_list", "assets_get", "assets_stats",
-                         "generate_video", "publish_simulate",
-                         "registry_list_generators", "assets_find_logo",
-                         "publish_validate_ready"]:
+        canonical = [
+            "generate_voice", "generate_image", "generate_video_submit",
+            "video_job_status", "models_voices", "voiceover_assemble",
+            "reference_clips_check", "render_video", "render_still",
+            "render_document", "templates_list", "templates_get",
+            "assets_list", "assets_get", "assets_stats",
+            "registry_list_generators", "registry_describe_generator",
+        ]
+        for expected in canonical:
             assert expected in tools, f"missing tool {expected}"
-        # legacy aliases kept
-        for legacy in ["list_all_content", "get_content_details",
-                       "publish_video_to_platforms", "create_cover_image"]:
-            assert legacy in tools, f"missing legacy alias {legacy}"
+        # publish plane stays stdio-only
+        for pub in ["publish_video", "publish_article", "publish_validate_ready",
+                    "publish_get_config", "publish_simulate", "publish_record"]:
+            assert pub in tools, f"missing tool {pub}"
+        assert len(tools) == 23, tools
+        # retired tools + legacy aliases are gone
+        for gone in ["orchestrate_brainstorm", "orchestrate_voiceover",
+                     "generate_cover", "generate_video",
+                     "assets_list_common", "assets_find_logo",
+                     "assets_list_compositions", "assets_validate_paths",
+                     "assets_get_scene_templates",
+                     "create_cover_image", "create_voiceover", "brainstorm_content",
+                     "publish_video_to_platforms", "publish_article_to_platforms",
+                     "list_all_content", "get_content_details"]:
+            assert gone not in tools, f"retired tool still registered: {gone}"
 
 
 
@@ -323,6 +348,77 @@ class TestUsageMetering:
         body = resp.json()
         assert body["currency"] == "CNY"
         assert isinstance(body["items"], list)
+
+    def test_usage_report_pricing_render_plane(self, monkeypatch, tmp_path):
+        """W7.2: render_video/render_still/render_document rows are priced via
+        the new keys. Non-zero rates prove the _price lookup hits the table
+        instead of falling through to the 0.0 default."""
+        import importlib
+        from starlette.testclient import TestClient
+        pricing = tmp_path / "pricing.json"
+        pricing.write_text(
+            '{"currency": "CNY",'
+            ' "render_video": {"second": 0.5},'
+            ' "render_still": {"image": 0.2},'
+            ' "render_document": {"doc": 1.0}}')
+        monkeypatch.setenv("VAAS_PRICING_FILE", str(pricing))
+        from mcp_server.db import record_usage
+        record_usage("alice", "render_video", "local", "playwright+ffmpeg",
+                     3.5, "second", "local")
+        record_usage("alice", "render_still", "local", "chromium",
+                     1, "image", "local")
+        record_usage("alice", "render_document", "local", "chromium+print",
+                     2, "doc", "local")
+        main_mod = importlib.import_module("mcp_server.main")
+        client = TestClient(main_mod.mcp.http_app())
+        body = client.get("/usage/summary").json()
+        rows = {(r["tool"], r["unit_type"]): r for r in body["items"]}
+        assert rows[("render_video", "second")]["units"] == 3.5
+        assert rows[("render_video", "second")]["amount"] == 1.75
+        assert rows[("render_still", "image")]["units"] == 1
+        assert rows[("render_still", "image")]["amount"] == 0.2
+        assert rows[("render_document", "doc")]["units"] == 2
+        assert rows[("render_document", "doc")]["amount"] == 2.0
+        assert body["total_amount"] == 3.95
+
+    def test_pricing_example_covers_recorded_render_units(self, monkeypatch, tmp_path):
+        """pricing.example.json must carry every unit spelling the code records
+        for the render plane (render_video second|render, render_still
+        image|render, render_document doc|render). Bump its 0.0 rates to 1.0
+        so a hit is observable, then price rows exactly as the server does."""
+        import importlib
+        import json as _json
+        from starlette.testclient import TestClient
+        example = Path(__file__).resolve().parent.parent / "pricing.example.json"
+        table = _json.loads(example.read_text(encoding="utf-8"))
+        # target 口径 keys present (0.0 计价, second/image/doc)
+        assert table["render_video"] == {"second": 0.0, "render": 0.0}
+        assert table["render_still"] == {"image": 0.0, "render": 0.0}
+        assert table["render_document"] == {"doc": 0.0, "render": 0.0}
+        for rates in table.values():
+            if isinstance(rates, dict):
+                for unit in rates:
+                    rates[unit] = 1.0
+        pricing = tmp_path / "pricing.json"
+        pricing.write_text(_json.dumps(table))
+        monkeypatch.setenv("VAAS_PRICING_FILE", str(pricing))
+        from mcp_server.db import record_usage
+        # production spellings: storyboard=second, type-mode video/still/doc=render
+        record_usage("alice", "render_video", "local", "playwright+ffmpeg",
+                     3.5, "second", "local")
+        record_usage("alice", "render_video", "local", "fd-vaas-video-creator",
+                     1, "render", "env")
+        record_usage("alice", "render_still", "local", "chromium",
+                     1, "render", "local")
+        record_usage("alice", "render_document", "local", "chromium+print",
+                     1, "render", "local")
+        main_mod = importlib.import_module("mcp_server.main")
+        client = TestClient(main_mod.mcp.http_app())
+        body = client.get("/usage/summary").json()
+        assert body["currency"] == "CNY"
+        for row in body["items"]:
+            assert row["amount"] == row["units"]  # rate 1.0 -> hit, not default 0.0
+        assert body["total_amount"] == 6.5
 
 
 class TestSignedDownloads:

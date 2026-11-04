@@ -1,0 +1,41 @@
+{
+  "kind": "tts",
+  "updated": "2026-10-27",
+  "note": "由 models_voices 工具对外暴露；消费端以此为准，不要猜模型/音色名。voice 为跨车道路由键（语音车道按计划只认 voice，不以 body.model 为准）。",
+  "providers": {
+    "ciyuan": {
+      "lane": "router.finddatatech.cloud /v1/audio/speech",
+      "captions_supported": false,
+      "speed_supported": false,
+      "speed_note": "上游按 voice 路由，body model 仅文档名；speed 经上游参数透传但被忽略的概率大，请勿依赖变速。",
+      "models": [
+        {
+          "public_model": "tencent-tts",
+          "upstream_account_id": 44,
+          "status": "active",
+          "price_note": "腾讯云精品音色 后付费 ¥0.3/万字符（通用档）",
+          "voices": [
+            {"id": "101001", "name": "智瑜", "style": "情感女声", "default": true},
+            {"id": "101013", "name": "智辉", "style": "新闻男声"},
+            {"id": "101015", "name": "智萌", "style": "男童"},
+            {"id": "101016", "name": "智甜", "style": "女童"}
+          ]
+        },
+        {
+          "public_model": "doubao-speech",
+          "upstream_account_id": 43,
+          "status": "upstream-broken（上游待修）",
+          "price_note": "豆包语音合成模型 2.0 ¥3/万字符",
+          "voices": []
+        }
+      ]
+    },
+    "volcengine": {
+      "lane": "ARK /unidirectional (待配凭据后再开)",
+      "captions_supported": true,
+      "speed_supported": true,
+      "speed_note": "speed_ratio 生效范围 0.2–3.0。",
+      "models": []
+    }
+  }
+}

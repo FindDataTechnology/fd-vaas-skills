@@ -1,3 +1,7 @@
+# brainstorm 模板知识（原 skills/brainstorm.py，Wave1 从服务端退役）
+# 保留原文供后续波次做成 skill（本文件为原样拷贝，勿手改）；来源: mcp-server/mcp_server/skills/brainstorm.py
+# ─────────────────────────────────────────────────────────────
+
 """
 Brainstorm tool for structured content planning.
 
