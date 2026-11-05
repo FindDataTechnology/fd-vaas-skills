@@ -39,6 +39,8 @@ export type VoiceoverVideoProps = {
   subtitleSize?: number;
   switchEveryMs?: number;
   bgColor?: string;
+  // 字幕垂直位置：bottom（贴底，横屏默认）| center（居中，竖屏 TikTok 观感）
+  subtitlePosition?: "bottom" | "center";
 };
 
 const DEFAULTS = {
@@ -49,13 +51,15 @@ const DEFAULTS = {
   switchEveryMs: 1400,
   bgColor: "#0a0e14",
   coverFrames: 60,
+  subtitlePosition: "center",
 };
 
 const CaptionPage: React.FC<{
   page: TikTokPage;
   color: string;
   size: number;
-}> = ({ page, color, size }) => {
+  position: "bottom" | "center";
+}> = ({ page, color, size, position }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const currentTimeMs = (frame / fps) * 1000;
@@ -64,9 +68,9 @@ const CaptionPage: React.FC<{
   return (
     <AbsoluteFill
       style={{
-        justifyContent: "center",
+        justifyContent: position === "bottom" ? "flex-end" : "center",
         alignItems: "center",
-        padding: 40,
+        padding: position === "bottom" ? "0 40px 56px" : 40,
       }}
     >
       <div
@@ -74,9 +78,10 @@ const CaptionPage: React.FC<{
           fontSize: size,
           fontWeight: 800,
           color: "#ffffff",
-          whiteSpace: "pre",
+          whiteSpace: "pre-wrap",
           textAlign: "center",
           lineHeight: 1.3,
+          maxWidth: "94%",
           textShadow:
             "0 4px 16px rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.95)",
         }}
@@ -196,6 +201,7 @@ const VoiceoverVideoComp: React.FC<VoiceoverVideoProps> = (rawProps) => {
               page={page}
               color={props.subtitleColor}
               size={props.subtitleSize}
+              position={props.subtitlePosition ?? "center"}
             />
           </Sequence>
         );
