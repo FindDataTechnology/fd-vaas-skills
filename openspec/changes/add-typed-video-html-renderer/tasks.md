@@ -33,6 +33,6 @@
 ### W5 部署与收口
 
 - [x] W5.1 镜像重建（无新系统依赖）+ 上产 + 托管探针：五类型 voice_path 腿生产 E2E（成片+签名下载+md5 口径）
-- [ ] W5.2 TTS 腿 E2E（依赖 W7.5 用户 key，就绪即补）
+- [x] W5.2 TTS 腿 E2E（11-05 词元自铸 key 后补跑：generate_voice qwen3-tts-flash+voice 101001 全链 PASS 出 MP3+签名下载；image/video 腿凭证链已通但上游 openai-next 账号被 403 封→503，非本 change/key 问题，见 deploy/README 复核）
 - [x] W5.3 文档：fd-vaas-storyboard SKILL.md 类型段更新（hosted 可用、voice_path/bgm、confirm 协议）；README render_video 段同步
 - [x] W5.4 pricing 复核（type 模式记账仍 render_video+render，无新条目即勾）+ 外账记录（trial 文档如提及类型则同步）

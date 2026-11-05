@@ -42,27 +42,26 @@ secret/vaas/service/default/<kind>         # 服务默认凭证（同上形状�
 secret/vaas/service/default/download-hmac  # 下载签名密钥 {value}
 ```
 
-### ciyuan 档记录示例（萬星·词元，2026-10-16 实测可用模型）
+### ciyuan 档记录示例（萬星·词元，2026-11-05 复核）
 
 ```jsonc
-// secret/vaas/pool/wanxing/tts —— 组3 key（chat+三车道分组，用于语音）
+// secret/vaas/pool/wanxing/tts —— 组3 core（豆包/腾讯云语音，健康）
 {"api_key": "sk-...", "base_url": "https://router.finddatatech.cloud",
- "model": "qwen3-tts-flash", "voice": "Cherry", "provider": "ciyuan"}
+ "model": "qwen3-tts-flash", "voice": "101001", "provider": "ciyuan"}
 
-// secret/vaas/pool/wanxing/image —— 组9 key（图像+视频分组）
+// secret/vaas/pool/wanxing/image —— 组9 image-video（上游账号 40 openai-next）
 {"api_key": "sk-...", "base_url": "https://router.finddatatech.cloud",
  "model": "gemini-3-pro-image", "provider": "ciyuan"}
 
-// secret/vaas/pool/wanxing/video —— 组9 key
+// secret/vaas/pool/wanxing/video —— 组9（同一把 key）
 {"api_key": "sk-...", "base_url": "https://router.finddatatech.cloud",
  "model": "doubao-seedance-2-0-fast-260128", "provider": "ciyuan"}
 ```
 
-> ⚠️ 词元密钥按「分组」锁能力：**语音一把（组3）、图像+视频一把（组9）**，
-> 一把通吃做不到。配错分组会得到「模型不可路由」类错误，不是密钥错误。
-> 已知缺陷（2026-10-16 实测）：图像 `gpt-image-*` 返回 200 但 body 是 HTML
-> （客户端显式拒绝）；`doubao-seedance-1-0-pro`/`seedance-2-5` 上游 503；
-> ASR 上游账号未配置暂不可用。换模型前先实调。
+> ⚠️ 词元密钥按「分组」锁能力：**语音一把（组3 core）、图像+视频一把（组9 image-video）**，一把通吃做不到。配错分组得到「模型不可路由」类错误，不是密钥错误。
+> **voice 字段是数字音色 ID（如 101001），不是 "Cherry"**——ciyuan 车道音色以 `models_voices` 工具为准（`_ciyuan_tts.py` 有硬校验，错误音色直接拒，不让上游静默回落）。旧文档/示例里的 "Cherry" 是过时口径。
+> **2026-11-05 实测**：voice 腿（qwen3-tts-flash + 101001）200 出 MP3 全链通；**image/video 腿 HTTP 503**（`No available compatible accounts` / `No eligible Seedance accounts`）——根因是组9 唯一上游账号（openai-next，acct 40）被上游 `403 site owner blocked access`，router 侧无健康图像/视频账号可调度。这是**上游订阅问题，非 router key 问题**（凭证链已实证解析到 driver）；解法=恢复/替换 openai-next 图像视频账号。
+> 换模型前先实调——`/v1/models` 列的是「可识别」不是「可服务」。
 
 ## OpenBAO 运维（以 registry 栈所在节点为例）
 
