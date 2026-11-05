@@ -70,6 +70,10 @@ async function handleCreate(args) {
   // 逐字时间戳（默认开启）；传 --no-subtitle 关闭
   const enableSubtitle = !hasArg(args, '--no-subtitle');
 
+  // 输出目录（add-tts-caption-fallback）：指定则产物直写该目录（确定性落盘），
+  // 未指定走既有三级 fallback（桌面 Ark-TTS 时间戳目录）
+  const outputDir = getArgValue(args, '--output-dir');
+
   // 文本来源：--input 或 --text 直接传入；--input-file 从文件读取
   let inputText = getArgValue(args, '--input') || getArgValue(args, '--text');
   const inputFile = getArgValue(args, '--input-file') || getArgValue(args, '--file');
@@ -101,6 +105,7 @@ async function handleCreate(args) {
   const options = {
     apiKey,
     baseUrl,
+    outputDir,
     litellm: useLiteLLM,
   };
 
@@ -141,7 +146,21 @@ async function handleCreate(args) {
       console.log(`⏱️ 官方音频时长: ${result.audio_duration_seconds.toFixed(2)} 秒`);
     }
   }
-  console.log('='.repeat(50) + '\n');
+  console.log('='.repeat(50));
+  // 机器可读结果行（add-tts-caption-fallback）：task-render stepTts 解析
+  // provider/captions_source 等元数据写入 task.json，避免解析人读报告
+  console.log('TTS_RESULT_JSON:' + JSON.stringify({
+    ok: result.ok,
+    provider: result.provider || null,
+    model: result.model || null,
+    voice: result.voice || null,
+    local_path: result.local_path,
+    captions_path: result.captions_path || null,
+    captions_source: result.captions_source || null,
+    captions_count: result.captions_count || 0,
+    audio_duration_seconds: result.audio_duration_seconds || null,
+  }));
+  console.log('');
 }
 
 // ============================================

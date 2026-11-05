@@ -1,7 +1,7 @@
 {
   "id": "voiceover",
   "name": "口播视频",
-  "description": "文案转 AI 配音 + 逐字同步字幕 + 画面轮播，标准口播短视频（不带 --type 的旧任务默认走本流程）",
+  "description": "文案转 AI 配音 + 逐字同步字幕 + 画面轮播，标准口播短视频（不带 --type 的旧任务默认走本流程）。字幕来源：official=官方逐字时间戳（volcengine 直连）/ synthetic=实测时长推算（词元档，captions_source 元数据标记）",
   "version": 1,
   "status": "stable",
   "inputs": {
@@ -13,13 +13,31 @@
     "orientation": {
       "required": false,
       "type": "enum",
-      "enum": ["1080x1920", "1920x1080"],
+      "enum": [
+        "1080x1920",
+        "1920x1080"
+      ],
       "default": "1080x1920",
       "desc": "竖屏 1080x1920（默认）/ 横屏 1920x1080"
     }
   },
-  "pipeline": ["tts", "fix-tts-timings", "preflight", "render"],
+  "pipeline": [
+    "tts",
+    "fix-tts-timings",
+    "preflight",
+    "render"
+  ],
   "composition": "VoiceoverVideo",
-  "defaults": { "voice": "auto", "tailPad": 15 },
-  "platforms": ["douyin", "xiaohongshu", "bilibili", "weixin", "kuaishou", "youtube"]
+  "defaults": {
+    "voice": "auto",
+    "tailPad": 15
+  },
+  "platforms": [
+    "douyin",
+    "xiaohongshu",
+    "bilibili",
+    "weixin",
+    "kuaishou",
+    "youtube"
+  ]
 }

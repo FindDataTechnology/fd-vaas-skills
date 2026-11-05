@@ -191,7 +191,11 @@ function stepTts(ctx) {
     .trim();
 
   console.log("🎤 TTS…");
-  const ttsArgs = [ctx.TTS_WRAPPER, "--text", script];
+  // 确定性输出目录（add-tts-caption-fallback）：产物直写 taskDir/_tts，
+  // 不再依赖「扫描桌面 Ark-TTS 最新目录」定位本次产物（并发竞态消除）。
+  const ttsOutDir = path.join(ctx.taskDir, "_tts");
+  fs.mkdirSync(ttsOutDir, { recursive: true });
+  const ttsArgs = [ctx.TTS_WRAPPER, "--text", script, "--output-dir", ttsOutDir];
   if (ctx.voice) ttsArgs.push("--voice", ctx.voice);
   const ttsRes = spawnSync("node", ttsArgs, { cwd: ctx.REMOTION, encoding: "utf8" });
   if (ttsRes.status !== 0) {
@@ -200,16 +204,36 @@ function stepTts(ctx) {
   }
   process.stdout.write(ttsRes.stdout);
 
-  const arkDir = findLatestArkTTS();
-  if (!arkDir) throw new Error("could not locate Ark-TTS output dir");
+  const arkDir = ttsOutDir;
   const files = fs.readdirSync(arkDir);
   const audioFile = files.find((f) => f.endsWith(".mp3") || f.endsWith(".wav"));
   const captionsFile = files.includes("captions.json") ? "captions.json" : null;
-  if (!audioFile) throw new Error("no audio in Ark-TTS dir: " + arkDir);
-  if (!captionsFile) throw new Error("no captions.json — did TTS run with enable_subtitle?");
+  if (!audioFile) throw new Error("no audio in tts output dir: " + arkDir);
+  if (!captionsFile) throw new Error("no captions.json — TTS 出口层应保证 captions 落盘（official 或 synthetic）");
+
+  // 从 wrapper 的 TTS_RESULT_JSON 行提取 provider / captions_source
+  let provider = null;
+  let captionsSource = null;
+  let ttsModel = null;
+  let ttsVoice = null;
+  try {
+    const marker = "TTS_RESULT_JSON:";
+    const line = (ttsRes.stdout || "").split("\n").find((l) => l.startsWith(marker));
+    if (line) {
+      const parsed = JSON.parse(line.slice(marker.length));
+      provider = parsed.provider || null;
+      captionsSource = parsed.captions_source || null;
+      ttsModel = parsed.model || null;
+      ttsVoice = parsed.voice || null;
+    }
+  } catch { /* 元数据提取失败不阻塞——只影响 manifest 审计字段 */ }
+  ctx.ttsModel = ttsModel;
+  ctx.ttsVoice = ttsVoice;
 
   ctx.audioExt = path.extname(audioFile);
   ctx.audioName = "voiceover" + ctx.audioExt;
+  ctx.ttsProvider = provider;
+  ctx.captionsSource = captionsSource;
   fs.copyFileSync(path.join(arkDir, audioFile), path.join(ctx.taskDir, ctx.audioName));
   fs.copyFileSync(
     path.join(arkDir, captionsFile),
@@ -237,8 +261,12 @@ function stepFixTtsTimings(ctx) {
     fs.readFileSync(path.join(ctx.taskDir, "captions.json"), "utf8"),
   );
   ctx.lastEndMs = ctx.caps[ctx.caps.length - 1].endMs;
-  ctx.durationInFrames = Math.ceil((ctx.lastEndMs / 1000) * ctx.fps) + ctx.tailPad;
-  console.log(`⏱️  duration: ${ctx.lastEndMs}ms → ${ctx.durationInFrames} frames`);
+  // synthetic captions 的末帧已钉到音频实测末帧（tts.js 出口层保证），此时
+  // tailPad 反而制造 drift——preflight 用 frames 当 narration 时长比对音频。
+  // official 逐字戳末帧通常略早于音频末尾，tailPad=15 帧兜住（既有行为不动）。
+  const effectiveTailPad = ctx.captionsSource === "synthetic" ? 0 : ctx.tailPad;
+  ctx.durationInFrames = Math.ceil((ctx.lastEndMs / 1000) * ctx.fps) + effectiveTailPad;
+  console.log(`⏱️  duration: ${ctx.lastEndMs}ms → ${ctx.durationInFrames} frames (tailPad=${effectiveTailPad}, source=${ctx.captionsSource ?? "official"})`);
 
   ctx.publicAudio = `${ctx.slug}-voiceover${ctx.audioExt}`;
   ctx.publicCaps = `${ctx.slug}-captions.json`;
@@ -367,6 +395,10 @@ function stepRender(ctx) {
   task.tts = {
     ...task.tts,
     voice: ctx.voice ?? task.tts?.voice ?? null,
+    provider: ctx.ttsProvider ?? task.tts?.provider ?? null,
+    captions_source: ctx.captionsSource ?? task.tts?.captions_source ?? null,
+    model: ctx.ttsModel ?? task.tts?.model ?? null,
+    voice: ctx.ttsVoice ?? task.tts?.voice ?? null,
     audio: ctx.audioName,
     captions: "captions.json",
     captionsRaw: "captions-raw.json",

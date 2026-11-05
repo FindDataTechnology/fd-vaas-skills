@@ -137,7 +137,16 @@ function stripTrailingSlash(u) { return u && u.endsWith('/') ? u.slice(0, -1) : 
  * File helpers
  * ------------------------------------------------------------------ */
 
-function resolveSaveDir() {
+function resolveSaveDir(options = {}) {
+  // 确定性输出目录（add-tts-caption-fallback）：调用方（如 task-render stepTts）
+  // 传 --output-dir 时直写该目录，消除桌面扫描竞态；未指定保持既有三级 fallback。
+  if (options.outputDir) {
+    const d = path.isAbsolute(options.outputDir)
+      ? options.outputDir
+      : path.join(process.cwd(), options.outputDir);
+    fs.mkdirSync(d, { recursive: true });
+    return d;
+  }
   const ts = makeTimestamp();
   const dirs = [
     path.join(os.homedir(), 'Desktop', 'Ark-TTS', ts),
@@ -300,6 +309,16 @@ async function synthesizeSpeech(params, options = {}) {
   const parsed = parseChunkedResponse(rawText);
 
   if (!parsed.audio) {
+    // provider 结构化错误块 → 按真实原因分类直出（禁伪装成解码失败）
+    if (parsed.errorBlock) {
+      return {
+        ok: false,
+        error_code: parsed.errorBlock.code,
+        error_message: parsed.errorBlock.message,
+        hint: parsed.hint || '',
+        model, base_url: baseUrl,
+      };
+    }
     return {
       ok: false,
       error_code: 'DECODE_FAILED',
@@ -308,7 +327,7 @@ async function synthesizeSpeech(params, options = {}) {
     };
   }
 
-  const outDir = resolveSaveDir();
+  const outDir = resolveSaveDir(options);
   const fmt = body.req_params.audio_params.format || 'mp3';
   const ext = extForFormat(fmt);
   const fileName = `speech.${ext}`;
@@ -363,16 +382,33 @@ async function synthesizeSpeech(params, options = {}) {
 function parseChunkedResponse(rawText) {
   const sentences = [];
   let audioB64 = '';
+  // 错误块直出（add-tts-caption-fallback）：分块响应里若出现「非零 code +
+  // 带 message 且无 data 字段」的 JSON 块，是 provider 的结构化报错
+  // （如 InvalidSubscription），MUST NOT 当音频解码失败伪装过去。
+  let errorBlock = null;
 
   // 每块是一整个 JSON 对象；用括号计数拆
   const objects = extractJsonObjects(rawText);
   for (const obj of objects) {
     if (obj && typeof obj.data === 'string' && obj.data.length > 0) {
       audioB64 += obj.data;
+      continue;
     }
     if (obj && obj.sentence && Array.isArray(obj.sentence.words)) {
       sentences.push(obj.sentence);
+      continue;
     }
+    if (obj && !errorBlock && typeof obj.code === 'number' && obj.code !== 0 && (obj.message || obj.msg)) {
+      errorBlock = { code: obj.code, message: obj.message || obj.msg, raw: obj };
+    }
+  }
+
+  if (!audioB64 && errorBlock) {
+    const hint = /InvalidSubscription/i.test(JSON.stringify(errorBlock.raw))
+      ? '火山方舟订阅失效或过期：请到火山方舟控制台续订 AgentPlan，'
+        + '或切换 TTS_PROVIDER=ciyuan（萬星词元）继续合成。'
+      : '';
+    return { audio: null, sentences, errorBlock, hint };
   }
 
   // 兜底：如果 JSON 拆不出（比如 chunk 没换行），仍然抓 base64
@@ -507,6 +543,249 @@ function listVoices(params) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Synthetic captions — fallback when a provider returns audio without
+ * word-level timestamps (ciyuan lane /v1/audio/speech).
+ *
+ * 算法（2026-11-05/06 生产实证，add-solution-package 三支片）:
+ *   1. ffprobe 实测音频时长（VAAS 准入依赖，doctor 检查项）
+ *   2. 文本切 token：中文按字、标点并入前字、Latin 连续词元整体一个 token
+ *   3. token 数均分单 token 时长 → 全体时间戳 × (实测/估算) 线性缩放
+ *      （吸收 MP3 帧填充等估算误差）
+ *   4. 末 token endMs 钉到实测总时长
+ * 结果形状与官方逐字戳完全一致；captions_source 标记 synthetic。
+ * ------------------------------------------------------------------ */
+
+function splitTextIntoTokens(text) {
+  const tokens = [];
+  let latin = '';
+  for (const ch of text) {
+    if (ch === '\n' || ch === '\r') { if (latin) { tokens.push(latin); latin = ''; } continue; }
+    if (/[A-Za-z0-9@._\-/+]/.test(ch)) { latin += ch; continue; }
+    if (latin) { tokens.push(latin); latin = ''; }
+    if ('，。！？；、：'.includes(ch)) {
+      if (tokens.length) tokens[tokens.length - 1] += ch;
+      else tokens.push(ch);
+      continue;
+    }
+    if (ch === ' ') continue;
+    tokens.push(ch);
+  }
+  if (latin) tokens.push(latin);
+  return tokens;
+}
+
+function probeAudioDurationSeconds(filePath) {
+  try {
+    const r = spawnSync('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=nw=1:nk=1',
+      filePath,
+    ], { encoding: 'utf8' });
+    if (r.status !== 0) return null;
+    const d = Number(String(r.stdout).trim());
+    return Number.isFinite(d) && d > 0 ? d : null;
+  } catch { return null; }
+}
+
+// 估算总时长：token 数 × 中文单字基速（约 0.22s/字 @ 常速）。只作缩放基准的
+// 初值，最终由实测时长线性缩放覆盖，粗估不影响对齐精度。
+const SYNTHETIC_BASE_SECONDS_PER_TOKEN = 0.22;
+
+// 腾讯 TTS 单次请求长度墙（2026-11-06 二分实测：165 字通 / 170 字挂，
+// 超限 502 且触发上游熔断摘除约 5 分钟）。分段上限取安全余量。
+const CIYUAN_SEGMENT_MAX_CHARS = 150;
+const CIYUAN_RETRY_MAX = 3;
+const CIYUAN_RETRY_BACKOFF_MS = [1500, 3000];
+const CIYUAN_INTER_SEG_GAP_SECONDS = 0.22; // 段间静音（自然句间停顿）
+
+// 把文本切成 ≤maxChars 的合成段：先按句切（。！？；），过长的句再按逗号/字数硬切。
+function splitTextIntoSegments(text, maxChars = CIYUAN_SEGMENT_MAX_CHARS) {
+  const sentences = [];
+  let buf = '';
+  for (const ch of text) {
+    if (ch === '\n' || ch === '\r') { if (buf.trim()) sentences.push(buf.trim()); buf = ''; continue; }
+    buf += ch;
+    if ('。！？；'.includes(ch)) { if (buf.trim()) sentences.push(buf.trim()); buf = ''; }
+  }
+  if (buf.trim()) sentences.push(buf.trim());
+  const hardSplit = (s) => {
+    const parts = [];
+    let cur = '';
+    for (const ch of s) {
+      cur += ch;
+      if ((cur.length >= maxChars && '，、：'.includes(ch)) || cur.length >= maxChars) {
+        parts.push(cur); cur = '';
+      }
+    }
+    if (cur.trim()) parts.push(cur);
+    return parts;
+  };
+  const segments = [];
+  let cur = '';
+  for (const s of sentences) {
+    if (s.length > maxChars) {
+      if (cur.trim()) { segments.push(cur.trim()); cur = ''; }
+      segments.push(...hardSplit(s));
+      continue;
+    }
+    if ((cur + s).length > maxChars) { if (cur.trim()) segments.push(cur.trim()); cur = s; }
+    else cur += s;
+  }
+  if (cur.trim()) segments.push(cur.trim());
+  return segments;
+}
+
+function sleepMs(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// 段级 captions：每段 token 均分于该段实测时长，段间静音推进时间轴。
+// 比「全文单次缩放」更准——句级边界由实测锚定。
+function buildSegmentedCaptions(segments, segDurations, gapSeconds) {
+  const caps = [];
+  let cursor = 0;
+  segments.forEach((seg, i) => {
+    const tokens = splitTextIntoTokens(seg);
+    if (!tokens.length) return;
+    const segMs = (segDurations[i] || 0) * 1000;
+    const per = segMs / tokens.length;
+    for (const tok of tokens) {
+      const startMs = Math.round(cursor);
+      const endMs = Math.round(cursor + per);
+      caps.push({ text: tok, startMs, endMs, timestampMs: Math.round((startMs + endMs) / 2), confidence: null });
+      cursor += per;
+    }
+    if (i < segments.length - 1) cursor += gapSeconds * 1000;
+  });
+  return caps;
+}
+
+// 逐段经 bridge 合成 + ffmpeg 拼接（段间静音），产出完整音频与段级时长表。
+// 任一段重试耗尽 → 抛错（调用方整任务失败，不产残缺音频）。
+async function synthesizeSegmentedViaBridge(params, options, env) {
+  const bridgePath = resolveBridgePath();
+  const text = params.input || params.text || '';
+  const fmt = (params.responseFormat || params.response_format || 'mp3').toLowerCase();
+  const ext = extForFormat(fmt);
+  const outDir = resolveSaveDir(options);
+  const segDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tts-seg-'));
+
+  const segments = splitTextIntoSegments(text);
+  const model = params.model || env.TTS_MODEL || DEFAULT_MODEL;
+  const voice = params.voice || env.TTS_VOICE || '';
+
+  const segFiles = [];
+  for (let i = 0; i < segments.length; i++) {
+    const segPath = path.join(segDir, `s${String(i).padStart(3, '0')}.mp3`);
+    let done = false;
+    let lastErr = '';
+    for (let attempt = 1; attempt <= CIYUAN_RETRY_MAX; attempt++) {
+      const args = [bridgePath, 'tts', '--text', segments[i], '--output', segPath, '--format', 'mp3'];
+      if (model) args.push('--model', model);
+      if (voice) args.push('--voice', voice);
+      if (params.speed != null) args.push('--speed', String(params.speed));
+      if (options.apiKey) args.push('--api-key', options.apiKey);
+      if (options.baseUrl) args.push('--base-url', options.baseUrl);
+      const r = spawnSync('python3', args, {
+        encoding: 'utf8',
+        maxBuffer: 10 * 1024 * 1024,
+        env: { ...process.env, ...env },
+      });
+      if (r.status === 0) { done = true; break; }
+      lastErr = (r.stderr || r.stdout || '').trim().slice(0, 300);
+      if (attempt < CIYUAN_RETRY_MAX) await sleepMs(CIYUAN_RETRY_BACKOFF_MS[attempt - 1] || 3000);
+    }
+    if (!done) {
+      const err = new Error(`分段合成失败（段 ${i + 1}/${segments.length}）: ${lastErr}`);
+      err.code = 'SEGMENT_FAILED';
+      throw err;
+    }
+    segFiles.push(segPath);
+    if (i < segments.length - 1) await sleepMs(300); // 段间间隔，避免连环失败触发上游熔断扩大
+  }
+
+  // 拼接（mp3 段间垫静音）
+  const finalPath = path.join(outDir, `speech.${ext}`);
+  if (segFiles.length === 1) {
+    fs.copyFileSync(segFiles[0], finalPath);
+  } else {
+    const gap = path.join(segDir, 'gap.mp3');
+    spawnSync('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'anullsrc=r=24000:cl=mono',
+      '-t', String(CIYUAN_INTER_SEG_GAP_SECONDS), '-codec:a', 'libmp3lame', '-q:a', '4', gap],
+      { stdio: 'pipe' });
+    const list = path.join(segDir, 'concat.txt');
+    const lines = [];
+    segFiles.forEach((f, i) => {
+      lines.push(`file '${f}'`);
+      if (i < segFiles.length - 1) lines.push(`file '${gap}'`);
+    });
+    fs.writeFileSync(list, lines.join('\n') + '\n');
+    const cc = spawnSync('ffmpeg', ['-y', '-f', 'concat', '-safe', '0', '-i', list,
+      '-codec:a', 'libmp3lame', '-q:a', '4', finalPath], { stdio: 'pipe', maxBuffer: 10 * 1024 * 1024 });
+    if (cc.status !== 0) {
+      const err = new Error(`分段拼接失败: ${(cc.stderr || '').slice(0, 200)}`);
+      err.code = 'CONCAT_FAILED';
+      throw err;
+    }
+  }
+
+  // 段级实测时长 → captions 时间轴（段间静音计入）
+  const segDurations = segFiles.map((f) => probeAudioDurationSeconds(f) || 0);
+  const caps = buildSegmentedCaptions(segments, segDurations, CIYUAN_INTER_SEG_GAP_SECONDS);
+  const captionsOut = path.join(outDir, 'captions.json');
+  fs.writeFileSync(captionsOut, JSON.stringify(caps, null, 2));
+
+  try { fs.rmSync(segDir, { recursive: true, force: true }); } catch {}
+
+  return {
+    ok: true,
+    provider: 'ciyuan',
+    model,
+    voice,
+    voice_name: voice,
+    input_length: text.length,
+    response_format: fmt,
+    speed: params.speed != null ? parseFloat(params.speed) : 1.0,
+    local_path: finalPath,
+    captions_path: captionsOut,
+    captions_source: 'synthetic',
+    captions_count: caps.length,
+    audio_duration_seconds: caps.length ? caps[caps.length - 1].endMs / 1000 : null,
+    file_size_bytes: fs.existsSync(finalPath) ? fs.statSync(finalPath).size : 0,
+    estimated_duration_seconds: caps.length ? caps[caps.length - 1].endMs / 1000 : 0,
+    api_latency_ms: 0,
+    segments: segments.length,
+  };
+}
+
+function buildSyntheticCaptions(text, audioPath) {
+  const realSec = probeAudioDurationSeconds(audioPath);
+  if (!realSec) return null;
+  const tokens = splitTextIntoTokens(text);
+  if (!tokens.length) return null;
+  const estimatedSec = tokens.length * SYNTHETIC_BASE_SECONDS_PER_TOKEN;
+  const scale = realSec / estimatedSec;
+  const captions = [];
+  let cursor = 0;
+  for (const tok of tokens) {
+    const segMs = SYNTHETIC_BASE_SECONDS_PER_TOKEN * 1000 * scale;
+    const startMs = Math.round(cursor);
+    const endMs = Math.round(cursor + segMs);
+    captions.push({
+      text: tok,
+      startMs,
+      endMs,
+      timestampMs: Math.round((startMs + endMs) / 2),
+      confidence: null,
+    });
+    cursor += segMs;
+  }
+  captions[captions.length - 1].endMs = Math.round(realSec * 1000);
+  return captions;
+}
+
+/* ------------------------------------------------------------------ *
  * LiteLLM bridge — multi-provider TTS via Python bridge script
  * ------------------------------------------------------------------ */
 
@@ -546,11 +825,28 @@ async function synthesizeSpeechViaLiteLLM(params, options = {}) {
   const env = findProjectEnv() || {};
 
   // Determine output path (mirror the local save pattern)
-  const outDir = resolveSaveDir();
+  const outDir = resolveSaveDir(options);
   const fmt = (params.responseFormat || params.response_format || 'mp3').toLowerCase();
   const ext = extForFormat(fmt);
   const outPath = path.join(outDir, `speech.${ext}`);
   const captionsOut = path.join(outDir, 'captions.json');
+
+  // 分段合成路径（add-tts-caption-fallback D2）：词元·腾讯档有单次 ~170 字长度墙
+  // （超限 502 + 熔断），真实口播稿（500-1600 字）必须分段。文本超阈值时在出口层
+  // 逐段合成、拼接、段级时长对齐 captions——管线零感知。
+  const textLen = (params.input || params.text || '').length;
+  if (textLen > CIYUAN_SEGMENT_MAX_CHARS) {
+    try {
+      return await synthesizeSegmentedViaBridge(params, options, env);
+    } catch (e) {
+      return {
+        ok: false,
+        error_code: e.code || 'SEGMENTED_TTS_FAILED',
+        error_message: e.message || String(e),
+        hint: '词元·腾讯 TTS 按段重试耗尽。检查词元 audio 车道上游（sub2api accounts）与网络后重试。',
+      };
+    }
+  }
 
   const args = [bridgePath, 'tts', '--output', outPath];
 
@@ -608,7 +904,23 @@ async function synthesizeSpeechViaLiteLLM(params, options = {}) {
     return { ok: false, ...data };
   }
 
-  // Normalize to match synthesizeSpeech() return shape
+  // Normalize to match synthesizeSpeech() return shape.
+  // 字幕来源归一：官方逐字戳 → official；provider 无逐字戳（词元档常态）→
+  // 合成兜底（句切 token × ffprobe 实测时长线性缩放）。下游管线只认 Caption[]。
+  let captionsPath = data.captions_path || (fs.existsSync(captionsOut) ? captionsOut : null);
+  let captionsSource = captionsPath ? 'official' : null;
+  if (!captionsPath) {
+    const synthesized = buildSyntheticCaptions(
+      params.input || params.text || '',
+      data.local_path || outPath,
+    );
+    if (synthesized) {
+      fs.writeFileSync(captionsOut, JSON.stringify(synthesized, null, 2));
+      captionsPath = captionsOut;
+      captionsSource = 'synthetic';
+    }
+  }
+
   return {
     ok: true,
     model: data.model || '',
@@ -618,8 +930,11 @@ async function synthesizeSpeechViaLiteLLM(params, options = {}) {
     response_format: fmt,
     speed: params.speed != null ? parseFloat(params.speed) : 1.0,
     local_path: data.local_path || outPath,
-    captions_path: data.captions_path || (fs.existsSync(captionsOut) ? captionsOut : null),
-    captions_count: data.captions_count || 0,
+    captions_path: captionsPath,
+    captions_source: captionsSource,
+    captions_count: captionsPath
+      ? (JSON.parse(fs.readFileSync(captionsPath, 'utf8'))).length
+      : 0,
     audio_duration_seconds: data.audio_duration_seconds || null,
     file_size_bytes: data.file_size_bytes || (fs.existsSync(outPath) ? fs.statSync(outPath).size : 0),
     estimated_duration_seconds: data.estimated_duration_seconds || 0,
@@ -635,6 +950,14 @@ module.exports = {
   listVoices,
   resolveApiKey,
   resolveBaseUrl,
+  // 合成字幕兜底（add-tts-caption-fallback）：导出供单测与宿主复用
+  splitTextIntoTokens,
+  probeAudioDurationSeconds,
+  buildSyntheticCaptions,
+  parseChunkedResponse,
+  resolveSaveDir,
+  splitTextIntoSegments,
+  buildSegmentedCaptions,
   DEFAULT_BASE_URL,
   DEFAULT_MODEL,
   DEFAULT_VOICE,

@@ -412,20 +412,24 @@ VIDEO_MODEL=doubao-seedance-2.0
 # ─── ciyuan 档（萬星·词元，router.finddatatech.cloud）──
 # 词元密钥按「分组」划能力：语音一把（组3）、图像+视频一把（组9），需两把 key。
 # 托管模式经 OpenBAO 按 kind 注入；本地模式直接配：
-#CIYUAN_API_KEY=sk-...          # 按 kind 分别注入不同分组的 key
+#CIYUAN_API_KEY=sk-...          # 按 kind 分别注入不同分组的 key（语音用 VAAS 专用账号的语音分组 key）
 #CIYUAN_BASE_URL=https://router.finddatatech.cloud
-# 实测可用模型（2026-10-16，见下「词元车道实测白名单」）
-#TTS_MODEL=qwen3-tts-flash
-#TTS_VOICE=Cherry
+# 实测可用模型（2026-11-06，见下「词元车道实测白名单」）
+#TTS_PROVIDER=ciyuan            # 语音切词元档
+#TTS_MODEL=tencent-tts          # 腾讯云语音（audio 车道按 protocol 路由，模型名任意）
+#TTS_VOICE=101001               # 腾讯音色 id；qwen3 档用 Cherry
 #IMAGE_MODEL=gemini-3-pro-image
 #VIDEO_MODEL=doubao-seedance-2-0-fast-260128
 ```
 
-### 词元车道实测白名单（2026-10-16）
+### 词元车道实测白名单（2026-11-06 更新）
 
 `/v1/models` 列出的是「可识别」不是「可服务」——换模型前先实调。实测（VAAS 专用账号）：
 
-- **TTS**：`qwen3-tts-flash` + voice `Cherry` ✅；`tts-1` 502、`gpt-4o-mini-audio-preview`/`speech-1.6` 503。
+- **TTS（2026-11-06）**：`tencent-tts` + voice `101001` ✅（腾讯云语音，audio 车道按 protocol 路由、
+  **模型名任意且不进 `/v1/models` 目录**；⚠️ 单次请求长度墙 ~170 字——165 通 / 170 挂，超限 502 且触发
+  上游熔断摘除约 5 分钟；VAAS 出口层已按 ≤150 字分段合成 + 段级实测时长对齐 captions）。
+  `qwen3-tts-flash` + voice `Cherry` ✅（2026-10-16）；`tts-1` 502、`gpt-4o-mini-audio-preview`/`speech-1.6` 503。
 - **图像**：`gemini-3-pro-image` ✅（合规 b64_json）。⚠️ `gpt-image-*` 返回 HTTP 200 但 body 是 HTML（上游缺陷，客户端会显式报错拒绝）；`doubao-seedream-*`/`flux-*`/`imagen-4` 400。
 - **视频**：`doubao-seedance-2-0-fast-260128` ✅。⚠️ `doubao-seedance-1-0-pro`/`seedance-2-5` 503、`veo3.1`/`sora-2`/`kling-*` 404（目录挂名不可路由）。
 - **ASR**：词元侧上游账号未配置（503），暂不可用；端点协议已就绪，词元配好后即用。
