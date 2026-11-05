@@ -11,11 +11,11 @@
 
 ### W2 五类型 builder
 
-- [ ] W2.1 card 族：news-flash（标题卡→要点卡×N→CTA+来源署名位）+ listicle（钩子卡→倒数条目卡 rank 弹入→CTA）
-- [ ] W2.2 carousel（分段 kenburns + 段字幕；images 路径或提示词，提示词走补图 pending→confirm 协议）
-- [ ] W2.3 data-viz（ECharts seek 驱动：bar 生长/line 描画/pie 角度扫描，animation 由 theme 注入 false，echarts.min.js 内联）
-- [ ] W2.4 kinetic-quote（逐句入场阶跃 + `**词**` 关键词放大变色，零图片依赖；句级对齐口径）
-- [ ] W2.5 type.json ×5 加 `renderer: "html"`；templates_list(domain=video) runtime 标注翻转为 hosted 可用
+- [x] W2.1 card 族：news-flash（标题卡→要点卡×N→CTA+来源署名位）+ listicle（钩子卡→倒数条目卡 rank 弹入→CTA）
+- [x] W2.2 carousel（分段 kenburns + 段字幕；images 路径或提示词，提示词走补图 pending→confirm 协议）
+- [x] W2.3 data-viz（ECharts seek 驱动：bar 生长/line 描画/pie 角度扫描，animation 由 theme 注入 false，echarts.min.js 内联）
+- [x] W2.4 kinetic-quote（逐句入场阶跃 + `**词**` 关键词放大变色，零图片依赖；句级对齐口径）
+- [x] W2.5 type.json ×5 加 `renderer: "html"`；templates_list(domain=video) runtime 标注翻转为 hosted 可用
 
 ### W3 type 模式重接
 
@@ -25,14 +25,14 @@
 
 ### W4 质量门
 
-- [ ] W4.1 builder 单测：每类型场景 HTML 断言（结构节点/品牌变量/seek 契约字段/零外链）；结构数不匹配对照报错
-- [ ] W4.2 对齐单测：mock TTS 段时长驱动边界；voice_path 比例分摊；句级字幕切分
-- [ ] W4.3 确定性回归：voice_path 腿每类型真渲染双跑一致（沿用 test_determinism 口径）；本地 vs VAAS_HOSTED=1 同构
-- [ ] W4.4 既有 213 测试全绿不回退（render.py 接口未破坏）
+- [x] W4.1 builder 单测：每类型场景 HTML 断言（结构节点/品牌变量/seek 契约字段/零外链）；结构数不匹配对照报错
+- [x] W4.2 对齐单测：mock TTS 段时长驱动边界；voice_path 比例分摊；句级字幕切分
+- [x] W4.3 确定性回归：voice_path 腿每类型真渲染双跑一致（沿用 test_determinism 口径）；本地 vs VAAS_HOSTED=1 同构
+- [x] W4.4 既有 213 测试全绿不回退（render.py 接口未破坏）
 
 ### W5 部署与收口
 
-- [ ] W5.1 镜像重建（无新系统依赖）+ 上产 + 托管探针：五类型 voice_path 腿生产 E2E（成片+签名下载+md5 口径）
+- [x] W5.1 镜像重建（无新系统依赖）+ 上产 + 托管探针：五类型 voice_path 腿生产 E2E（成片+签名下载+md5 口径）
 - [ ] W5.2 TTS 腿 E2E（依赖 W7.5 用户 key，就绪即补）
-- [ ] W5.3 文档：fd-vaas-storyboard SKILL.md 类型段更新（hosted 可用、voice_path/bgm、confirm 协议）；README render_video 段同步
-- [ ] W5.4 pricing 复核（type 模式记账仍 render_video+render，无新条目即勾）+ 外账记录（trial 文档如提及类型则同步）
+- [x] W5.3 文档：fd-vaas-storyboard SKILL.md 类型段更新（hosted 可用、voice_path/bgm、confirm 协议）；README render_video 段同步
+- [x] W5.4 pricing 复核（type 模式记账仍 render_video+render，无新条目即勾）+ 外账记录（trial 文档如提及类型则同步）

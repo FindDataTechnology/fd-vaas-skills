@@ -422,7 +422,7 @@ def compose_storyboard(
     if not total_frames:
         raise RuntimeError("no frames rendered")
 
-    audio_p = Path(voice_path) if voice_path else None
+    audio_p = _resolve_input_file(voice_path) if voice_path else None
     if audio_p and not audio_p.is_file():
         raise ValueError(f"voice file missing: {voice_path}")
 
