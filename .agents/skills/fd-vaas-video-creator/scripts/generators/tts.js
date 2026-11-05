@@ -732,7 +732,29 @@ async function synthesizeSegmentedViaBridge(params, options, env) {
 
   // 段级实测时长 → captions 时间轴（段间静音计入）
   const segDurations = segFiles.map((f) => probeAudioDurationSeconds(f) || 0);
-  const caps = buildSegmentedCaptions(segments, segDurations, CIYUAN_INTER_SEG_GAP_SECONDS);
+  let caps = buildSegmentedCaptions(segments, segDurations, CIYUAN_INTER_SEG_GAP_SECONDS);
+  // whisper 对齐升级（2026-11-06 生产教训）：均分时间戳零间隙会让 TikTok 分页
+  // 失效（整稿一页糊满全屏——分页只认「空格开头 token + 页超阈值」）。本机有
+  // whisper-cli + 模型时，对拼接音频转写拿真实字级时间戳，与口播稿对齐（识别错字
+  // 由稿侧文本兜底），并插句首空格 token 触发翻页。失败则回退均分方案。
+  if (process.env.VAAS_TTS_WHISPER !== '0') {
+    try {
+      const { execFileSync } = require('child_process');
+      const wav = path.join(segDir, 'align-16k.wav');
+      spawnSync('ffmpeg', ['-y', '-i', finalPath, '-vn', '-ar', '16000', '-ac', '1', wav], { stdio: 'pipe' });
+      const model = findWhisperModel();
+      if (model) {
+        const jf = path.join(segDir, 'whisper-full.json');
+        const w = spawnSync('whisper-cli', ['-m', model, '-l', 'zh', '-f', wav, '-ojf', '-of',
+          jf.replace(/\.json$/, ''), '--max-len', '8', '--split-on-word'], { encoding: 'utf8' });
+        if (w.status === 0 && fs.existsSync(jf)) {
+          const aligned = alignCaptionsWithWhisper(text, jf, caps);
+          if (aligned && aligned.length) caps = aligned;
+          console.error(`🎤 whisper 对齐: ${aligned ? aligned.length + ' tokens（真实时间戳）' : '失败，回退均分'}`);
+        }
+      }
+    } catch { /* whisper 不可用——静默回退均分 */ }
+  }
   const captionsOut = path.join(outDir, 'captions.json');
   fs.writeFileSync(captionsOut, JSON.stringify(caps, null, 2));
 
@@ -783,6 +805,97 @@ function buildSyntheticCaptions(text, audioPath) {
   }
   captions[captions.length - 1].endMs = Math.round(realSec * 1000);
   return captions;
+}
+
+
+function findWhisperModel() {
+  const candidates = [
+    '/tmp/ggml-small.bin',
+    path.join(os.homedir(), '.cache/whisper-cpp/ggml-small.bin'),
+  ];
+  for (const c of candidates) { if (fs.existsSync(c)) return c; }
+  return null;
+}
+
+// whisper 对齐：把稿文本映射到 whisper 字级时间轴（LCS 锚点 + 锚点间插值）。
+// 识别错字不影响——锚点取两端共同的字，中间不一致的稿字在锚点区间内均分。
+function alignCaptionsWithWhisper(scriptText, whisperJsonPath, fallbackCaps) {
+  try {
+    const d = JSON.parse(fs.readFileSync(whisperJsonPath, 'utf8'));
+    const wTokens = [];
+    for (const seg of d.transcription || []) {
+      for (const t of seg.tokens || []) {
+        if (t.text.startsWith('[')) continue;
+        wTokens.push({ text: t.text, from: t.offsets.from, to: t.offsets.to });
+      }
+    }
+    if (!wTokens.length) return null;
+    // 去掉稿侧标点（不参与对齐，挂在锚点字上）
+    const sChars = [];
+    for (const ch of scriptText) {
+      if ('，。！？；、：—…'.includes(ch)) continue;
+      sChars.push(ch);
+    }
+    const wChars = wTokens.map(t => t.text);
+    // LCS DP（几百字规模可承受）
+    const n = sChars.length, m = wChars.length;
+    const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+    for (let i = 1; i <= n; i++) {
+      for (let j = 1; j <= m; j++) {
+        dp[i][j] = sChars[i - 1] === wChars[j - 1]
+          ? dp[i - 1][j - 1] + 1
+          : Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+    // 回溯：s 侧每字若命中锚点 → 用 whisper 时间；否则锚点间插值
+    const anchors = new Array(n).fill(null);
+    let i = n, j = m;
+    while (i > 0 && j > 0) {
+      if (sChars[i - 1] === wChars[j - 1]) { anchors[i - 1] = wTokens[j - 1]; i--; j--; }
+      else if (dp[i - 1][j] >= dp[i][j - 1]) i--;
+      else j--;
+    }
+    const caps = [];
+    let prevEnd = 0;
+    let k = 0;
+    while (k < n) {
+      if (anchors[k]) {
+        const a = anchors[k];
+        caps.push({ text: sChars[k], startMs: a.from, endMs: Math.max(a.to, a.from + 30),
+          timestampMs: Math.round((a.from + a.to) / 2), confidence: null });
+        prevEnd = a.to; k++;
+      } else {
+        // 找下一个锚点
+        let nk = k;
+        while (nk < n && !anchors[nk]) nk++;
+        const nextStart = nk < n ? anchors[nk].from : prevEnd + 400;
+        const span = (nextStart - prevEnd) / (nk - k);
+        for (let x = k; x < nk; x++) {
+          const a = Math.round(prevEnd + (x - k) * span);
+          const b = Math.round(prevEnd + (x - k + 1) * span);
+          caps.push({ text: sChars[x], startMs: a, endMs: Math.max(b, a + 30),
+            timestampMs: Math.round((a + b) / 2), confidence: null });
+        }
+        prevEnd = nextStart; k = nk;
+      }
+    }
+    if (!caps.length) return null;
+    // 标点并入前字 + 句首空格 token（翻页触发）
+    const merged = [];
+    for (const c of caps) {
+      if (merged && '，。！？；、：'.includes(c.text)) merged[merged.length - 1].text += c.text;
+      else merged.push(c);
+    }
+    const paged = [];
+    let prevPunct = true;
+    for (const c of merged) {
+      if (prevPunct) paged.push({ text: ' ', startMs: Math.max(0, c.startMs - 30),
+        endMs: c.startMs, timestampMs: Math.max(0, c.startMs - 15), confidence: null });
+      paged.push(c);
+      prevPunct = c.text.endsWith('。') || c.text.endsWith('！') || c.text.endsWith('？') || c.text.endsWith('；');
+    }
+    return paged;
+  } catch { return null; }
 }
 
 /* ------------------------------------------------------------------ *

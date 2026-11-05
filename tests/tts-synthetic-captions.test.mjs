@@ -75,3 +75,22 @@ test('分段切分：1600 字口播稿切成 ≤150 字段、句边界优先', (
   assert.ok(segs.every(s => s.length <= 150), `最长段 ${Math.max(...segs.map(s => s.length))} 字`);
   assert.equal(segs.reduce((a, s) => a + s.length, 0) <= long.length + segs.length, true);
 });
+
+test('whisper 对齐：句首空格 token 触发 TikTok 分页（≥句数页）', async () => {
+  const { createTikTokStyleCaptions } = require('/Users/chengsishi/VAAS/remotion-app/node_modules/@remotion/captions');
+  const mp3 = makeSilentMp3(6);
+  const caps = tts.buildSyntheticCaptions('问一句话，拿回真实数据行。这是寻数科技。数据留在你手里。', mp3);
+  // 均分版应只有 1 页（零间隙合并）
+  const p1 = createTikTokStyleCaptions({ captions: caps, combineTokensWithinMilliseconds: 1400 });
+  // 走出口层 whisper 对齐（本机有 whisper-cli + /tmp/ggml-small.bin 时生效）
+  const aligned = tts.buildSyntheticCaptionsWithWhisper
+    ? await tts.buildSyntheticCaptionsWithWhisper('问一句话，拿回真实数据行。这是寻数科技。数据留在你手里。', mp3)
+    : null;
+  if (aligned) {
+    const p2 = createTikTokStyleCaptions({ captions: aligned, combineTokensWithinMilliseconds: 1400 });
+    assert.ok(p2.pages.length >= 3, `whisper 对齐应 ≥3 页，实际 ${p2.pages.length}`);
+    assert.ok(!aligned.some(c => c.text.includes('巡述')), '不应出现 whisper 识别错字（稿侧兜底）');
+  } else {
+    console.log('   (本机无 whisper 模型，跳过分页断言)');
+  }
+});
