@@ -10,7 +10,7 @@ description: >
   voiceover_assemble 配音链与 bgm 混流。
   触发场景:用户要做视频 / 出片 / 写分镜 / storyboard、问"用什么视频形态"、要把数据做成视频、
   要自制开场片尾画面、要给视频配配音 / 加 BGM,或问 render_video / render_still 怎么传参。
-compatibility: VAAS MCP 工具面(render_video / render_still / generate_voice / voiceover_assemble / models_voices / templates_list / templates_get);本地 chromium+ffmpeg 渲染;ECharts 品牌主题(echarts-theme,源自 remotion-app theme.ts)。
+compatibility: VAAS MCP 工具面(render_video / render_still / generate_voice / voiceover_assemble / models_voices / templates_list / templates_get);chromium+ffmpeg 渲染(本地与托管同一 HTML 场景底座);ECharts 品牌主题(echarts-theme,源自 remotion-app theme.ts)。
 ---
 
 # FD VAAS Storyboard——展示层创作手册
@@ -29,7 +29,10 @@ compatibility: VAAS MCP 工具面(render_video / render_still / generate_voice /
 模式语义:
 
 - **storyboard = 确定性渲染**:逐帧由 `window.seek(t)` 重放,同一 storyboard → 同一字节流。slug 缺省按 storyboard 内容哈希派生,重复提交同一 storyboard 会幂等重放既有资产(不重渲、不重计费)。
-- **type = 类型管线**:`script` 可传内联文本或文件路径;`inputs` 的每个键变成管线 CLI 参数(契约见 `templates_get(domain="video", id=<type>)`,清单用 `templates_list(domain="video")`)。**slug 必须全新**——`downloads/fd-videos/<slug>/` 已存在会直接报错。配音在管线内自动完成,`voice_path` 参数不生效、`bgm` 传了会直接报错(本波未接线)。
+- **type = 类型管线(HTML 场景构建器)**:五类型均由 HTML 场景构建器产出 seek 契约场景,再走与 storyboard 同一渲染实现——**本地与托管实例同一行为**(不依赖 node/Remotion,托管直接可用)。`script` 可传内联文本或文件路径;`inputs` 的每个键变成管线参数(契约见 `templates_get(domain="video", id=<type>)`)。`templates_list(domain="video")` 每项带 `runtime` 标注:`hosted` = 该类型托管实例可用(五类型皆如此);`local_stdio_only` = 未移植类型仅本地 stdio 实例支持,托管上调用会指路报错。
+- type 模式的配音与 BGM:`voice_path` 给定时**跳过 TTS**,按实测音频总时长×各段字符数加权分摊段时长;不给则管线内逐段 TTS(音色 `inputs.voice`,默认 auto)。`bgm={asset_id|path, volume?, fade_out?}` 与 storyboard 同语义,合成后混流。
+- **补图 confirm 协议**:inputs 含提示词待补图(`{"prompt":...}`,或 `generate=true` 下的纯字符串)且未确认时,零产物返回 `pending_images` 清单;确认后重试传 `inputs.confirm_images=true`,先 generate_image 补图入账、再渲染。也可把对应条目直接换成已就绪的图片路径。
+- slug 缺省按计划哈希派生(type+script+inputs+voice_path+bgm 全折入),同输入命中既有资产即幂等重放(跳过补图/TTS/渲染,不重渲、不重复计费)。
 - 画幅:storyboard `size` 默认 `[1080,1920]` 竖屏;type 的 `orientation` 输入选 `1080x1920` 或 `1920x1080`。B 站 / YouTube 用横屏。
 - 缺文件会在渲染前一次性报全(kenburns images / voice_path / bgm path 逐条列出),不会渲到一半才炸。
 
@@ -37,7 +40,7 @@ compatibility: VAAS MCP 工具面(render_video / render_still / generate_voice /
 
 | type | 形态 | inputs 必填 | 适合内容 |
 |---|---|---|---|
-| `carousel` | 图文轮播:一图对一段,Ken Burns + 交叉淡入 | `script` + `images`(路径字符串 / `{"path":...}` / `{"prompt":...}` 配 `generate=true` 缺图 seedream 补) | 有图片素材的叙事、种草、教程 |
+| `carousel` | 图文轮播:一图对一段,Ken Burns + 交叉淡入 | `script` + `images`(路径字符串 / `{"path":...}` 就绪图 / `{"prompt":...}` 待补图,走 confirm 协议,见上节) | 有图片素材的叙事、种草、教程 |
 | `listicle` | 倒数排名卡片:hook → 条目卡×N → CTA | `script` + `items={title, items:[{title, text?, image?}], source?}` | Top N 榜单、盘点、测评合集 |
 | `data-viz` | 图表动画讲解:hook → 图表卡×N → CTA | `script` + `data={title, charts:[...], source?}` | 数据解读、财报速览、行业数字 |
 | `kinetic-quote` | 金句文字动画:逐句弹入、逐字高亮,无图 | `script`(`**关键词**` 显式标记放大词) | 观点、情绪、语录、金句合集 |
@@ -184,7 +187,8 @@ data-viz 的图表规格(`inputs.data`):
                                         │
                                         ▼
               render_video(storyboard=..., voice_path="<VAAS_ROOT>/downloads/<file_path>")
-              (type 模式不需要外部音频:管线内 TTS,音色用 inputs.voice,默认 auto)
+              (type 模式也可接外部配音:voice_path 给定时跳过 TTS、按字符数加权分摊段时长;
+               缺省则管线内 TTS,音色用 inputs.voice,默认 auto)
 ```
 
 - `generate_voice` 返回的 `file_path` 相对 `downloads/`;`render_video` 的 `voice_path` 要**绝对路径**。
@@ -199,7 +203,7 @@ data-viz 的图表规格(`inputs.data`):
 |---|---|
 | `render_video(storyboard=..., bgm=...)` | 视频合成后混流;曲短 `-stream_loop` 循环补长,曲长在片长处收尾;有配音时 amix 不压干声 |
 | `voiceover_assemble(..., bgm=...)` | 混进干声成片;干声自动备份,**换 BGM 重跑从干声出发不叠混**;同计划不同 BGM 不串重放键 |
-| type 模式 | **本波不支持**(传了直接报错) |
+| `render_video(type=..., bgm=...)` | 与 storyboard 同语义:视频合成后混流,循环补长 / 片长收尾、volume / fade_out 一致 |
 
 ## 6. 最小全链示例(自定义分镜 + 配音 + BGM)
 
