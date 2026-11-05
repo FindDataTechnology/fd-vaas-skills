@@ -30,7 +30,7 @@ multi-tenant — workspace ADR-0004).
 | Namespace | Tools |
 |---|---|
 | `generate_*` | `generate_voice`, `generate_image`, `generate_video_submit` (async submit; poll with `video_job_status`), `models_voices`, `voiceover_assemble`, `reference_clips_check` — cloud lanes dispatch through the generation registry |
-| `render_*` | `render_video` — two mutually exclusive modes: `storyboard={size, scenes:[...]}` (deterministic frame-by-frame) or `type` + `script`/`inputs` (video-creator pipeline); `render_still` (`kind=cover\|chart\|graphic`); `render_document` (`format=pdf\|longimage`) |
+| `render_*` | `render_video` — two mutually exclusive modes: `storyboard={size, scenes:[...]}` (deterministic frame-by-frame) or `type` + `script`/`inputs` (HTML scene-builder pipeline, `renderer:"html"` in each `type.json`; identical behavior on hosted and local stdio instances — no node/Remotion needed. `voice_path` skips in-pipeline TTS and apportions segment durations by per-segment char count; `bgm={asset_id\|path, volume?, fade_out?}` matches storyboard semantics; prompt-based images return a `pending_images` list with zero artifacts until retried with `inputs.confirm_images=true`); `render_still` (`kind=cover\|chart\|graphic`); `render_document` (`format=pdf\|longimage`) |
 | `templates_*` | `templates_list` / `templates_get` — presentation templates by domain `video\|cover\|doc` |
 | `assets_*` | `assets_list`, `assets_stats`, `assets_get` (by `id`/`slug`; `kind=common` lists shared brand assets, `kind=logo` logo/icon only) |
 | `registry_*` | `registry_list_generators`, `registry_describe_generator` — generation method discovery (`voice\|image\|video\|cover\|chart\|doc`) |

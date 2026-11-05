@@ -1,5 +1,6 @@
 {
   "id": "data-viz",
+  "renderer": "html",
   "name": "数据可视化讲解",
   "description": "每口播段一个图表场景：hook 大字卡 -> 图表卡×N（柱状生长/折线描画/饼图展开，进度动画占段帧 40%）-> CTA。data.json 提供 charts 规格；图表数与口播段数渲染前校验一致。",
   "version": 1,
@@ -18,12 +19,22 @@
     "orientation": {
       "required": false,
       "type": "enum",
-      "enum": ["1080x1920", "1920x1080"],
+      "enum": [
+        "1080x1920",
+        "1920x1080"
+      ],
       "default": "1080x1920",
       "desc": "画幅。1080x1920 竖屏 / 1920x1080 横屏。"
     }
   },
-  "pipeline": ["tts", "fix-tts-timings", "scene-align", "validate-data", "preflight", "render"],
+  "pipeline": [
+    "tts",
+    "fix-tts-timings",
+    "scene-align",
+    "validate-data",
+    "preflight",
+    "render"
+  ],
   "composition": "DataVizVideo",
   "defaults": {
     "voice": "auto",
@@ -32,5 +43,12 @@
     "minSegmentMs": 1500,
     "padFrames": 0
   },
-  "platforms": ["douyin", "xiaohongshu", "bilibili", "weixin", "kuaishou", "youtube"]
+  "platforms": [
+    "douyin",
+    "xiaohongshu",
+    "bilibili",
+    "weixin",
+    "kuaishou",
+    "youtube"
+  ]
 }

@@ -301,10 +301,13 @@ class TestVideoBgmMix:
             render_mod.render_video(storyboard=SB, bgm={"path": "/no/bgm.mp3"})
         assert "bgm path: /no/bgm.mp3" in str(exc.value)
 
-    def test_type_mode_bgm_rejected(self):
-        """type 模式本波不接 bgm——明确报错而非静默忽略。"""
-        with pytest.raises(ValueError, match="bgm"):
-            render_mod.render_video(type="carousel", script="口播稿",
+    def test_type_mode_bgm_accepted_at_mode_gate(self):
+        """add-typed-video-html-renderer W3.2：type 模式接入 bgm（与 storyboard
+        同参数语义，复用 normalize_bgm/resolve_bgm/混流链）——模式级不再拒绝；
+        此处只验模式 gate 放行（未注册 builder 的 type 撞的是类型 gate）。
+        完整混流链覆盖见 test_typed_scenes.py::test_bgm_wired_for_type_mode。"""
+        with pytest.raises(ValueError, match="html-renderer"):
+            render_mod.render_video(type="screen-recording", script="口播稿",
                                     bgm={"path": "/x.mp3"})
 
     def test_seed_asset_id_resolution_propagates_license(

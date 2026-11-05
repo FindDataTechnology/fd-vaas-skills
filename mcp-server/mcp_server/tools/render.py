@@ -3,7 +3,7 @@ render_* namespace: the presentation render plane.
 
 Three tools share one asset ledger convention (insert_content + download_url):
   render_video     — storyboard 模式（确定性逐帧出片，原 video_compose 实现）
-                     或 type 模式（fd-vaas-video-creator 类型管线，subprocess）
+                     或 type 模式（typed_scenes builder → 同一 storyboard 实现路径）
   render_still     — cover（Remotion 静帧）/ chart / graphic（占位）
   render_document  — pdf / longimage（占位，chromium print 内核后续波次接入）
 
@@ -27,6 +27,12 @@ shorter side, so the audio must be at least as long as the planned video.
 BGM (W4): storyboard 模式支持 bgm={asset_id|path, volume, fade_out}，视频合成
 后 ffmpeg amix 混流（BGM -stream_loop 补长、-t 在视频时长处收尾、fade_out=afade
 出）。种子曲库随镜像分发（templates/bgm/），首启注册为全局可见 bgm 资产。
+
+Type mode (add-typed-video-html-renderer W3): render_video(type=..., script=...,
+inputs=...) 走 tools/typed_scenes（type.json gate + builder → seek 契约场景
+序列），随后复用 storyboard 模式的同一实现路径（compose_storyboard：计划级
+重放 / 外链硬校验 / 账本 / 计价）——hosted 与本地行为一致。原 node
+subprocess 分支与 ADR-0004 hosted carve-out 已移除。
 """
 
 import base64
@@ -40,10 +46,9 @@ from typing import Optional
 
 from ..db import (generate_id, insert_content, insert_asset, record_usage,
                   scoped_asset_slug, get_asset, get_asset_by_slug, delete_asset)
-from ..utils import (VAAS_ROOT, DOWNLOADS_DIR, ensure_directory,
-                     ensure_directory_rel, get_relative_path, generate_slug)
+from ..utils import (VAAS_ROOT, ensure_directory, ensure_directory_rel,
+                     get_relative_path)
 from ..hosting import current_owner, download_url, is_hosted, SERVICE_OWNER
-from ..generators.runtime import prepare, run_bridge
 from ._scene_guard import find_external_refs, install_route_guard
 
 FPS_DEFAULT = 30
@@ -53,11 +58,6 @@ VAT_CSS_FALLBACK = (
     "background:linear-gradient(160deg,#070a20,#141a4d 60%,#3b2a8f);"
     f"color:#fff;font-family:{FONT_STACK};"
 )
-
-# fd-vaas-video-creator 类型管线（render_video type 模式的外部执行体）
-VIDEO_CREATOR_SCRIPTS = VAAS_ROOT / ".agents" / "skills" / "fd-vaas-video-creator" / "scripts"
-REMOTION_APP = VAAS_ROOT / "remotion-app"
-FD_VIDEOS_DIR = DOWNLOADS_DIR / "fd-videos"
 
 STORYBOARD_SCENE_KINDS = ("html_intro", "html_outro", "kenburns", "html_full")
 
@@ -305,6 +305,35 @@ def _assert_scenes_offline(scene_htmls: list[str], scenes: list[dict]) -> None:
             "offline):\n  " + "\n  ".join(f"- {v}" for v in violations))
 
 
+def _replay_existing(scoped: str, owner: str, format: str) -> Optional[dict]:
+    """Plan-level replay: this renderer is deterministic, so an identical
+    plan must return the existing asset instead of colliding on the
+    (globally unique) slug; a failed/partial record is replaced.
+
+    compose_storyboard 与 type 模式的重放预检共用（预检在补图/TTS 之前短路，
+    重放全链免费）。
+    """
+    replay = get_asset_by_slug(scoped, owner=owner)
+    if replay is None:
+        return None
+    rel = replay.get("file_path") or ""
+    meta = replay.get("metadata") or {}
+    if replay.get("stage") != "failed" and rel and (VAAS_ROOT / "downloads" / rel).exists():
+        result = {
+            "id": replay["id"], "slug": replay["slug"], "file_path": rel,
+            "duration_ms": meta.get("duration_ms"),
+            "scenes": meta.get("scenes"), "frames": meta.get("frames"),
+            "format": format, "idempotent_replay": True,
+        }
+        if is_hosted():
+            url = download_url(replay["id"], owner)
+            if url:
+                result["download_url"] = url
+        return result
+    delete_asset(replay["id"])
+    return None
+
+
 def compose_storyboard(
     storyboard: dict,
     slug: Optional[str] = None,
@@ -312,6 +341,7 @@ def compose_storyboard(
     voice_path: Optional[str] = None,
     fps: int = FPS_DEFAULT,
     bgm: Optional[dict] = None,
+    extra_metadata: Optional[dict] = None,
 ) -> dict:
     """
     Compose one video from a storyboard, deterministically (render_video 的
@@ -327,6 +357,9 @@ def compose_storyboard(
     bgm（W4.2）：已解析的 bgm spec（resolve_bgm 产物；传原始 {asset_id|path,...}
     会在内部补解析）。视频合成后混流 BGM，计划重放键折叠 bgm 签名——同一
     storyboard 配不同 BGM 是不同重放键。
+
+    extra_metadata（type 模式）：并入产物账本行的 metadata（segments 对齐表/
+    计费口径/type 等，见 tools/typed_scenes::build_typed_storyboard 的 meta）。
     """
     scenes = list(storyboard.get("scenes") or [])
     if not scenes:
@@ -362,27 +395,10 @@ def compose_storyboard(
             ensure_ascii=False, sort_keys=True)
         slug = f"compose-{hashlib.sha256(plan.encode()).hexdigest()[:12]}"
 
-    # ── Plan-level replay: this renderer is deterministic, so an identical
-    # storyboard must return the existing asset instead of colliding on the
-    # (globally unique) slug; a failed/partial record is replaced.
     scoped = scoped_asset_slug(slug, owner)
-    replay = get_asset_by_slug(scoped, owner=owner)
-    if replay is not None:
-        rel = replay.get("file_path") or ""
-        meta = replay.get("metadata") or {}
-        if replay.get("stage") != "failed" and rel and (VAAS_ROOT / "downloads" / rel).exists():
-            result = {
-                "id": replay["id"], "slug": replay["slug"], "file_path": rel,
-                "duration_ms": meta.get("duration_ms"),
-                "scenes": meta.get("scenes"), "frames": meta.get("frames"),
-                "format": format, "idempotent_replay": True,
-            }
-            if is_hosted():
-                url = download_url(replay["id"], owner)
-                if url:
-                    result["download_url"] = url
-            return result
-        delete_asset(replay["id"])
+    replayed = _replay_existing(scoped, owner, format)
+    if replayed is not None:
+        return replayed
 
     # ── W6.1a 外置场景硬校验：先建全部场景 HTML 扫外链，命中即抛——此刻磁盘
     # 零写入（帧目录不建、账本行不写），违规不产生任何部分产物。重放语义不变：
@@ -441,6 +457,8 @@ def compose_storyboard(
                            "title": bgm.get("title"),
                            "license": bgm.get("license"),
                            "attribution": bgm.get("attribution")}
+    if extra_metadata:
+        metadata.update(extra_metadata)
     insert_content(
         id=content_id, type="video", slug=scoped, file_path=rel_path,
         metadata=metadata,
@@ -672,121 +690,72 @@ def _mix_bgm_onto_video(video: Path, spec: dict, out: Path) -> None:
         raise RuntimeError(f"ffmpeg bgm mix failed: {proc.stderr[-400:]}")
 
 
-# ─── render_video type 模式：fd-vaas-video-creator 类型管线 ────────────────
-
-def _list_video_types() -> list[str]:
-    types_dir = VIDEO_CREATOR_SCRIPTS.parent / "types"
-    if not types_dir.is_dir():
-        return []
-    return sorted(p.name for p in types_dir.iterdir()
-                  if (p / "type.json").is_file())
-
+# ─── render_video type 模式：typed_scenes → storyboard 同一实现路径（W3） ──
 
 def _render_typed_video(type: str, script: str, inputs: Optional[dict],
-                        slug: Optional[str], owner: str) -> dict:
-    """Run the fd-vaas-video-creator type pipeline via subprocess.
+                        slug: Optional[str], owner: str,
+                        voice_path: Optional[str] = None,
+                        bgm: Optional[dict] = None,
+                        format: str = "mp4",
+                        fps: Optional[int] = None) -> dict:
+    """HTML 场景管线：typed_scenes builder 产出 seek 契约场景序列 → 复用
+    storyboard 模式的既有实现（compose_storyboard），确定性重放 / 外链硬校验
+    / 账本 / 计价全部生效；hosted 与本地行为一致（原 ADR-0004 node subprocess
+    分支与 hosted carve-out 随本 change 移除）。
 
-    调用方式参照原 skills/voiceover.py::create_voiceover_video：
-    node new-task.mjs 建任务目录（downloads/fd-videos/<slug>/）→
-    node task-render.mjs 跑类型 pipeline（tts/scene-align/preflight/render），
-    cwd=remotion-app、env 注入凭据 overlay（hosted 模式）。
-
-    hosted 限定：托管镜像按 ADR-0004 不含 node/Remotion 运行时，type 模式
-    仅本地 stdio 实例可用——入口显式报错指路，不让调用方撞 node 缺失的裸错。
+    顺序纪律：计划级重放预检 → 补图 confirm 协议（未确认零产物返回）→
+    build_typed_storyboard（结构数对照先于 TTS 花费；voice_path 优先，否则
+    逐段 TTS 拼全轨）→ compose_storyboard。
     """
-    if is_hosted():
-        raise ValueError(
-            "render_video type 模式仅本地 stdio 实例支持：托管镜像按 ADR-0004 "
-            "不含 node/Remotion 运行时。托管调用请改用 storyboard 模式"
-            "（seek 契约场景，同底座确定性渲染），或自部署 stdio 实例使用类型管线。"
-        )
-    known = _list_video_types()
-    if known and type not in known:
-        raise ValueError(f"unknown video type: {type}. Available: {known}")
+    from .typed_scenes import (build_typed_storyboard, collect_pending_images,
+                               resolve_pending_images, typed_plan_slug)
 
     if not script:
         raise ValueError("render_video(type=...) requires script (口播稿文本或路径)")
     inputs = dict(inputs or {})
 
-    script_file = Path(script).expanduser()
-    if script_file.is_file():
-        script_arg = str(script_file)
-    else:
-        # script 是内联文本 → 落临时文件再交给 new-task.mjs（file 输入约定）
-        import tempfile
-        tmp = tempfile.NamedTemporaryFile(
-            "w", suffix=".txt", prefix=f"vaas-script-{type}-",
-            delete=False, encoding="utf-8")
-        tmp.write(script)
-        tmp.close()
-        script_arg = tmp.name
+    # ── 计划键（W1.4）：type+script+inputs+voice_path+bgm 全折入；同输入
+    # 直接命中既有资产（跳过补图/TTS/渲染——重放全链免费）
+    target_slug = slug or typed_plan_slug(type, script, inputs, voice_path, bgm)
+    replayed = _replay_existing(scoped_asset_slug(target_slug, owner), owner,
+                                format or "mp4")
+    if replayed is not None:
+        replayed["type"] = type
+        return replayed
 
-    cmd1 = ["node", str(VIDEO_CREATOR_SCRIPTS / "new-task.mjs"),
-            "--slug", slug, "--type", type, "--script", script_arg]
-    for key, value in inputs.items():
-        if isinstance(value, bool):
-            value = "true" if value else "false"
-        elif not isinstance(value, str):
-            value = json.dumps(value, ensure_ascii=False)
-        cmd1 += [f"--{key}", str(value)]
+    # ── 补图 confirm 协议（W3.3，公共层）：先于一切生成/渲染，未确认零产物
+    pending = collect_pending_images(inputs)
+    if pending and not inputs.get("confirm_images"):
+        return {
+            "pending_images": pending,
+            "type": type,
+            "message": (
+                f"检测到 {len(pending)} 张待补图（提示词）。确认后重试："
+                "inputs.confirm_images=true（将先调 generate_image 补图并入账，"
+                "再渲染）。也可把对应条目换成已就绪的图片路径。"),
+        }
+    generated_images: list[dict] = []
+    if pending:
+        inputs, generated_images = resolve_pending_images(inputs, owner)
 
-    ctx = prepare("video", {
-        "type": type, "slug": slug, "script": script, "inputs": inputs,
-    })
-    env = {**os.environ, **ctx["env"]} if ctx["env"] else None
+    storyboard, meta = build_typed_storyboard(
+        type_id=type, script=script, inputs=inputs,
+        voice_path=voice_path, bgm=bgm, owner=owner)
 
-    try:
-        subprocess.run(cmd1, capture_output=True, text=True, check=True,
-                       cwd=str(REMOTION_APP), env=env)
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"task init failed: {(e.stderr or e.stdout)[-800:]}")
+    # TTS 路径：storyboard.voice_path 是 downloads 相对引用（产物可移植）；
+    # compose 的音频存在性检查按 CWD 直读，这里显式给绝对路径
+    voice_for_compose = voice_path
+    if voice_path is None and meta.get("voice_mode") == "tts":
+        voice_for_compose = str(VAAS_ROOT / "downloads" / meta["voice_path"])
 
-    cmd2 = ["node", str(VIDEO_CREATOR_SCRIPTS / "task-render.mjs"), "--slug", slug]
-    try:
-        proc = subprocess.run(cmd2, capture_output=True, text=True, check=True,
-                              cwd=str(REMOTION_APP), env=env)
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"task render failed: {(e.stderr or e.stdout)[-800:]}")
-
-    task_dir = FD_VIDEOS_DIR / slug
-    task_json_path = task_dir / "task.json"
-    task_json = {}
-    if task_json_path.exists():
-        try:
-            task_json = json.loads(task_json_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            task_json = {}
-
-    mp4 = task_dir / f"{slug}.mp4"
-    if not mp4.exists():
-        raise RuntimeError(
-            f"task render finished but output missing: {mp4}; "
-            f"stdout tail: {proc.stdout[-400:]}")
-
-    content_id = generate_id()
-    rel_path = get_relative_path("fd-videos", slug, f"{slug}.mp4")
-    insert_content(
-        id=content_id, type="video", slug=slug, file_path=rel_path,
-        metadata={"kind": "video_type", "type": type,
-                  "task_json": task_json,
-                  "composition": task_json.get("composition"),
-                  "duration_sec": (task_json.get("render") or {}).get("totalDurationSec")},
-        status="rendered", owner=owner,
+    bgm_spec = resolve_bgm(bgm, owner)
+    result = compose_storyboard(
+        storyboard=storyboard, slug=target_slug, format=format or "mp4",
+        voice_path=voice_for_compose, fps=fps or FPS_DEFAULT, bgm=bgm_spec,
+        extra_metadata={"typed": {**meta,
+                                  "generated_images": generated_images or None}},
     )
-    source = ctx["resolved"].get("source") or "env"
-    record_usage(owner=owner, tool="render_video", provider="local",
-                 model="fd-vaas-video-creator", units=1, unit_type="render",
-                 credential_source=source, asset_id=content_id)
-
-    result = {
-        "id": content_id, "slug": slug, "file_path": rel_path,
-        "duration_sec": (task_json.get("render") or {}).get("totalDurationSec"),
-        "type": type, "status": "rendered", "credential_source": source,
-    }
-    if is_hosted():
-        url = download_url(content_id, owner)
-        if url:
-            result["download_url"] = url
+    result["type"] = type
     return result
 
 
@@ -801,23 +770,29 @@ def render_video(
     fps: Optional[int] = None,
     bgm: Optional[dict] = None,
 ) -> dict:
-    """Render a video: storyboard 模式（确定性逐帧）或 type 模式（类型管线）。
+    """Render a video: storyboard 模式（确定性逐帧）或 type 模式（HTML 场景管线）。
 
     Two mutually exclusive modes:
       1. storyboard={size, scenes:[...]} — 确定性渲染，场景 kind ∈
          html_intro/html_outro/kenburns/html_full，逐帧由 window.seek(t)
          重放，同一 storyboard → 同一字节流；计划级重放键 scoped_asset_slug。
-      2. type="carousel|listicle|data-viz|kinetic-quote|news-flash" +
-         script（口播稿文本或路径）+ inputs（类型输入 dict，见
-         types/<id>/type.json）— 走 fd-vaas-video-creator 管线 subprocess。
+      2. type="news-flash|carousel|listicle|..." + script（口播稿文本或路径）
+         + inputs（类型输入 dict，见 types/<id>/type.json）— typed_scenes
+         builder 产出 seek 契约场景后走与 storyboard 模式同一实现路径；
+         type.json 须声明 "renderer": "html"，未注册 builder 报错列可用清单。
+         voice_path 给定时按段字符数加权对齐（不发起 TTS），否则逐段 TTS。
+         slug 缺省按计划哈希派生（type+script+inputs+voice_path+bgm 全折入），
+         同输入重放免费。
 
-    bgm（W4.2，storyboard 模式专用）: {asset_id|path, volume?, fade_out?} —
+    bgm（W4.2，两模式同参数语义）: {asset_id|path, volume?, fade_out?} —
     视频合成后混流背景音乐；BGM 短于视频自动循环补长，长于视频在视频时长处
     收尾；volume 默认 0.2，fade_out 默认 true（afade 出）。asset_id 引用
     assets 账本 type=bgm 资产（本人资产或全局种子曲库）。
 
     同时提交 storyboard 与 type 是明确错误；输入文件缺失时报错会列出
-    具体缺失清单（kenburns images / voice_path / bgm path）。
+    具体缺失清单（kenburns images / voice_path / bgm path）。inputs 里含
+    待补图（提示词）且未 confirm_images 时返回 pending_images 清单，不渲染
+    不产产物。
     """
     if storyboard is not None and type is not None:
         raise ValueError(
@@ -826,11 +801,7 @@ def render_video(
     if storyboard is None and type is None:
         raise ValueError(
             "render_video: no mode given — pass storyboard={size, scenes:[...]} "
-            "OR type=<carousel|listicle|data-viz|kinetic-quote|news-flash>")
-    if type is not None and bgm is not None:
-        raise ValueError(
-            "render_video: bgm mixing is not wired for type mode in this wave "
-            "— pass storyboard=... to use bgm")
+            "OR type=<news-flash|carousel|listicle|data-viz|kinetic-quote>")
 
     owner = current_owner()
 
@@ -845,14 +816,9 @@ def render_video(
             bgm=resolve_bgm(bgm, owner),
         )
 
-    if not slug:
-        slug = generate_slug(f"{type}-video")
-    if FD_VIDEOS_DIR is not None and (FD_VIDEOS_DIR / slug).exists():
-        raise ValueError(
-            f"task dir already exists for slug '{slug}' — the type pipeline "
-            f"requires a fresh slug (delete {FD_VIDEOS_DIR / slug} or pick another)")
     return _render_typed_video(type=type, script=script, inputs=inputs,
-                               slug=slug, owner=owner)
+                               slug=slug, owner=owner, voice_path=voice_path,
+                               bgm=bgm, format=format or "mp4", fps=fps)
 
 
 # ─── render_still / render_document：分发骨架（内核后续波次填） ────────────

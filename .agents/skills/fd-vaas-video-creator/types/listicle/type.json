@@ -1,9 +1,10 @@
 {
   "id": "listicle",
   "name": "榜单合集",
-  "description": "倒数排名卡片视频：hook 大字卡 -> 条目卡×N（排名弹出动画，可选配图）-> CTA。items.json 提供 title/items；条目数与口播段数渲染前校验一致。",
+  "description": "倒数排名卡片视频：hook 大字卡 -> 条目卡×N（rank 弹出动画，可选配图）-> CTA。items 为 [{rank,title,desc,image?}] 数组；条目数与口播段数渲染前校验一致。",
   "version": 1,
   "status": "experimental",
+  "renderer": "html",
   "inputs": {
     "script": {
       "required": true,
@@ -13,7 +14,7 @@
     "items": {
       "required": true,
       "type": "json",
-      "desc": "榜单清单 JSON：{title:string, items:[{title:string, text?:string, image?:string}], source?:string}。items 数须等于口播条目段数。image 为任务目录下的文件名（可选）。"
+      "desc": "榜单清单 JSON 数组：[{rank, title, desc, image?}]。rank 为名次（整数或整数字符串，大数字弹出展示），desc 为条目口播文案。items 数须等于口播条目段数（1 hook + N 条目 + 1 cta）。image 为图片文件路径（可选，绝对或相对 downloads/VAAS_ROOT，渲染时内联为 data: URI，零外链）。"
     },
     "orientation": {
       "required": false,

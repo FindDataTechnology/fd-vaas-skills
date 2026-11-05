@@ -5,7 +5,8 @@ Wave1 (add-presentation-plane) render-plane unit tests.
   - storyboard 解析（空场景/未知 kind/html_intro 提升/kenburns 契约）
   - 计划级重放键（scoped_asset_slug + 幂等重放 / failed 记录重建）
   - render_video 两模式互斥 + 输入文件缺失一次性列全
-  - type 模式的 subprocess 契约（mock，不依赖 node）
+  - type 模式重接（add-typed-video-html-renderer W3）：typed_scenes builder
+    注册表 + 与 storyboard 同一实现路径（详细覆盖见 tests/test_typed_scenes.py）
   - render_still / render_document 分发（chart/graphic W2 起为实现内核，
     本文件只验分发；内核单测见 test_render_still.py / test_echarts_theme.py）
   - templates_list / templates_get
@@ -15,7 +16,6 @@ playwright / ffmpeg / node 全部 mock（渲染路径冒烟由部署探针兜底
 
 import hashlib
 import json
-import subprocess as _subprocess
 import sys
 from pathlib import Path
 
@@ -222,74 +222,36 @@ class TestRenderVideoModes:
         with pytest.raises(ValueError, match="requires script"):
             render_mod.render_video(type="carousel", slug="t1")
 
-    def test_type_mode_task_dir_must_be_fresh(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(render_mod, "FD_VIDEOS_DIR", tmp_path / "fd-videos")
-        _mkdir(tmp_path / "fd-videos" / "stale")
-        with pytest.raises(ValueError, match="task dir already exists"):
-            render_mod.render_video(type="carousel", script="文本", slug="stale")
+    def test_type_mode_non_html_renderer_rejected(self):
+        """type 模式 gate：未声明 renderer=html 的 type.json 拒绝（node
+        subprocess 分支已移除，type 模式只服务 html renderer 类型；card 族
+        已全部接入——未接入类型剩 screen-recording/voiceover）。"""
+        with pytest.raises(ValueError, match="not an html-renderer type"):
+            render_mod.render_video(type="screen-recording",
+                                    script="第一段\n第二段")
 
-    def test_type_mode_subprocess_contract_and_ledger(self, tmp_path, monkeypatch):
-        """type 模式：new-task.mjs + task-render.mjs 按序调用，cwd=remotion-app，入账本。"""
-        fd = tmp_path / "fd-videos"
-        monkeypatch.setattr(render_mod, "FD_VIDEOS_DIR", fd)
-        monkeypatch.setattr(render_mod, "REMOTION_APP", tmp_path)
-        monkeypatch.setattr(render_mod, "VIDEO_CREATOR_SCRIPTS", tmp_path / "scripts")
-
-        cmds = []
-
-        def fake_run(cmd, capture_output=True, text=True, check=True,
-                     cwd=None, env=None):
-            cmds.append((cmd, cwd, env))
-            # new-task.mjs 建目录；task-render.mjs 收尾时补 task.json + 成片
-            if "new-task.mjs" in str(cmd[1]):
-                _mkdir(fd / "my-list")
-            else:
-                task_dir = fd / "my-list"
-                (task_dir / "task.json").write_text(json.dumps({
-                    "composition": "CarouselVideo",
-                    "render": {"totalDurationSec": 42.5},
-                }), encoding="utf-8")
-                (task_dir / "my-list.mp4").write_bytes(b"vv")
-            return _subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
-
-        monkeypatch.setattr(render_mod.subprocess, "run", fake_run)
-
+    def test_type_mode_same_runtime_as_storyboard(self, hermetic_fs,
+                                                  fake_render_pipeline,
+                                                  monkeypatch):
+        """type 模式与 storyboard 模式同一实现路径：compose_storyboard 的
+        账本/计价语义（unit_type=second、kind=video_compose）不变。"""
+        monkeypatch.setattr(
+            "mcp_server.tools.typed_scenes.alignment._ffprobe_seconds",
+            lambda p: 8.0)
+        voice = hermetic_fs["downloads"] / "v.wav"
+        voice.write_bytes(b"fake-audio")
         result = render_mod.render_video(
-            type="carousel", script="第一段\n第二段",
-            inputs={"images": ["/x/a.png"], "orientation": "1080x1920"},
-            slug="my-list")
-
-        assert len(cmds) == 2
-        new_task, cwd1, env1 = cmds[0]
-        task_render, cwd2, env2 = cmds[1]
-        assert "new-task.mjs" in new_task[1]
-        assert "--type" in new_task and "carousel" in new_task
-        assert "--script" in new_task
-        # json inputs 以内联 JSON 传递，enum 原值传递
-        assert "--images" in new_task
-        inline = new_task[new_task.index("--images") + 1]
-        assert json.loads(inline) == ["/x/a.png"]
-        assert new_task[new_task.index("--orientation") + 1] == "1080x1920"
-        assert "task-render.mjs" in task_render[1] and "--slug" in task_render
-        assert cwd1 == cwd2  # 两步都在 remotion-app 下执行
-        # 入账本
-        assert result["status"] == "rendered" and result["type"] == "carousel"
-        assert result["duration_sec"] == 42.5
-        asset = get_asset_by_slug("my-list")
+            type="news-flash",
+            script="## hook\n开场白。\n## 要点\n第一条。\n## cta\n关注。",
+            inputs={"meta": {"headline": "H", "points": ["P"]}},
+            voice_path=str(voice), slug="same-runtime")
+        asset = get_asset_by_slug("same-runtime")
         assert asset and asset["type"] == "video"
-        assert asset["metadata"]["composition"] == "CarouselVideo"
+        assert asset["metadata"]["kind"] == "video_compose"
+        assert result["scenes"] == 3
         rows = usage_summary(owner="service")
-        assert any(r["tool"] == "render_video" and r["unit_type"] == "render" for r in rows)
-
-    def test_type_mode_missing_output_raises_with_stdout_tail(self, tmp_path, monkeypatch):
-        """管线跑完但成片缺失 → RuntimeError 带诊断（不静默成功）。"""
-        monkeypatch.setattr(render_mod, "FD_VIDEOS_DIR", tmp_path / "fd-videos")
-        monkeypatch.setattr(render_mod, "REMOTION_APP", tmp_path)
-        monkeypatch.setattr(render_mod, "VIDEO_CREATOR_SCRIPTS", tmp_path / "scripts")
-        monkeypatch.setattr(render_mod.subprocess, "run",
-                            lambda cmd, **kw: _subprocess.CompletedProcess(cmd, 0, "pipeline done", ""))
-        with pytest.raises(RuntimeError, match="output missing"):
-            render_mod.render_video(type="listicle", script="文本", slug="ghost")
+        assert any(r["tool"] == "render_video" and r["unit_type"] == "second"
+                   for r in rows)
 
 
 class TestRenderStillAndDocumentSkeletons:

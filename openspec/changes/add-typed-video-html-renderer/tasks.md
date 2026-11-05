@@ -4,10 +4,10 @@
 
 ### W1 分段对齐与构建器基建
 
-- [ ] W1.1 `tools/typed_scenes.py` 骨架：builder 注册表（type id → builder）、inputs 契约校验（读 type.json，结构数对照前置报错列全）、`## 段名` 分段
-- [ ] W1.2 对齐层：逐段 TTS（复用 generators/tts，凭证链同 generate_voice）取真实段时长；`voice_path` 输入走 ffprobe 总时长按段字符数加权分摊；句级字幕切分（段内按句、时长按字符数比例）
-- [ ] W1.3 品牌 CSS wrapper 接入 builder 场景（theme.ts 单源变量 + 字幕底部条样式，与 SubtitleBrand 语义对齐）
-- [ ] W1.4 type 模式计划哈希折入 type/script/inputs/voice/bgm（确定性重放键，接既有 scoped slug）
+- [x] W1.1 `tools/typed_scenes.py` 骨架：builder 注册表（type id → builder）、inputs 契约校验（读 type.json，结构数对照前置报错列全）、`## 段名` 分段
+- [x] W1.2 对齐层：逐段 TTS（复用 generators/tts，凭证链同 generate_voice）取真实段时长；`voice_path` 输入走 ffprobe 总时长按段字符数加权分摊；句级字幕切分（段内按句、时长按字符数比例）
+- [x] W1.3 品牌 CSS wrapper 接入 builder 场景（theme.ts 单源变量 + 字幕底部条样式，与 SubtitleBrand 语义对齐）
+- [x] W1.4 type 模式计划哈希折入 type/script/inputs/voice/bgm（确定性重放键，接既有 scoped slug）
 
 ### W2 五类型 builder
 
@@ -19,9 +19,9 @@
 
 ### W3 type 模式重接
 
-- [ ] W3.1 `render_video` type 分支：subprocess(node) → typed_scenes 管线；W7.6 hosted carve-out 摘除（本地/托管同行为）
-- [ ] W3.2 type 模式 bgm 参数接入（复用 storyboard 的 normalize/resolve/mix 链）
-- [ ] W3.3 补图 confirm 协议：首次调用返回 pending 清单 + confirm 参数二次调用进入渲染
+- [x] W3.1 `render_video` type 分支：subprocess(node) → typed_scenes 管线；W7.6 hosted carve-out 摘除（本地/托管同行为）
+- [x] W3.2 type 模式 bgm 参数接入（复用 storyboard 的 normalize/resolve/mix 链）
+- [x] W3.3 补图 confirm 协议：首次调用返回 pending 清单 + confirm 参数二次调用进入渲染
 
 ### W4 质量门
 

@@ -63,7 +63,8 @@ def hermetic_fs(tmp_path, monkeypatch):
         return _mkdir(downloads.joinpath(*parts))
 
     for mod in (render_mod, doc_mod, graphic_mod):
-        monkeypatch.setattr(mod, "DOWNLOADS_DIR", downloads)
+        if hasattr(mod, "DOWNLOADS_DIR"):  # render.py 已不再绑定（重放/校验走 VAAS_ROOT）
+            monkeypatch.setattr(mod, "DOWNLOADS_DIR", downloads)
         monkeypatch.setattr(mod, "ensure_directory_rel", _ensure_rel)
     monkeypatch.setattr(render_mod, "VAAS_ROOT", tmp_path)
     monkeypatch.setattr(render_mod, "ensure_directory",

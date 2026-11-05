@@ -4,6 +4,7 @@
   "description": "纯文字动态排版：逐句 spring 弹入、逐字（字幕时间戳）高亮、关键词恒放大变色。无图片。关键词支持 `**词**` 显式标记，否则取段内最长中文词。",
   "version": 1,
   "status": "experimental",
+  "renderer": "html",
   "inputs": {
     "script": {
       "required": true,

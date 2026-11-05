@@ -29,7 +29,7 @@ compose_storyboard（既有管线：seek 契约逐帧 → ffmpeg → bgm 混流 
 ## 关键决策
 
 1. **type 模式 = 语法糖**：`render_video(type=...)` 内部就是「builder → storyboard」，复用全部既有纪律（确定性重放、外链校验、计划哈希、bgm、账本、计价）。不新增第二条渲染管线。计划哈希把 type+script+inputs+voice+bgm 全折入——同输入重放免费。
-2. **builder 位置**：`tools/typed_scenes.py` 单文件注册表（`BUILDERS: dict[str, Callable]`），五 builder 同文件起步（每个 ~100-200 行 HTML 模板函数）；type.json 的 `renderer: "html"` 声明只是契约标记，注册表才是执行真源（与 registry.json/DRIVERS 同哲学）。
+2. **builder 位置**：`tools/typed_scenes/` 包——`__init__.py` 注册表（`BUILDER_REGISTRY: dict[str, builder]`）+ `alignment.py`（分段/对齐/字幕）+ `builders/<type_id>.py` 每类型一模块（提案期原定单文件起步，apply 时改为包布局：每类型独立模块便于并行实现与文件所有权切分，注册表哲学不变——type.json `renderer: "html"` 只是契约标记，注册表才是执行真源，与 registry.json/DRIVERS 同哲学）。
 3. **对齐口径**：TTS 腿取真实段时长（tts 返回 duration）；voice_path 腿用 ffprobe 总时长 ÷ 段数加权（按段字符数加权比均分诚实）。句级字幕 = 段内按句切分、时长按字符数比例。tailPad（默认 15 frames）沿用 type.json defaults。
 4. **data-viz 动画**：场景 HTML 内嵌 vendored echarts.min.js + `window.seek(t)` 里 `chart.setOption({series:[{data: value*ease(t)}]}, {lazyUpdate:true})`，animation:false 由 theme 注入（与 render_still 同纪律）。ease = 段内进度 0→1 的 cubic-out，柱/线/饼三种各自映射（bar=高度、line=逐点显影、pie=角度扫描）。
 5. **kinetic-quote 句级**：`**词**` 标记解析保留（关键词放大变色）；入场=句块 opacity/translateY 随 seek 阶跃。逐字同步需要 TTS 词级时间戳（fix-tts-timings 链），/stretch 注记。
