@@ -3,3 +3,7 @@ pydantic>=2.0.0
 aiosqlite>=0.19.0
 python-dotenv>=1.0.0
 markdown>=3.4
+# deliver-hosted-surface: mp3 duration measurement (generators/tts.py) and the
+# hosted render base (chromium/ffmpeg are apt layers in the image).
+mutagen>=1.47
+playwright>=1.49

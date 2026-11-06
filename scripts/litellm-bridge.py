@@ -101,7 +101,7 @@ def _reject_provider(provider: str, kind: str) -> None:
 
 
 def cmd_tts(args: argparse.Namespace) -> int:
-    text = args.text or args.input
+    text = args.text
     if not text:
         print("Error: --text is required", file=sys.stderr)
         return 2
@@ -134,7 +134,8 @@ def cmd_tts(args: argparse.Namespace) -> int:
         )
     elif provider == "ciyuan":
         # 萬星·词元车道：POST /v1/audio/speech（OpenAI 音频形状），stdlib HTTP。
-        # 逐字时间戳（captions）是 volcengine 直连专属，此档不可用——如实降级。
+        # 出口层（deliver-hosted-surface W2）：>150 字自动分段拼接；无官方逐字戳
+        # 时合成字幕兜底（captions_source=synthetic）——与 node 腿同算法。
         from _ciyuan_tts import synthesize as ciyuan_synth  # type: ignore
 
         result = ciyuan_synth(
@@ -143,15 +144,18 @@ def cmd_tts(args: argparse.Namespace) -> int:
             voice=voice,
             speed=args.speed,
             format=args.format or "wav",
-            enable_subtitle=False,
+            enable_subtitle=not args.no_subtitle,
             api_key=args.api_key or env_get("CIYUAN_API_KEY") or "",
             base_url=args.base_url or env_get("CIYUAN_BASE_URL") or "",
             output_path=out_path,
+            captions_path=args.captions,
         )
     else:
         _reject_provider(provider, "TTS")
 
-    # Write captions if requested and available
+    # Write captions if requested and available — volcengine path returns a
+    # captions LIST here; the ciyuan path already wrote captions_path itself
+    # (segmented/synthetic), so only the list form lands in this block.
     if result.get("captions") and args.captions:
         cap_path = Path(args.captions)
         cap_path.parent.mkdir(parents=True, exist_ok=True)
@@ -292,18 +296,19 @@ def cmd_video(args: argparse.Namespace) -> int:
         # 重试的是查询，不是付费的提交）。
         from _ciyuan_video import submit as ciyuan_submit  # type: ignore
         from _ciyuan_video import poll as ciyuan_poll  # type: ignore
+        from _ciyuan_video import status_once as ciyuan_status_once  # type: ignore
         from _ciyuan_video import download as ciyuan_download  # type: ignore
 
         api_key = args.api_key or env_get("CIYUAN_API_KEY") or ""
         base_url = args.base_url or env_get("CIYUAN_BASE_URL") or ""
 
         if args.status_task_id:
-            final = ciyuan_poll(
+            # single-shot read: hosted video_job_status must return in
+            # seconds (waiting is the client's retry cadence, not ours)
+            final = ciyuan_status_once(
                 task_id=args.status_task_id,
                 api_key=api_key,
                 base_url=base_url,
-                timeout_seconds=args.timeout or 600,
-                interval_seconds=10,
             )
             result = {
                 "ok": final.get("status") == "succeeded",
@@ -391,7 +396,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     # --- tts ---
     t = sub.add_parser("tts", help="Text-to-speech synthesis")
-    t.add_argument("--text", "--input", dest="text", help="Text to synthesize")
+    # NOTE: the old "--input" alias shared dest="text", so callers passing
+    # --input <file> spoke the literal path string. The alias is removed;
+    # file reading belongs to the caller (generators/tts.py resolves
+    # file_path into --text).
+    t.add_argument("--text", dest="text", required=True, help="Text to synthesize")
     t.add_argument("--model", help="Model name (e.g. openai/tts-1, seed-tts-2.0)")
     t.add_argument("--voice", help="Voice name (e.g. alloy, zh-CN-Yunxia)")
     t.add_argument("--speed", type=float, help="Speech speed multiplier")

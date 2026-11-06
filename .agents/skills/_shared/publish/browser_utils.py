@@ -297,25 +297,33 @@ class StepRunner:
 
 # ─── 用户交接 ────────────────────────────────────────────
 def handoff(msg):
-    """阻塞等用户完成手动操作后回车继续。对应 ego-browser 的 handOffTaskSpace。"""
+    """阻塞等用户完成手动操作后回车继续。对应 ego-browser 的 handOffTaskSpace。
+
+    返回 True=用户已确认(回车),False=非交互拿不到确认。
+    enforce-publish-confirmation-gate W1.1: 非交互(CI/后台)EOF 不再静默放行——
+    调用方(如 publish_and_verify 的确认分支)必须把它当作「未确认」失败关闭。
+    """
     cli_log("\n" + "━" * 41)
     cli_log("⚠️  需要你操作")
     cli_log("   " + msg)
     cli_log("━" * 41)
     try:
         input("\n👉  完成后按回车继续... ")
+        return True
     except EOFError:
-        # 非交互环境（CI）下不阻塞
-        pass
+        # 非交互环境(CI/无 TTY 后台):无确认凭据 = 拒绝,绝不默默继续(旧行为是静默放行=事故)
+        cli_log("❌  非交互环境(无 TTY),无法收到人工确认 —— 按未确认处理(fail closed)")
+        return False
 
 
 def screenshot_confirm(b, prompt, path=None):
+    """截图 + 回车确认。返回 False 表示拿不到确认(非交互/超时),调用方必须失败关闭。"""
     cli_log("\n📸  截取当前页面...")
     try:
         b.screenshot(path)
     except Exception:
         cli_log("⚠️  截图失败，请直接查看浏览器窗口")
-    handoff(prompt)
+    return handoff(prompt)
 
 
 # ─── 非交互(Claude 后台运行)用的等待原语 ──────────────────
@@ -368,11 +376,36 @@ def login_or_wait(b, editor_url, check_fn, timeout=300, hint="请在浏览器扫
     return ok and check_fn()
 
 
+def default_gate_file(platform, prefix="vaas-doc"):
+    """确认哨兵默认路径:<系统临时目录>/<prefix>-<platform>.go。
+
+    W5.1 Windows 可移植:不硬编码 /tmp——VAAS_GATE_DIR env 优先(面板/Claude 可指到
+    可写目录),否则 tempfile.gettempdir()(Windows 也能创建/触碰)。与
+    _shared/publish/confirm-gate.mjs 的 defaultGateFile 同命名同语义。
+    """
+    import tempfile
+    if not platform:
+        raise ValueError("default_gate_file 需要平台名(空凭据必须拒绝而非挂等)")
+    base = os.environ.get("VAAS_GATE_DIR") or tempfile.gettempdir()
+    return os.path.join(base, f"{prefix}-{platform}.go")
+
+
 def confirm_gate(b, confirm_file, screenshot_path=None, hint="确认发布", timeout=7200):
     """发布前确认门:截图(可选存路径给 Claude 读取)-> 轮询等待 confirm_file 出现 -> 放行。
 
     无 stdin 依赖:Claude 在后台跑该脚本,看到「等待确认」后问你,你说确认 -> Claude touch confirm_file。
+
+    enforce-publish-confirmation-gate W1.1 硬化:
+    - confirm_file 为空/未设置 = 无确认凭据:直接拒绝(旧行为是拿空路径轮询,白挂满
+      timeout 才失败;现在立即 fail closed 并给可行动提示)。
+    - 超时仍只是「未确认=拒绝」,绝不存在「超时后自动发布」路径(语义不变)。
+    - 非空哨兵路径的等待/消费(删除)语义保持不变(docs patchright 路径零改动)。
     """
+    if not confirm_file or not str(confirm_file).strip():
+        cli_log("❌  缺少确认凭据(confirm_gate 被以空哨兵路径调用),拒绝发布 —— fail closed")
+        cli_log("   补齐方法:人工核对内容无误后 touch 系统临时目录下的 vaas-doc-<platform>.go")
+        cli_log("   (如 publish.mjs 打印的确切路径;Windows 可设 VAAS_GATE_DIR 改哨兵基目录)")
+        return False
     if screenshot_path:
         try:
             b.screenshot(screenshot_path)
@@ -601,7 +634,10 @@ def publish_and_verify(b, click_texts, url_pattern, label="发布", timeout=30, 
             if not confirm_gate(b, confirm_file, screenshot_path=screenshot_path, hint=label):
                 return False, b.page.url
         else:
-            screenshot_confirm(b, f"检查标题/正文/封面/标签无误后,回复或回车继续点「{label}」;或自己在浏览器点发布后回车")
+            # W1.1:TTY 确认拿不到(非交互 EOF)= 失败关闭,不点发布
+            if not screenshot_confirm(b, f"检查标题/正文/封面/标签无误后,回复或回车继续点「{label}」;或自己在浏览器点发布后回车"):
+                cli_log(f"❌  {label}:无 TTY 且无确认凭据,拒绝发布(fail closed)")
+                return False, b.page.url
     ok = click_by_text(b, click_texts, label, exact=False)
     if not ok:
         cli_log(f"⚠️  未找到「{label}」按钮,请在浏览器手动点击")
@@ -609,7 +645,9 @@ def publish_and_verify(b, click_texts, url_pattern, label="发布", timeout=30, 
             cli_log(f"⏸️  手动点完后 touch {confirm_file} 让脚本继续验证")
             wait_for_file(confirm_file, timeout=300, hint="等待手动发布")
         else:
-            handoff(f"请在浏览器手动点「{label}」,完成后回车继续")
+            if not handoff(f"请在浏览器手动点「{label}」,完成后回车继续"):
+                cli_log(f"❌  {label}:无 TTY 确认手动发布,拒绝继续(fail closed)")
+                return False, b.page.url
     # 验证 URL
     for _ in range(timeout):
         wait(1)

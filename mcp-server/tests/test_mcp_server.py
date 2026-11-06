@@ -566,13 +566,18 @@ class TestArtifactGC:
 
 class TestAssetsSignedUrl:
     def test_assets_get_hosted_carries_download_url(self, monkeypatch):
-        """Hosted assets_get attaches a fresh signed URL for pull-from-cloud."""
+        """Hosted assets_get attaches a fresh signed URL for pull-from-cloud.
+
+        (fix-hosted-generation-correctness) base URL comes ONLY from
+        VAAS_PUBLIC_URL — never the request host (internal host:port leak).
+        """
         import importlib
         from mcp_server import hosting as H
         monkeypatch.setenv("VAAS_HOSTED", "1")
         monkeypatch.setenv("VAAS_BEARER_TOKEN", "t")
+        monkeypatch.setenv("VAAS_PUBLIC_URL", "http://vaas:30950")
         monkeypatch.setattr(H, "_request",
-                            lambda: type("R", (), {"base_url": "http://vaas:30950/",
+                            lambda: type("R", (), {"base_url": "http://internal-node:30950/",
                                                    "headers": {"x-forwarded-user": "alice"}})())
         monkeypatch.setattr(H, "_download_hmac_key", lambda: b"k" * 8)
         monkeypatch.setattr(H, "_bearer_ok", lambda request: True)
@@ -584,6 +589,10 @@ class TestAssetsSignedUrl:
         monkeypatch.setattr(H, "current_owner", lambda: "alice")
         out = amod.assets_get(id="a-1")
         assert out["download_url"].startswith("http://vaas:30950/download/a-1?")
+        # unset public base: no URL attached, request host must NOT leak
+        monkeypatch.delenv("VAAS_PUBLIC_URL")
+        out3 = amod.assets_get(id="a-1")
+        assert "download_url" not in out3
         # local mode (hosted off): no url attached
         monkeypatch.setenv("VAAS_HOSTED", "")
         out2 = amod.assets_get(id="a-1")

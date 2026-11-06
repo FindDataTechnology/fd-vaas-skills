@@ -12,6 +12,7 @@ import shutil
 from typing import Optional
 
 from ..registry import dispatch
+from ..hosting import current_owner
 from ..generators.video import submit as _video_submit, poll as _video_poll
 
 
@@ -23,9 +24,8 @@ def generate_video_submit(
     first_frame: Optional[str] = None,
     last_frame: Optional[str] = None,
     slug: Optional[str] = None,
-    name: str = "seedance",
 ) -> dict:
-    """Submit an async video job; returns a job id in seconds (registry method: seedance).
+    """Submit an async video job; returns a job id in seconds.
 
     Poll video_job_status until succeeded/failed. Client timeouts may safely
     retry this call's sibling status tool — never resubmit.
@@ -40,8 +40,12 @@ def video_job_status(job_id: str) -> dict:
     """Poll one async video job by id (running/succeeded/failed/expired).
 
     On success the returned payload carries asset_id and a signed download_url.
+
+    Tenant scoping enforced here (generation-jobs: cross-tenant invisible):
+    hosted callers only ever see their own jobs; local stdio resolves to the
+    service owner and sees the whole table as before.
     """
-    return _video_poll(job_id)
+    return _video_poll(job_id, owner=current_owner())
 
 
 def generate_voice(
@@ -73,14 +77,17 @@ def generate_image(
     size: Optional[str] = None,
     output_format: str = "jpeg",
     n: int = 1,
-    reference_image: Optional[str] = None,
     slug: Optional[str] = None,
     name: str = "seedream",
 ) -> dict:
-    """Generate images from a text prompt (registry method: seedream)."""
+    """Generate images from a text prompt (registry method: seedream).
+
+    reference_image (img2img) is not on this surface: no lane has an E2E-
+    proven path, so the parameter was removed instead of advertised.
+    """
     return dispatch("image", name, {
         "prompt": prompt, "size": size, "output_format": output_format,
-        "n": n, "reference_image": reference_image, "slug": slug,
+        "n": n, "slug": slug,
     })
 
 
@@ -110,9 +117,16 @@ def models_voices() -> dict:
     Read before choosing a voice/model: shows capabilities (speed/captions
     support), current status, and pricing notes per lane. The manifest at
     generators/voices_manifest.json is the source of truth for this tool.
+    Each provider block also carries its lane health
+    (health/reason_class/last_verified, from lane_health.json).
     """
     from ..generators.manifest import load_manifest
-    return load_manifest()
+    from ..lane_health import lane_health as _lh
+
+    doc = load_manifest()
+    for pname, prov in (doc.get("providers") or {}).items():
+        prov["lane"] = _lh("voice", pname)
+    return doc
 
 
 def voiceover_assemble(

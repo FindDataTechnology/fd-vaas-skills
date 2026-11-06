@@ -198,13 +198,13 @@ node $SKILL/publish.mjs --slug <name> --runtime patchright --platforms zhihu,wei
 
 **登录态**:patchright 用**独立持久 profile** `VAAS/.profiles/<platform>/`,**不复用 Chrome 登录态**(和 ego-browser 的关键差异)。每平台首次发布要在 patchright 浏览器窗口里扫码/登录一次,profile 存下来后续复用。`login_or_wait` 轮询 URL 检测登录完成(无 stdin 依赖)。
 
-**发布确认门(非交互)**:`.py` 默认半自动 -- 填完一切 + 截图存 `.adapted/<p>/preview.png` + 等 sentinel 文件 `/tmp/vaas-doc-<platform>.go` 出现才点发布。Claude 在后台跑脚本,看到「等待确认」后问你,你说「确认发布」-> Claude `touch /tmp/vaas-doc-<p>.go` 放行。`--auto-publish` 跳过此门(仅你明确要求时加,对应「违反流程直接发=事故」)。
+**发布确认门(非交互)**:`.py` 默认半自动 -- 填完一切 + 截图存 `.adapted/<p>/preview.png` + 等 sentinel 文件(系统临时目录下 `vaas-doc-<platform>.go`,Windows 可设 `VAAS_GATE_DIR` 覆盖基目录)出现才点发布。Claude 在后台跑脚本,看到「等待确认」后问你,你说「确认发布」-> Claude `touch <系统临时目录>/vaas-doc-<p>.go` 放行(确切路径以 publish.mjs 打印的为准)。`--auto-publish` 跳过此门(仅你明确要求时加,对应「违反流程直接发=事故」;上游 note_adapter 路径同闸形态)。
 
 **正文灌入**:`paste_text` 优先剪贴板粘贴(瞬时、保留换行;知乎专栏还能渲染 markdown -> `--markdown` 走 `body.md`,其余平台走 `body.txt` = mdToPlain 去符号但**保留代码块**),失败回退 `execCommand('insertText')` -> 逐行 `typeText`。
 
 **选择器验证状态**:单一可机读源 = `.agents/skills/_shared/publish/platform-registry.json` 的 `selectorStatus` / `lastVerified`。跑 `probe.py <platform>` 后自动回写:
 - ✅ `verified`:zhihu、toutiao、baijiahao、weibo(2026-07-29/30)、weixin(2026-07-30,patchright 链路实测存草稿)、eastmoney(部分,需财经号)
-- ❌ `broken`:xueqiu、tonghuashun -- **两者入口 URL 已失效**(2026-08-11 probe:雪球旧入口 404、同花顺 302 跳投顾入驻引导;当时均未登录)-- 首次发布前**必须先登录,确认真实发文入口,再跑 `probe.py <platform>`** 核对选择器(核对失败加 `--mark-broken`)
+- ❌ `broken`:xueqiu、tonghuashun -- **两者入口 URL 已失效**(2026-08-11 probe:雪球旧入口 404、同花顺 302 跳投顾入驻引导;当时均未登录)-- **已移出默认 `PLATFORMS_DOCS`**(W3.4);首次发布前**必须先登录,确认真实发文入口,再跑 `probe.py <platform>`** 核对选择器,重验通过回写 verified 后方可回归默认集(核对失败加 `--mark-broken`)
 - 上游平台(小红书/抖音/快手)状态为 `upstream`,由 vendored 上游维护,不在本地 probe 范围内
 
 **安装**:

@@ -5,7 +5,7 @@ description: >
   平台差异化偏好、标签、定时由 publish.mjs 编排；上传逻辑走「vendor + 薄适配层」——
   把 social-auto-upload 上游整个 vendor 进 scripts/upstream/，薄适配层 sau_adapter.py 把
   CLI 翻译成上游 <Platform>Video(...).main() 调用。统一 py 运行时（patchright）。
-  支持抖音/小红书/B站/快手/视频号/YouTube 六平台。触发场景：用户说"把这支视频发到
+  支持抖音/小红书/B站/快手/视频号/YouTube/微博/百家号/支付宝生活号/虎扑 十平台。触发场景：用户说"把这支视频发到
   抖音/小红书/B站/视频号/YouTube/快手"、"多平台一起发"、"分发这条视频"、"push to socials"、
   "posting the video"，或者刚做完一支 fd-videos/<slug>/ 里的视频、要走下一步分发时。
   **必须**用本 skill 的 publish.mjs，不要直接手写各平台参数。
@@ -40,17 +40,24 @@ vendor 让我们免费获得上游的 bugfix，`sync-upstream.sh` 一键同步�
 
 ## 支持平台
 
-> 平台**路由**(sau_adapter→upstream / bilibili.py 自有)+ **选择器验证状态**的单一可机读源是
-> `.agents/skills/_shared/publish/platform-registry.json`(图文+视频共用)。下表从它渲染。
+> 平台**路由**(sau_adapter→upstream / bilibili.py 自有)、**定时能力**、**选择器验证状态**的单一可机读源是
+> `.agents/skills/_shared/publish/platform-registry.json`(图文+视频共用)。下表从它渲染（表由 platform-registry.json 派生，改状态跑 probe 回写，别手抄）。
 
-| 平台 | 上传路径 | 核心技术挑战 |
-|---|---|---|
-| 抖音 (douyin) | sau_adapter → upstream | 标准 DOM，无特殊框架 |
-| 小红书 (xiaohongshu) | sau_adapter → upstream ✓已实发 | 标题 ≤ 20 字；话题 ≤ 10 |
-| B站 (bilibili) | bilibili.py（上游用 biliup） | **micro-app shadow DOM** |
-| 快手 (kuaishou) | sau_adapter → upstream | **React Joyride 遮罩** + 视口外按钮；话题 ≤ **4** |
-| 视频号 (weixin) | sau_adapter → upstream | **Wujie shadow DOM** |
-| YouTube | sau_adapter → upstream（需代理） | **Polymer dialog** 4 步流程；"Not made for kids" 必答 |
+| 平台 | 上传路径 | 定时 | 核心技术挑战 |
+|---|---|---|---|
+| 抖音 (douyin) | sau_adapter → upstream | ✅ | 标准 DOM，无特殊框架 |
+| 小红书 (xiaohongshu) | sau_adapter → upstream ✓已实发 | ✅ | 标题 ≤ 20 字；话题 ≤ 10 |
+| B站 (bilibili) | bilibili.py（上游用 biliup） | ❌ | **micro-app shadow DOM** |
+| 快手 (kuaishou) | sau_adapter → upstream | ✅ | **React Joyride 遮罩** + 视口外按钮；话题 ≤ **4** |
+| 视频号 (weixin) | sau_adapter → upstream | ✅ | **Wujie shadow DOM** |
+| YouTube | sau_adapter → upstream（需代理） | ❌ | **Polymer dialog** 4 步流程；"Not made for kids" 必答 |
+| 微博 (weibo) | sau_adapter → upstream | ❌ | 上游 WeiBoVideo（no_strategy） |
+| 百家号 (baijiahao) | sau_adapter → upstream | ❌ | 上游 BaiJiaHaoVideo（no_strategy） |
+| 支付宝生活号 (alipay) | sau_adapter → upstream | ❌ | 上游 AlipayVideo（no_publish_date） |
+| 虎扑 (hupu) | sau_adapter → upstream | ❌ | 上游 HuPuVideo（no_strategy） |
+
+> weibo/baijiahao/alipay/hupu 四平台 2026-10-14 随上游 0012d2c 接入，视频域未实机验证（registry selectorStatus=upstream）；
+> 带 `--schedule` 发布时，不支持定时的平台会在批次组装阶段被剔除并明确提示（不会批跑到一半才失败）。
 
 > py 运行时上传逻辑在 `scripts/upstream/uploader/<platform>_uploader/main.py`，是上游 canonical 代码，不要手改。
 > 平台核心挑战（shadow DOM 结构、字数限制等运行时无关的事实）见 `references/<platform>.md`。
@@ -86,6 +93,11 @@ vendor 让我们免费获得上游的 bugfix，`sync-upstream.sh` 一键同步�
 
 **违反此流程直接发出去 = 事故**。封面文案都没确认就发，发出去撤不回来。
 
+> 人工确认已由**代码强制**（enforce-publish-confirmation-gate W1.2）：publish.mjs 在 spawn 任何上传器之前
+> 校验确认凭据——系统临时目录哨兵 `vaas-video-<platform>.go`（touch 即放行）或 `--confirm-file <path>`；
+> 缺凭据 = 打印逐平台预览后非零退出，**零上传请求发出**；非交互无 TTY 同样失败关闭。
+> `--auto-publish` 是唯一显式旁路参数，回执/台账会标注 `auto_publish: true` 可审计。
+
 ## 用法
 
 ### 一键多平台发布（推荐）
@@ -104,11 +116,12 @@ node $SKILL/publish.mjs --slug finddata-brand-2026 \
   --platforms douyin,xiaohongshu,bilibili,kuaishou,weixin,youtube \
   --tags "科技,开源,AI,数据,程序员"
 
-# 定时发布（除 youtube 外都支持；bilibili.py 不支持定时）
+# 定时发布（仅 registry 声明支持定时的平台收到 --schedule：
+#   douyin/xiaohongshu/kuaishou/weixin；不支持的批次组装阶段剔除并提示）
 node $SKILL/publish.mjs --slug finddata-brand-2026 \
   --title "..." --schedule "2026-07-20 21:30"
 
-# 别真发，先看一眼每个平台会跑的命令
+# 别真发，先看一眼每个平台会跑的命令（不触发确认闸）
 node $SKILL/publish.mjs --slug finddata-brand-2026 --title "..." --dry-run
 ```
 
@@ -140,8 +153,10 @@ python3 $ADAPTER --platform weixin --migrate-profile
 | `--note` | ❌ | 小红书用的笔记正文；未给则退到 `desc` |
 | `--platforms` | ❌ | 逗号分隔平台列表，不给用 .env 的 `PLATFORMS` |
 | `--tags` | ❌ | 逗号分隔标签，不给用 .env 的 `TAGS` 或平台专属 `XXX_TAGS` |
-| `--schedule` | ❌ | `YYYY-MM-DD HH:MM`，不给立即发 |
-| `--dry-run` | ❌ | 只打印命令不执行 |
+| `--schedule` | ❌ | `YYYY-MM-DD HH:MM`，不给立即发；仅发给 registry 声明支持定时的平台，不支持的批次组装时剔除并提示 |
+| `--dry-run` | ❌ | 只打印命令不执行（不触发确认闸） |
+| `--confirm-file` | ❌ | 确认闸哨兵路径（缺省用系统临时目录 `vaas-video-<platform>.go`；Windows 可设 `VAAS_GATE_DIR` 换基目录） |
+| `--auto-publish` | ❌ | 显式旁路人工确认闸（无人值守用，慎用；回执/台账标注 `auto_publish: true`） |
 | `--no-cover` | ❌ | 跳过封面生成与上传，用平台默认封面 |
 | `--cover-only` | ❌ | 只跑封面生成（4 张 + 回写 task.json），不执行发布（给预览确认用） |
 
@@ -155,7 +170,7 @@ publish.mjs 按平台差异组装不同的 CLI 参数：
 |---|---|---|---|---|
 | 抖音 | `--cover-horizontal` + `--cover-vertical`（**自动传两张**） | `--tags` | `--schedule` | 10 |
 | 小红书 | `--cover` | `--tags` | 标题 ≤ 20 字 | 10 |
-| B站 | `--cover` | `--tags` | `--tid` (分区) | - |
+| B站 | `--cover` | `--tags` | 分区走页面默认推荐（浏览器窗口手选；旧 `--tid` 从未生效已移除） | - |
 | 快手 | `--cover` | `--tags` | - | **4**（不是5！） |
 | 视频号 | `--cover` | (描述内 #话题) | 无单独标题字段 | - |
 | YouTube | `--thumbnail` | `--tags` | `--visibility` | - |
@@ -265,8 +280,9 @@ python3 $SKILL/platforms/sau_adapter.py --platform douyin --login
 
 ### B站 (bilibili) — micro-app shadow DOM
 - **micro-app 微前端**：所有内容在 `micro-app[name=video-up].shadowRoot` 内
-- 需选择分区（`--tid`），否则无法发布
+- 分区走页面默认推荐（要指定分区在浏览器窗口手选；旧 `--tid` 参数从未生效，已移除）
 - 走 `bilibili.py`（上游用 biliup 二进制，不在适配层）
+- 发布后验证落地（success/manager 回跳或稿件管理页探到标题）；验证不到 = 非零退出，不写 distribution 成功行
 - 详见 `references/bilibili.md`
 
 ### 小红书 (xiaohongshu) — 标题字数限制

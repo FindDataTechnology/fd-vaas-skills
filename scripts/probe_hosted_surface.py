@@ -18,10 +18,13 @@ Env:
                      (the endpoint probed is <base>/mcp)
   VAAS_PROBE_TOKEN   static service bearer — behind the gateway this is the
                      egress credential; omit it only for direct node access.
+  VAAS_PROBE_USER    tenant identity (X-Forwarded-User) for tools/call checks
+                     against a hosted instance; required when the hosted server
+                     enforces identity on calls (fail-closed). Never printed.
   VAAS_PROBE_TIMEOUT request timeout in seconds (default 30)
 
 Usage:
-  VAAS_PROBE_BASE=http://node:30950 VAAS_PROBE_TOKEN=... \\
+  VAAS_PROBE_BASE=http://node:30950 VAAS_PROBE_TOKEN=... VAAS_PROBE_USER=... \\
       python3 scripts/probe_hosted_surface.py
 
 Output: one [ok]/[FAIL] line per check, the visible tool surface, then a final
@@ -60,6 +63,7 @@ def usage() -> str:
         "(e.g. http://10.0.0.2:30950); probes <base>/mcp\n"
         "  VAAS_PROBE_TOKEN   static service bearer (gateway egress credential); "
         "optional for direct node access\n"
+        "  VAAS_PROBE_USER    tenant identity header for hosted tools/call checks\n"
         "  VAAS_PROBE_TIMEOUT request timeout in seconds (default 30)\n"
         "\n"
         "exit: 0 = PASS, 1 = FAIL, 2 = usage/config error"
@@ -76,6 +80,9 @@ def _post(url: str, payload: dict, session: str | None, token: str,
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    tenant = os.getenv("VAAS_PROBE_USER", "").strip()
+    if tenant:
+        headers["X-Forwarded-User"] = tenant
     if session:
         headers["Mcp-Session-Id"] = session
         headers["MCP-Protocol-Version"] = PROTOCOL_VERSION
@@ -226,6 +233,26 @@ def main() -> int:
                       "tool executed — publish plane leaked into hosted surface")
         except (urllib.error.URLError, OSError, ValueError) as e:
             check("publish_video call rejected", False, f"transport error: {e}")
+
+        # ── check 5: lane health visible in discovery (deliver-hosted-surface
+        # W3): registry_list_generators entries carry lane blocks; down lanes
+        # must be marked down (never advertised as usable).
+        try:
+            status, _, body = _post(url, {
+                "jsonrpc": "2.0", "id": 4, "method": "tools/call",
+                "params": {"name": "registry_list_generators", "arguments": {}},
+            }, session=session, token=token, timeout=timeout)
+            resp = _rpc_response(body, 4)
+            content = ((resp.get("result") or {}).get("content") or [])
+            text = "".join((c.get("text") or "") for c in content if isinstance(c, dict))
+            lanes_found = text.count('"health"') if text else 0
+            downs = text.count('"health": "down"') + text.count('"health":"down"')
+            check("discovery carries lane health",
+                  lanes_found > 0,
+                  f"{lanes_found} lane blocks in registry listing"
+                  + (f"; down lanes: {downs}" if downs else ""))
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            check("discovery carries lane health", False, f"transport error: {e}")
 
     failed = [name for name, ok, _ in checks if not ok]
     print(f"\n{'PASS' if not failed else 'FAIL'}: "

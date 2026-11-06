@@ -24,9 +24,12 @@ Transport:
 """
 
 import json
+import logging
 import os
 import threading
 import time
+
+log = logging.getLogger("vaas.main")
 
 from fastmcp import FastMCP
 from starlette.responses import JSONResponse
@@ -110,13 +113,46 @@ def gc_expired_artifacts(now: float | None = None, ttl_days: int = ARTIFACT_TTL_
         if file_path:
             target = (DOWNLOADS_DIR / file_path).resolve()
             slug_dir = target.parent
-            if slug_dir.is_dir() and str(slug_dir).startswith(str(DOWNLOADS_DIR.resolve())):
-                shutil.rmtree(slug_dir, ignore_errors=True)
+            if slug_dir.is_dir():
+                # containment by real path relation, not string prefix
+                # (downloads vs downloads_evil prefix trap; fix-hosted-generation-correctness)
+                if slug_dir.is_relative_to(DOWNLOADS_DIR.resolve()):
+                    shutil.rmtree(slug_dir, ignore_errors=True)
+                else:
+                    log.warning("GC refused: path escapes downloads: %s", slug_dir)
         conn.execute("DELETE FROM assets WHERE id = ?", (row["id"],))
         removed += 1
     conn.commit()
     conn.close()
     return removed
+
+
+def _load_pricing(strict: bool) -> dict:
+    """Hosted pricing load refuses silent zero-rated metering.
+
+    strict=True (hosted startup): a missing/empty/unreadable table is a
+    config error, not a 0.0 default — usage totals would lie forever.
+    strict=False (local stdio): {} is fine; local rows are informational.
+    """
+    pricing_path = os.getenv("VAAS_PRICING_FILE", "pricing.json")
+    try:
+        with open(pricing_path, encoding="utf-8") as f:
+            doc = json.load(f)
+    except (OSError, ValueError) as e:
+        if strict:
+            raise RuntimeError(
+                f"pricing configuration missing or unreadable: {pricing_path} ({e}); "
+                f"hosted mode refuses silent zero-rated metering — set VAAS_PRICING_FILE "
+                f"to a valid pricing table"
+            ) from e
+        return {}
+    if not isinstance(doc, dict) or not doc:
+        if strict:
+            raise RuntimeError(
+                f"pricing table {pricing_path} is empty — fill real rates or unset hosted mode"
+            )
+        return {}
+    return doc
 
 
 def _start_gc_scheduler() -> None:
@@ -126,9 +162,13 @@ def _start_gc_scheduler() -> None:
             time.sleep(86400)
             try:
                 expire_stale_jobs()
-                gc_expired_artifacts()
-            except Exception:
-                pass
+                removed = gc_expired_artifacts()
+                if removed:
+                    log.info("GC reclaimed %d aged assets", removed)
+            except Exception as e:
+                # A silent disk-leak was the old behavior; disk pressure on
+                # deploy nodes is a known incident class — speak instead.
+                log.warning("GC cycle failed: %s", e)
     thread = threading.Thread(target=_loop, name="vaas-gc", daemon=True)
     thread.start()
 
@@ -176,16 +216,12 @@ async def usage_report(request: Request) -> JSONResponse:
     if not service_auth_ok(request):
         return JSONResponse({"error": "authentication required"}, status_code=401)
 
-    pricing_path = os.getenv("VAAS_PRICING_FILE", "pricing.json")
-    pricing = {}
     try:
-        with open(pricing_path, encoding="utf-8") as f:
-            pricing = json.load(f)
-    except (OSError, ValueError):
-        pricing = {}
+        pricing = _load_pricing(strict=is_hosted())
+    except RuntimeError as e:
+        return JSONResponse({"error": f"pricing_unconfigured: {e}"}, status_code=503)
 
     def _price(row: dict) -> float:
-        key = f"{row['tool']}.{row['unit_type']}"
         rate = (pricing.get(row["tool"]) or {}).get(row["unit_type"], 0.0)
         return round(float(row.get("units") or 0) * float(rate), 6)
 
@@ -208,6 +244,10 @@ def main():
     from .tools.render import ensure_bgm_library
     ensure_bgm_library()  # W4.1: 首启注册种子 BGM 曲库为全局资产（幂等）
     if is_hosted():
+        # Pricing is a startup dependency of the hosted plane: a missing/
+        # empty table means every usage total would silently be ¥0 —
+        # refuse boot loudly instead (fix-hosted-generation-correctness).
+        _load_pricing(strict=True)
         expire_stale_jobs()
         gc_expired_artifacts()
         _start_gc_scheduler()

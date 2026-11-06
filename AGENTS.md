@@ -12,11 +12,12 @@ over two halves:
 
 1. **Creation skills** (`.agents/skills/`) - turn a demand into an asset file.
 2. **Distribution** - the two publish skills ship the asset to platforms. `fd-vaas-publish-videos`
-   ships a video to 6 video platforms; `fd-vaas-publish-docs` ships an article to 9 图文 platforms.
-   Video upload runs a **unified py runtime** (patchright): 5 Playwright platforms go through a
+   ships a video to 10 video platforms; `fd-vaas-publish-docs` ships an article to 11 图文 platforms.
+   Video upload runs a **unified py runtime** (patchright): 9 upstream platforms go through a
    vendored copy of `social-auto-upload` under `scripts/upstream/` via the thin adapter
-   `scripts/platforms/sau_adapter.py`; `bilibili.py` stays local (upstream uses the `biliup` binary,
-   not Playwright). `sync-upstream.sh` re-syncs the vendor from the upstream repo.
+   `scripts/platforms/sau_adapter.py`; `bilibili.py` stays local (patchright-driven; upstream's
+   biliup binary path is not used). `.agents/skills/fd-vaas-publish-videos/scripts/sync-upstream.sh`
+   re-syncs the vendor from the upstream repo.
 
 There is **no monolithic VAAS application** - the workspace wires skills together. The **mainline is
 wired end-to-end** via the `fd-vaas-*` skills (no glue code to write by hand):
@@ -26,8 +27,8 @@ demand / 文案
   -> /fd-vaas-brainstorm           (optional: 选题 + 脚本/图文大纲 planning)
   -> /fd-vaas-video-creator       (文案 -> 口播视频 .mp4 + .srt;  built-in TTS/Seedream/Seedance generators;
                                    OR 录屏/网页操作视频 via ego-browser + cap)
-  -> /fd-vaas-publish-videos       (.mp4 -> 6 video platforms;  unified py runtime: vendored upstream + bilibili.py)
-  -> /fd-vaas-publish-docs         (article -> 9 图文 platforms;  ego-browser instruction-driven)
+  -> /fd-vaas-publish-videos       (.mp4 -> 10 video platforms;  unified py runtime: vendored upstream + bilibili.py)
+  -> /fd-vaas-publish-docs         (article -> 11 图文 platforms;  upstream-note + own-logic runtimes)
 ```
 
 When the user says "make a resource and post it", the flow is:
@@ -56,6 +57,12 @@ via its built-in uploaders under `scripts/platforms/` (thin adapter `sau_adapter
   logins — never commit), `tmp/`.
 - **`scripts/` (root)** holds the multi-provider media bridge: `litellm-bridge.py`,
   `_volcengine_{tts,image,video}.py`, `requirements.txt`, `pyproject.toml`.
+- **Test gate (统一测试闸)**: run `bash scripts/ci-local.sh` — it executes the same four checks as
+  `.github/workflows/ci.yml`: mcp-server pytest, `node --test` suites, registry consistency, and the
+  Dockerfile single-source drift check (`cmp -s Dockerfile deploy/mcp-server.Dockerfile`; regenerate
+  root copy with `bash scripts/gen-root-dockerfile.sh`). A red gate blocks image builds; do not
+  merge or ship with the gate red. Deferred cross-repo debts are tracked in `docs/debt-ledger.md` —
+  check it before closing any change wave.
 
 ## Skills (`.agents/skills/` - the source of truth)
 
@@ -72,11 +79,11 @@ via its built-in uploaders under `scripts/platforms/` (thin adapter `sau_adapter
 | `fd-coding-wifi-tunnel` | share a local service over LAN/WiFi | repo skill | `/wifi-tunnel` |
 | `fd-vaas-brainstorm` | 口播选题矩阵 + 脚本大纲 / 图文草稿（Markdown + 纯文本双版本）+ 差异化角度 | repo skill (prompt) | `/fd-vaas-brainstorm` |
 | `fd-vaas-video-creator` | 文案 -> 口播视频 `.mp4`+`.srt` (TTS+字幕+Remotion), **or** 录屏视频; **built-in TTS/Seedream/Seedance generators** | repo skill | `/fd-vaas-video-creator` |
-| `fd-vaas-publish-videos` | one video -> 6 video platforms (unified py runtime: vendored upstream + `bilibili.py`) | repo skill | `/fd-vaas-publish-videos` |
-| `fd-vaas-publish-docs` | one article -> 9 图文 platforms (ego-browser instruction-driven) | repo skill | `/fd-vaas-publish-docs` |
+| `fd-vaas-publish-videos` | one video -> 10 video platforms (unified py runtime: vendored upstream + `bilibili.py`) | repo skill | `/fd-vaas-publish-videos` |
+| `fd-vaas-publish-docs` | one article -> 11 图文 platforms (upstream-note + own-logic; ego-browser or `--runtime patchright`) | repo skill | `/fd-vaas-publish-docs` |
 | `fd-vaas-dashboard` | content dashboard: lists generated articles + videos | repo skill | `/dashboard` |
 | `fd-vaas-dashboard-sharing` | share the dashboard (tunnel) | repo skill | `/share-dashboard` |
-| `fd-vaas-login` | QR scan-login portal: 6 video platforms status overview + live QR display | repo skill | `/login` · `.agents/skills/fd-vaas-login/` |
+| `fd-vaas-login` | QR scan-login portal: 10 video platforms status overview + live QR display | repo skill | `/login` · `.agents/skills/fd-vaas-login/` |
 | `remotion-*` (7) | scaffold / compose / caption / render Remotion videos | repo skills | `/remotion-create` etc. · `.agents/skills/remotion-*` |
 
 Each skill's `SKILL.md` is the authoritative contract - read it before driving the tool. `officecli`
@@ -84,12 +91,13 @@ and `cap` are external CLIs (run `<cmd> --help` / `cap guide` instead of guessin
 
 ## The two distribution mainlines
 
-### `fd-vaas-publish-videos` - video -> 6 platforms
+### `fd-vaas-publish-videos` - video -> 10 platforms
 
-One video = one `publish.mjs` call -> per-platform preferences + per-platform upload. All 6 platforms
-use a **unified py runtime** (patchright): 5 Playwright platforms route through the thin adapter
+One video = one `publish.mjs` call -> per-platform preferences + per-platform upload. All 10 platforms
+use a **unified py runtime** (patchright): the 9 upstream platforms (douyin/xiaohongshu/kuaishou/weixin/
+youtube + weibo/baijiahao/alipay/hupu added 2026-10-14) route through the thin adapter
 `sau_adapter.py` → vendored upstream (`social-auto-upload`); `bilibili` stays local (`bilibili.py`,
-since upstream uses the `biliup` binary, not Playwright):
+patchright-driven):
 
 | Platform | Upload path | Key technical challenge |
 |---|---|---|
@@ -108,10 +116,12 @@ structure, char limits); quirks in `references/platform-quirks.md`.
 Other Playwright platforms + `bilibili` shadow-DOM still need real-machine verification on a logged-in
 session — run `--dry-run` first, confirm the flow reaches the upload page before trusting a real publish.
 
-### `fd-vaas-publish-docs` - article -> 9 图文 platforms
+### `fd-vaas-publish-docs` - article -> 11 图文 platforms
 
-Platforms: 知乎(zhihu)、微信公众号(weixin)、小红书(xiaohongshu)、雪球(xueqiu)、东方财富号(eastmoney)、
-同花顺财经号(tonghuashun)、今日头条(toutiao)、百家号(baijiahao)、微博(weibo).
+Platforms: upstream-note 3（小红书(xiaohongshu)、抖音(douyin)、快手(kuaishou) - via note_adapter）+ own-logic 8
+（知乎(zhihu)、微信公众号(weixin_mp)、今日头条(toutiao)、百家号(baijiahao)、微博(weibo)、雪球(xueqiu)、
+东方财富号(eastmoney)、同花顺财经号(tonghuashun)). xueqiu/tonghuashun carry `broken` status in
+`platform-registry.json` until re-verified.
 
 This skill is **instruction-driven**: `publish.mjs` only does prep (per-platform 文案/字数/标签/封面
 adaptation) and post-publish recording. The actual browser automation is ego-browser driven by

@@ -55,8 +55,7 @@ node $SKILL/bilibili.mjs \
   --title "视频标题" \
   --desc "视频简介" \
   --tags "标签1,标签2" \
-  --cover /path/to/cover.jpg \
-  --tid 124
+  --cover /path/to/cover.jpg
 ```
 
 ### 命令行参数
@@ -68,10 +67,11 @@ node $SKILL/bilibili.mjs \
 | `--desc` | ❌ | 视频简介 |
 | `--tags` | ❌ | 标签，逗号分隔 |
 | `--cover` | ❌ | 封面图片路径（建议 1920×1080） |
-| `--tid` | ❌ | 分区 ID，默认 124（科普） |
 | `--dry-run` | ❌ | 只打开页面不上传 |
 
-### 常用分区 ID (tid)
+> `--tid` 已移除（2026-11-06，enforce-publish-confirmation-gate W2.1）：分区走页面默认推荐；历史上的 `--tid` 参数只回显不生效，属假承诺。下方分区表仅供人工在页面上手选时参考。
+
+### 常用分区 ID (tid)（人工手选参考）
 
 | 分区 | tid |
 |---|---|

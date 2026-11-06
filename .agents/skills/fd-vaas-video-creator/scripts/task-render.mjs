@@ -62,6 +62,7 @@ function getArg(k) {
 
 const slug = getArg("--slug");
 const voiceArg = getArg("--voice");
+const speedArg = getArg("--speed");
 const compositionArg = getArg("--composition");
 const extraPropsArg = getArg("--extra-props");
 if (!slug) {
@@ -91,6 +92,7 @@ const DEFAULT_PIPELINE = ["tts", "fix-tts-timings", "preflight", "render"];
 // defaults 里的保留键由 pipeline 消费，不透传到 render props
 const RESERVED_DEFAULT_KEYS = new Set([
   "voice",
+  "speed", // TTS 参数（W1.3），不泄漏进 render props
   "tailPad",
   "gapMs",
   "minSegmentMs",
@@ -153,26 +155,6 @@ const ctx = {
 };
 
 // ---------- 内置步骤 ----------
-// Find the most recent Ark-TTS output (matches generate-voiceover.mjs logic)
-function findLatestArkTTS() {
-  const home = process.env.HOME;
-  const candidates = [
-    path.join(home, "Desktop/Ark-TTS"),
-    path.join(home, "Ark-TTS"),
-  ];
-  let newest = null, newestTime = 0;
-  for (const base of candidates) {
-    if (!fs.existsSync(base)) continue;
-    for (const d of fs.readdirSync(base)) {
-      const full = path.join(base, d);
-      if (!fs.statSync(full).isDirectory()) continue;
-      const m = fs.statSync(full).mtimeMs;
-      if (m > newestTime) { newestTime = m; newest = full; }
-    }
-  }
-  return newest;
-}
-
 /** tts: TTS wrapper → voiceover.mp3 + captions-raw.json 落 task 目录 */
 function stepTts(ctx) {
   const scriptPath = path.join(ctx.taskDir, "script.txt");
@@ -197,6 +179,10 @@ function stepTts(ctx) {
   fs.mkdirSync(ttsOutDir, { recursive: true });
   const ttsArgs = [ctx.TTS_WRAPPER, "--text", script, "--output-dir", ttsOutDir];
   if (ctx.voice) ttsArgs.push("--voice", ctx.voice);
+  // speed 进 TTS（harden-creation-chain W1.3）：CLI --speed > type.defaults.speed；
+  // 车道不支持时由 wrapper/出口层按参数诚实条款降级并回传 warnings。
+  const speedVal = speedArg ?? ctx.type?.defaults?.speed;
+  if (speedVal != null) ttsArgs.push("--speed", String(speedVal));
   const ttsRes = spawnSync("node", ttsArgs, { cwd: ctx.REMOTION, encoding: "utf8" });
   if (ttsRes.status !== 0) {
     console.error(ttsRes.stderr || ttsRes.stdout);
@@ -216,6 +202,7 @@ function stepTts(ctx) {
   let captionsSource = null;
   let ttsModel = null;
   let ttsVoice = null;
+  let audioMeasuredSec = null;
   try {
     const marker = "TTS_RESULT_JSON:";
     const line = (ttsRes.stdout || "").split("\n").find((l) => l.startsWith(marker));
@@ -225,10 +212,13 @@ function stepTts(ctx) {
       captionsSource = parsed.captions_source || null;
       ttsModel = parsed.model || null;
       ttsVoice = parsed.voice || null;
+      // 出口层实测音频时长（audio_duration_seconds=实测契约，never 上游自报）
+      audioMeasuredSec = parsed.audio_duration_seconds ?? null;
     }
   } catch { /* 元数据提取失败不阻塞——只影响 manifest 审计字段 */ }
   ctx.ttsModel = ttsModel;
   ctx.ttsVoice = ttsVoice;
+  ctx.audioMeasuredSec = audioMeasuredSec;
 
   ctx.audioExt = path.extname(audioFile);
   ctx.audioName = "voiceover" + ctx.audioExt;
@@ -394,15 +384,18 @@ function stepRender(ctx) {
   task.status = "rendered";
   task.tts = {
     ...task.tts,
-    voice: ctx.voice ?? task.tts?.voice ?? null,
+    // 请求值与实际生效值双记（harden-creation-chain W1.2：CLI --voice 不被
+    // wrapper 回报缺失时静默吞掉）；key 只保留一份（原重复键后者遮蔽前者）。
+    voice: ctx.ttsVoice ?? ctx.voice ?? task.tts?.voice ?? null,
+    voice_requested: ctx.voice ?? task.tts?.voice_requested ?? null,
     provider: ctx.ttsProvider ?? task.tts?.provider ?? null,
     captions_source: ctx.captionsSource ?? task.tts?.captions_source ?? null,
     model: ctx.ttsModel ?? task.tts?.model ?? null,
-    voice: ctx.ttsVoice ?? task.tts?.voice ?? null,
     audio: ctx.audioName,
     captions: "captions.json",
     captionsRaw: "captions-raw.json",
-    audioDurationSec: ctx.lastEndMs / 1000,
+    audioDurationSec: ctx.audioMeasuredSec ?? (ctx.lastEndMs / 1000),
+    audioDurationSource: ctx.audioMeasuredSec ? "measured" : "captions-fallback",
     tokenCount: ctx.caps.length,
   };
   task.render = {

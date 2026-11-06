@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
-"""校验 fd-vaas-login 的 PLATFORM_REGISTRY 与 sau_adapter 的 REGISTRY 是否一致。
+"""校验平台登记的四方一致性（enforce-publish-confirmation-gate W3.2）。
+
+对账源（platform-registry.json 为 canonical，spec「平台健康登记」）：
+  1. _shared/publish/platform-registry.json  — 路由 + 定时能力单一可机读源
+  2. login-manager.py PLATFORM_REGISTRY      — 登录面板 key 直接拼 `--platform`
+  3. sau_adapter.py REGISTRY                 — 视频适配层（9 上游平台 + 标志位）
+  4. fd-vaas-publish-videos/scripts/publish.mjs SAU_PLATFORMS — 视频编排清单
+  5. fd-vaas-publish-docs/scripts/publish.mjs PLATFORMS       — 图文编排清单
+  6. .env.example PLATFORMS_DOCS             — 默认图文平台（broken 必须剔除）
 
 为什么要有这个检查：login-manager 的 registry key 会被直接拼进
 `sau_adapter.py --platform <key>`，起个别名（比如 weibo_video）不会报「未知平台」
 那样直白的错，而是在深处 KeyError / 静默走错分支。加平台时极易踩。
+registry 陈旧而本检查报绿 = 假绿（比没有检查更糟），故 registry 纳入强对账。
 
 用法：
     python3 scripts/check-registry-consistency.py
@@ -12,19 +21,19 @@
 from __future__ import annotations
 
 import ast
+import json
+import re
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+SKILLS = HERE.parent.parent
 LOGIN_MANAGER = HERE / "login-manager.py"
-SAU_ADAPTER = (
-    HERE.parent.parent
-    / "fd-vaas-publish-videos"
-    / "scripts"
-    / "platforms"
-    / "sau_adapter.py"
-)
-PUBLISH_MJS = HERE.parent.parent / "fd-vaas-publish-videos" / "scripts" / "publish.mjs"
+SAU_ADAPTER = SKILLS / "fd-vaas-publish-videos" / "scripts" / "platforms" / "sau_adapter.py"
+VIDEOS_PUBLISH_MJS = SKILLS / "fd-vaas-publish-videos" / "scripts" / "publish.mjs"
+DOCS_PUBLISH_MJS = SKILLS / "fd-vaas-publish-docs" / "scripts" / "publish.mjs"
+PLATFORM_REGISTRY_JSON = SKILLS / "_shared" / "publish" / "platform-registry.json"
+ENV_EXAMPLE = SKILLS.parent.parent / ".env.example"
 
 # 不经 sau_adapter 的平台（走自有 profile / 独立脚本）
 ADAPTER_EXEMPT = {"bilibili"}
@@ -41,44 +50,94 @@ def extract_login_keys(path: Path) -> list[str]:
     raise RuntimeError(f"未在 {path} 找到 PLATFORM_REGISTRY")
 
 
-def extract_adapter_keys(path: Path) -> list[str]:
+def extract_adapter_registry(path: Path) -> dict[str, dict]:
+    """从 sau_adapter.py 静态取出 REGISTRY：平台 → {no_strategy, no_publish_date} 标志。
+
+    标志位决定定时能力真相（no_strategy 上游签名没有 publish_strategy，
+    youtube 无 publish_date），是 registry videos.schedule 的对账基准。
+    """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 if getattr(target, "id", None) == "REGISTRY":
-                    return [k.value for k in node.value.keys]
+                    out: dict[str, dict] = {}
+                    for k, v in zip(node.value.keys, node.value.values):
+                        flags = {}
+                        if isinstance(v, ast.Dict):
+                            for kk, vv in zip(v.keys, v.values):
+                                if isinstance(kk, ast.Constant) and kk.value in (
+                                    "no_strategy", "no_publish_date"
+                                ) and isinstance(vv, ast.Constant):
+                                    flags[kk.value] = bool(vv.value)
+                        out[k.value] = flags
+                    return out
     raise RuntimeError(f"未在 {path} 找到 REGISTRY")
 
 
-def extract_mjs_platforms(path: Path) -> set[str]:
-    """从 publish.mjs 的 SAU_PLATFORMS Set 里取平台名。"""
+def extract_mjs_platforms(path: Path, var: str) -> set[str]:
+    """从 publish.mjs 提取平台清单。
+
+    var="SAU_PLATFORMS" → `new Set([ ... ])` 字符串集合；
+    var="PLATFORMS"     → `{ key: {...}, ... }` 对象字面量的 key。
+    """
     src = path.read_text(encoding="utf-8")
-    start = src.find("const SAU_PLATFORMS")
+    start = src.find(f"const {var}")
     if start == -1:
-        raise RuntimeError(f"未在 {path} 找到 SAU_PLATFORMS")
-    end = src.find("])", start)
+        raise RuntimeError(f"未在 {path} 找到 {var}")
+    if f"const {var} = new Set" in src[start:start + 40]:
+        end = src.find("])", start)
+        block = src[start:end]
+        return set(re.findall(r'"([a-z_]+)"', block))
+    # 对象字面量：取到收尾 `};`，key 形如行首两空格 + 标识符 + `:`
+    end = src.find("};", start)
     block = src[start:end]
-    return {s.strip().strip('"') for s in block.split('"') if s.strip() in _KNOWN(block)}
+    return set(re.findall(r"\n  ([a-z_]+):\s*\{", block))
 
 
-def _KNOWN(block: str) -> set[str]:
-    # 逐个候选 token，凡是被引号包裹且形如平台名的都算
-    import re
+def load_platform_registry(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))["platforms"]
+    except Exception as e:
+        raise RuntimeError(f"platform-registry.json 读取/解析失败（registry 是 canonical 源，坏了必须先修）: {e}")
 
-    return set(re.findall(r'"([a-z_]+)"', block))
+
+def expected_schedule(platform: str, adapter: dict[str, dict]) -> bool:
+    """按运行时真相推导定时能力：adapter 平台看 no_strategy/youtube 特例；自有平台 False。"""
+    if platform in ADAPTER_EXEMPT:
+        return False  # bilibili.py 不支持 --schedule
+    flags = adapter.get(platform)
+    if flags is None:
+        return False
+    if flags.get("no_strategy") or flags.get("no_publish_date"):
+        return False
+    if platform == "youtube":  # 上游 YouTubeVideo 无 publish_date（adapter do_publish 特例 pop）
+        return False
+    return True
 
 
 def main() -> int:
     errors: list[str] = []
 
     login_keys = extract_login_keys(LOGIN_MANAGER)
-    adapter_keys = set(extract_adapter_keys(SAU_ADAPTER))
-    mjs_keys = extract_mjs_platforms(PUBLISH_MJS)
+    adapter = extract_adapter_registry(SAU_ADAPTER)
+    adapter_keys = set(adapter)
+    mjs_video_keys = extract_mjs_platforms(VIDEOS_PUBLISH_MJS, "SAU_PLATFORMS")
+    mjs_docs_keys = extract_mjs_platforms(DOCS_PUBLISH_MJS, "PLATFORMS")
+    registry = load_platform_registry(PLATFORM_REGISTRY_JSON)
+    reg_video = {p for p, v in registry.items() if "videos" in v}
+    reg_docs = {p for p, v in registry.items() if "docs" in v}
 
+    env_defaults_docs: set[str] = set()
+    if ENV_EXAMPLE.exists():
+        m = re.search(r"^PLATFORMS_DOCS=(\S+)", ENV_EXAMPLE.read_text(encoding="utf-8"), re.M)
+        if m:
+            env_defaults_docs = {s for s in m.group(1).split(",") if s}
+
+    print(f"platform-registry 平台数: {len(registry)}（videos {len(reg_video)} / docs {len(reg_docs)}）")
     print(f"login-manager 平台数: {len(login_keys)}")
     print(f"sau_adapter  平台数: {len(adapter_keys)}")
-    print(f"publish.mjs  平台数: {len(mjs_keys)}")
+    print(f"publish.mjs  视频平台数: {len(mjs_video_keys)} / 图文平台数: {len(mjs_docs_keys)}")
 
     # 1) login-manager 的 key 必须能被 adapter 接受（豁免的除外）
     for k in login_keys:
@@ -91,14 +150,52 @@ def main() -> int:
             )
 
     # 2) mjs 侧声明走 adapter 的平台，adapter 必须真的支持
-    for k in sorted(mjs_keys):
+    for k in sorted(mjs_video_keys):
         if k not in adapter_keys:
             errors.append(
                 f"publish.mjs 的 SAU_PLATFORMS 含 '{k}'，但 sau_adapter REGISTRY 没有它（会找不到 script）。"
             )
 
-    # 3) adapter 支持但 mjs 未声明（提示级，不算错——可能是只给 login 用）
-    only_adapter = sorted(adapter_keys - mjs_keys)
+    # 3) registry 视频域 ↔ (SAU_PLATFORMS ∪ 自有平台)：registry 缺路由 = 新平台漏登（spec「新增平台不再漏登」）
+    video_expected = mjs_video_keys | ADAPTER_EXEMPT
+    for k in sorted(reg_video - video_expected):
+        errors.append(
+            f"platform-registry.json 有视频路由 '{k}'，但 publish.mjs SAU_PLATFORMS / 自有平台集合里没有它（registry 与运行时脱节）。"
+        )
+    for k in sorted(video_expected - reg_video):
+        errors.append(
+            f"运行时可发布的视频平台 '{k}'（SAU_PLATFORMS/自有）在 platform-registry.json 没有视频路由条目 —— registry 必须全覆盖，请补 entries。"
+        )
+
+    # 4) registry 图文域 ↔ docs publish.mjs PLATFORMS
+    for k in sorted(reg_docs - mjs_docs_keys):
+        errors.append(
+            f"platform-registry.json 有图文路由 '{k}'，但 fd-vaas-publish-docs publish.mjs PLATFORMS 没有它。"
+        )
+    for k in sorted(mjs_docs_keys - reg_docs):
+        errors.append(
+            f"docs publish.mjs PLATFORMS 含 '{k}'，但 platform-registry.json 没有图文路由条目 —— registry 必须全覆盖。"
+        )
+
+    # 5) 定时能力三方对账：registry videos.schedule 必须等于运行时真相（adapter 标志位 / 自有平台 False）
+    for k in sorted(reg_video):
+        declared = registry[k]["videos"].get("schedule")
+        truth = expected_schedule(k, adapter)
+        if declared is not truth:
+            errors.append(
+                f"platform-registry.json '{k}'.videos.schedule={declared}，与运行时真相不符（应为 {truth}；"
+                f"依据: {'自有平台不支持 --schedule' if k in ADAPTER_EXEMPT else 'sau_adapter no_strategy/no_publish_date/youtube 特例'}）。"
+            )
+
+    # 6) broken 平台不得进默认发布集合（spec「默认排除 broken」）
+    broken = {p for p, v in registry.items() if v.get("selectorStatus") == "broken"}
+    for k in sorted(broken & env_defaults_docs):
+        errors.append(
+            f"'.env.example' 默认 PLATFORMS_DOCS 含 broken 平台 '{k}'（registry selectorStatus=broken）—— 必须重验通过后才可回归默认集。"
+        )
+
+    # 提示级（不算错——可能是只给 login 用）
+    only_adapter = sorted(adapter_keys - mjs_video_keys)
     if only_adapter:
         print(f"ℹ  adapter 有、mjs 未声明（可发布但入口未列）: {only_adapter}")
 
@@ -108,7 +205,7 @@ def main() -> int:
             print(f"   - {e}")
         return 1
 
-    print("\n✅ 注册表一致：login-manager ↔ sau_adapter ↔ publish.mjs")
+    print("\n✅ 注册表一致：platform-registry.json ↔ login-manager ↔ sau_adapter ↔ publish.mjs(视频/图文) ↔ .env.example")
     return 0
 
 

@@ -7,22 +7,31 @@ services:
       context: ..
       dockerfile: deploy/mcp-server.Dockerfile
     restart: unless-stopped
+    # 存活自证（release-verification）：/health 由托管 HTTP 面自带（main.py custom_route）。
+    # 注：compose 的 healthcheck 本身不触发重启，unhealthy→restart 由部署侧 watch 兜底
+    #（见 deploy/health-watch.sh + deploy/README「存活与恢复」）。
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; r=urllib.request.urlopen('http://127.0.0.1:30950/health', timeout=4); sys.exit(0 if r.status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     ports:
-      - "100.64.0.16:30950:30950" # 只绑本机 tailnet IP
+      - "${VAAS_BIND_IP}:30950:30950" # 部署侧注入，只绑本机 tailnet IP
     environment:
       VAAS_HOSTED: "1"
       VAAS_LINE: "wanxing"
       VAAS_PORT: "30950"
       VAAS_BIND: "0.0.0.0"
       VAAS_BEARER_TOKEN: "${VAAS_BEARER_TOKEN:?set in .env}"
-      OPENBAO_ADDR: "http://100.64.0.11:8200" # 跨机走 tailnet
+      OPENBAO_ADDR: "${VAAS_OPENBAO_ADDR:?set in .env}" # 跨机走 tailnet
       OPENBAO_TOKEN: "${VAAS_OPENBAO_TOKEN:?set in .env}"
       VAAS_PUBLIC_URL: "${VAAS_PUBLIC_URL:?set in .env}"
       VAAS_PRICING_FILE: "/run-config/pricing.json"
     volumes:
       - vaas-data:/app/data
       - vaas-downloads:/app/downloads
-      - ../mcp-server/pricing.example.json:/run-config/pricing.json:ro
+      - ../mcp-server/pricing.json:/run-config/pricing.json:ro   # 实价表；example 全零表仅供抄写参考，缺表托管直接拒启
     networks:
       - mcp-registry_default   # 与网关/OpenBAO 同网络（按宿主机实际栈名调整）
 

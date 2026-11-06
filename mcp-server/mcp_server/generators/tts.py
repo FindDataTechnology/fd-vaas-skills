@@ -19,14 +19,20 @@ from pathlib import Path
 from typing import Optional
 
 from ..db import insert_content, generate_id, get_asset_by_slug, delete_asset, scoped_asset_slug
+from ..hosting import download_url, is_hosted
 from ..utils import generate_slug, ensure_directory, get_relative_path, VAAS_ROOT, DOWNLOADS_DIR
-from .runtime import finish, prepare, run_bridge
+from .runtime import finish, prepare, provider_for, run_bridge
+from .errors import classify_upstream_error
 
 # Path to litellm-bridge.py
 SCRIPTS_DIR = VAAS_ROOT / "scripts"
 LITELLM_BRIDGE = SCRIPTS_DIR / "litellm-bridge.py"
 
 MANIFEST_PATH = Path(__file__).with_name("voices_manifest.json")
+
+# Filename extension whitelist: `format` lands in the output filename, so it
+# is an enum, never free text (path-traversal guard).
+AUDIO_FORMATS = {"mp3", "wav"}
 
 # Providers whose upstream actually honors the speed parameter.
 SPEED_SUPPORTED_PROVIDERS = {"volcengine"}
@@ -123,15 +129,42 @@ def synthesize(
         ValueError: If neither text nor file_path provided, or voice unknown.
         RuntimeError: If TTS synthesis fails, or duration cannot be measured.
     """
+    if text and file_path:
+        raise ValueError(
+            "invalid_input: provide either text or file_path, not both"
+        )
     if not text and not file_path:
         raise ValueError("Either text or file_path must be provided")
 
+    # Text source contract (fix-hosted-generation-correctness): file_path is
+    # a TEXT SOURCE — read it and synthesize its content. Historically the
+    # path was handed to the bridge as --input, which aliased onto `text`,
+    # so the literal path string got spoken and billed 0 chars.
+    if file_path:
+        p = Path(file_path)
+        if not p.is_absolute():
+            p = VAAS_ROOT / p
+        try:
+            text = p.read_text(encoding="utf-8")
+        except OSError as e:
+            raise ValueError(f"invalid_input: cannot read file_path ({e.strerror or e})") from e
+        except UnicodeDecodeError as e:
+            raise ValueError("invalid_input: file_path is not valid UTF-8 text") from e
+        if not text.strip():
+            raise ValueError("invalid_input: file_path is empty — nothing to synthesize")
+
+    if format not in AUDIO_FORMATS:
+        raise ValueError(
+            f"invalid_input: format {format!r} not allowed "
+            f"(supported: {sorted(AUDIO_FORMATS)})"
+        )
+
     # Tenant + credential context (guards params first)
     ctx = prepare("tts", {
-        "text": text, "file_path": file_path, "voice": voice, "slug": slug,
+        "text": text, "voice": voice, "slug": slug,
     })
     owner = ctx["owner"]
-    provider_actual = ctx["resolved"].get("provider") or "env"
+    provider_actual = provider_for(ctx, "TTS_PROVIDER")
 
     # ── Idempotent replay: same key + same owner → return the cached asset.
     # Caller-provided slugs were used as the inserted slug historically, so the
@@ -143,7 +176,10 @@ def synthesize(
         if idempotency_key:
             digest = hashlib.sha256(f"{owner}\0tts\0{idempotency_key}".encode()).hexdigest()[:20]
             idem_slug = f"idem-{digest}"
-            replay = get_asset_by_slug(idem_slug, owner=owner)
+            # Rows are stored in the owner-scoped slug domain; the replay
+            # lookup must use the SAME domain or every hosted retry
+            # re-generates and re-bills (was: raw-slug lookup vs scoped write).
+            replay = get_asset_by_slug(scoped_asset_slug(idem_slug, owner), owner=owner)
         if replay is None and slug:
             replay = get_asset_by_slug(scoped_asset_slug(slug, owner), owner=owner)
         if replay:
@@ -152,18 +188,24 @@ def synthesize(
                 abs_path = (DOWNLOADS_DIR / relative)
                 if abs_path.exists():
                     meta = replay.get("metadata") or {}
-                    return {
+                    captions_rel = str(Path(relative).parent / "captions.json")
+                    result = {
                         "id": replay["id"],
                         "slug": replay["slug"],
                         "file_path": relative,
                         "duration_ms": meta.get("duration_ms"),
-                        "captions_path": None,
+                        "captions_path": captions_rel if (DOWNLOADS_DIR / captions_rel).exists() else None,
                         "voice": meta.get("voice"),
                         "voice_requested": meta.get("voice_requested"),
                         "model": meta.get("model"),
-                        "warnings": [],
+                        "warnings": list(meta.get("warnings") or []),
                         "idempotent_replay": True,
                     }
+                    if is_hosted():
+                        url = download_url(replay["id"], owner)
+                        if url:
+                            result["download_url"] = url
+                    return result
             # stale/failed record: remove and regenerate
             delete_asset(replay["id"])
 
@@ -186,16 +228,14 @@ def synthesize(
     audio_path = output_dir / f"{slug}.{format}"
     captions_path = output_dir / "captions.json" if enable_subtitles else None
 
-    # Build command
+    # Build command — text always arrives via --text now: file_path was
+    # resolved into `text` above (the bridge's --input alias used to land
+    # the literal path string as the speech text).
     cmd = [
         "python", str(LITELLM_BRIDGE), "tts",
-        "--output", str(audio_path)
+        "--output", str(audio_path),
+        "--text", text,
     ]
-
-    if text:
-        cmd.extend(["--text", text])
-    elif file_path:
-        cmd.extend(["--input", file_path])
 
     if voice_requested:
         cmd.extend(["--voice", voice_requested])
@@ -216,7 +256,7 @@ def synthesize(
     try:
         stdout = run_bridge(cmd, ctx)
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"TTS synthesis failed: {e.stderr}")
+        raise classify_upstream_error("generate_voice", e.stderr, provider_actual) from e
 
     # Parse output
     try:
@@ -235,8 +275,9 @@ def synthesize(
     prov_manifest = (manifest.get("providers") or {}).get(provider_actual) or {}
     if enable_subtitles and prov_manifest.get("captions_supported") is False:
         warnings.append(
-            f"provider '{provider_actual}' does not support word-level captions; "
-            f"request proceeded without captions"
+            f"provider '{provider_actual}' does not return official word-level "
+            f"timestamps; captions are synthesized from measured segment durations "
+            f"when available (captions_source=synthetic)"
         )
 
     # Measure real duration from the produced file (never trust upstream fields)
@@ -256,6 +297,10 @@ def synthesize(
         "api_latency_ms": output.get("api_latency_ms"),
         "idempotency_key": idempotency_key,
         "warnings": warnings,
+        # captions 来源成元数据（spec ciyuan-lane-providers「manifest 记录字幕来源」）：
+        # official=官方逐字戳 / synthetic=出口层合成兜底（词元档常态）
+        "captions_source": output.get("captions_source"),
+        "segments": output.get("segments"),
     }
 
     scoped = scoped_asset_slug(slug, ctx["owner"])
@@ -277,6 +322,8 @@ def synthesize(
         "duration_ms": duration_ms,
         "api_latency_ms": output.get("api_latency_ms"),
         "captions_path": get_relative_path("audio", slug, "captions.json") if captions_path and captions_path.exists() else None,
+        "captions_source": output.get("captions_source"),
+        "segments": output.get("segments"),
         "voice": output.get("voice"),
         "voice_requested": voice_requested,
         "model": output.get("model"),

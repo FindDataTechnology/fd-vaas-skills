@@ -214,8 +214,10 @@ def init_schema(db_path: Optional[Path] = None) -> None:
             provider TEXT NOT NULL,
             model TEXT,
             units REAL NOT NULL DEFAULT 1,
-            unit_type TEXT NOT NULL,           -- image|char|second|render
-            credential_source TEXT NOT NULL,   -- pool|default|env
+            unit_type TEXT NOT NULL,           -- image|char|second|render|doc
+            credential_source TEXT NOT NULL,   -- pool|default|env|local
+                                               -- (local = deterministic render plane,
+                                               --  runs on local compute, no external credential)
             asset_id TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )

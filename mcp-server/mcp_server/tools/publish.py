@@ -121,7 +121,15 @@ def publish_simulate(slug: str, type: str = "video", platforms: Optional[list[st
     if tags:
         cmd += ["--tags", ",".join(tags)]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(script.parent))
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True,
+                                cwd=str(script.parent), timeout=120)
+    except subprocess.TimeoutExpired:
+        return {
+            "slug": slug, "type": type, "dry_run": True,
+            "exit_code": -1,
+            "error": "timeout: dry-run script exceeded 120s wall clock",
+        }
     return {
         "slug": slug, "type": type, "dry_run": True,
         "exit_code": result.returncode,

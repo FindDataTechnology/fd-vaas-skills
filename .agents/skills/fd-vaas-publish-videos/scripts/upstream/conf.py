@@ -27,7 +27,9 @@ LOCAL_CHROME_PATH = ""
 # adapter's --headless flag (youtube/xiaohongshu tolerate headless).
 LOCAL_CHROME_HEADLESS = False
 
-DEBUG_MODE = True
+# W6.2 复核关断:DEBUG_MODE 会让上游 uploader 打印/落盘调试行为,默认必须 False。
+# 临时排查时再手动打开,不随 vendor 常驻 True。
+DEBUG_MODE = False
 
 # YouTube is blocked in CN; point at the local proxy when uploading to YT.
 # Set VAAS_YT_PROXY=http://127.0.0.1:7892 (or similar) in the environment.

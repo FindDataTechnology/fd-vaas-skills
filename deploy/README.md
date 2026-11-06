@@ -46,15 +46,15 @@ secret/vaas/service/default/download-hmac  # 下载签名密钥 {value}
 
 ```jsonc
 // secret/vaas/pool/wanxing/tts —— 组3 core（豆包/腾讯云语音，健康）
-{"api_key": "sk-...", "base_url": "https://router.finddatatech.cloud",
+{"api_key": "sk-...", "base_url": "<CIYUAN_GATEWAY_BASE>",
  "model": "qwen3-tts-flash", "voice": "101001", "provider": "ciyuan"}
 
 // secret/vaas/pool/wanxing/image —— 组9 image-video（上游账号 40 openai-next）
-{"api_key": "sk-...", "base_url": "https://router.finddatatech.cloud",
+{"api_key": "sk-...", "base_url": "<CIYUAN_GATEWAY_BASE>",
  "model": "gemini-3-pro-image", "provider": "ciyuan"}
 
 // secret/vaas/pool/wanxing/video —— 组9（同一把 key）
-{"api_key": "sk-...", "base_url": "https://router.finddatatech.cloud",
+{"api_key": "sk-...", "base_url": "<CIYUAN_GATEWAY_BASE>",
  "model": "doubao-seedance-2-0-fast-260128", "provider": "ciyuan"}
 ```
 
@@ -68,14 +68,33 @@ secret/vaas/service/default/download-hmac  # 下载签名密钥 {value}
 - **生产模式**（2026-10-06 起）：file backend + `./openbao/data` 卷，**重启后 SEALED**。
 - **解封配方**（root-only 文件含 unseal key 与 root token；栈 `.env` 的 OPENBAO_TOKEN
   必须同步为当前 root token）：
-  `python3 -c "import json,urllib.request; init=json.load(open('/root/openbao-init-20261006.json')); urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8200/v1/sys/unseal', method='PUT', data=json.dumps({'key': init['unseal_keys_b64'][0]}).encode()))"`
+  `python3 -c "import json,urllib.request; init=json.load(open('/root/<OPENBAO_INIT_FILE>')); urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8200/v1/sys/unseal', method='PUT', data=json.dumps({'key': init['unseal_keys_b64'][0]}).encode()))"`
 - **VAAS policy token**：`vaas-policy`（仅 `secret/data/vaas/*`），10 年期 orphan
-  token；部署密钥在部署节点 `/root/vaas-deploy-secrets.txt`（600）。
+  token；部署密钥在部署节点 `/root/<VAAS_DEPLOY_SECRETS_FILE>`（600）。
 - 迁移回滚件：`/root/openbao-snapshot-20261006.json`（dev→file 当日全量导出，回填校验
   3/3 哈希一致）。
 - 两个 compose 都改过：`docker-compose.yml` 与 **权威的 `docker-compose.prebuilt.yml`**
   （容器由它创建；重建用 `docker compose -f docker-compose.prebuilt.yml up -d
   --no-deps --force-recreate --no-build <svc>`，不要走默认 yml——它会尝试本地 build）。
+
+## 存活与恢复（runbook）
+
+- **健康探针**：容器 `/health`（`main.py` custom_route）+ compose `healthcheck`（示例见
+  `docker-compose.vaas.example.yml`）。存活态可 `docker inspect -f '{{.State.Health.Status}}' vaas-wanxing`。
+- **unhealthy 自愈**：compose 的 healthcheck 不自动重启，部署侧用 `deploy/health-watch.sh` 兜底
+  （连续 unhealthy 达阈值即 `docker restart`，默认阈值 2 次、容器名 `vaas-wanxing`，env 可调）。
+  挂 root crontab：`*/5 * * * * bash <DEPLOY_DIR>/health-watch.sh >> /var/log/vaas-health-watch.log 2>&1`。
+- **进程级自愈**：`restart: unless-stopped` 覆盖崩溃/OOM；单容器单节点是已知单点（见下）。
+- **密钥库重启后 SEALED**：VAAS 起来但取不到凭证 → `credential_unavailable`。先按上方「OpenBAO 运维」
+  解封配方 unseal，再 `docker restart vaas-wanxing`（policy token TTL 缓存会自然失效）。
+  root key 文件路径与 OPENBAO_TOKEN 同步口径见上节；本仓不落真值。
+- **单点风险与备份责任**：实例是单容器单节点。数据面 = `vaas-data`(DB) + `vaas-downloads`(产物) 两个
+  named volume，宿主 docker 卷目录，**备份归部署节点运维**（本仓不提供生产坐标、不代管数据）。
+  重节点/迁移前 `docker compose ... down` 前先备份两卷；节点重启后确认容器已 `running` 且 `/health` 绿。
+- **外依赖债务**：车道封禁/CI 停摆/真机复验等跨仓未销账项，统一登记在
+  [`docs/debt-ledger.md`](../docs/debt-ledger.md)。
+- **验证一次自愈生效**（上线后做一次，留时间线）：`docker kill` 主进程 → 观察 restart 策略拉起 →
+  `/health` 回绿；人为使 healthcheck 失败（如临时错 port）→ 观察 health-watch.sh 到阈值重启。
 
 ## 謙面注册（`/vaas-wanxing` 先行）
 

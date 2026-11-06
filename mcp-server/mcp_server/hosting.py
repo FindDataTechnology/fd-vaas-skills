@@ -101,12 +101,14 @@ def verify_download(asset_id: str, owner: str, exp: int, signature: str) -> bool
 
 
 def download_url(asset_id: str, owner: str, ttl: int = DOWNLOAD_TTL_SECONDS) -> Optional[str]:
-    """Build an absolute signed URL; needs a base (request host or VAAS_PUBLIC_URL)."""
+    """Build an absolute signed URL — base comes ONLY from explicit config.
+
+    Historically fell back to the request host, which handed internal
+    host:port (gateway/proxy side) to tenants when VAAS_PUBLIC_URL was unset
+    (fix-hosted-generation-correctness). No base now means no URL: callers
+    must configure VAAS_PUBLIC_URL at deploy and can still sign later.
+    """
     base = os.getenv("VAAS_PUBLIC_URL", "").rstrip("/")
-    if not base:
-        request = _request()
-        if request is not None:
-            base = str(request.base_url).rstrip("/")
     if not base:
         return None
     signed = sign_download(asset_id, owner, ttl)

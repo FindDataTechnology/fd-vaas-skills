@@ -41,7 +41,7 @@ def submit(
     if not api_key:
         raise ValueError("CIYUAN_API_KEY is required for ciyuan video")
     if not base_url:
-        raise ValueError("CIYUAN_BASE_URL is required for ciyuan video (e.g. https://router.finddatatech.cloud)")
+        raise ValueError("CIYUAN_BASE_URL is required for ciyuan video (e.g. <CIYUAN_GATEWAY_BASE>)")
 
     content: list = [{"type": "text", "text": prompt}]
     if first_frame:
@@ -101,6 +101,34 @@ def poll(
             return last_doc
         time.sleep(interval_seconds)
     raise RuntimeError(f"ciyuan video poll timed out after {timeout_seconds}s (last status: {last_doc.get('status')})")
+
+
+def status_once(
+    *,
+    task_id: str,
+    api_key: str,
+    base_url: str,
+) -> dict:
+    """Single fast status read for the hosted poll tool — NO internal loop.
+
+    (fix-hosted-generation-correctness) The hosted `video_job_status` tool
+    must return in seconds; waiting belongs to the client's retry cadence,
+    not to a subprocess blocking up to 600s inside the call. On 5xx/timeout
+    the error propagates so the caller can classify it as transient and
+    leave the job running.
+    """
+    if not api_key:
+        raise ValueError("CIYUAN_API_KEY is required for ciyuan video")
+    if not base_url:
+        raise ValueError("CIYUAN_BASE_URL is required for ciyuan video")
+    req = urllib.request.Request(
+        base_url.rstrip("/") + "/v1/contents/generations/tasks/" + task_id,
+        method="GET", headers=_headers(api_key),
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        doc = json.loads(resp.read().decode("utf-8"))
+    doc.setdefault("status", "queued")
+    return doc
 
 
 def download(*, video_url: str, output_path, timeout_seconds: int = 300) -> dict:

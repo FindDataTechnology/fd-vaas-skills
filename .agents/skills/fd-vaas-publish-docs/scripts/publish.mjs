@@ -26,7 +26,8 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
-import { loadEnv, truncate, stripMd, mdToPlain, summarize, limitTags } from "../../_shared/publish/publish-common.mjs";
+import { loadEnv, truncate, stripMd, mdToPlain, summarize, limitTags, resolvePython } from "../../_shared/publish/publish-common.mjs";
+import { defaultGateFile, resolveTempDir, GATE_PREFIX_DOC } from "../../_shared/publish/confirm-gate.mjs";
 
 // ─── args ──────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -100,6 +101,8 @@ if (recordMode) {
   meta.distribution = meta.distribution ?? [];
   const now = new Date().toISOString();
   const dbWriter = path.join(VAAS, "data", "db_writer.py");
+  // W5.2:平台感知 Python 启动器(record 模式不读 .env,只认进程环境 PYTHON)
+  const RECORD_PY = resolvePython(process.env.PYTHON);
   for (const p of recPlatforms) {
     const spec = PLATFORMS[p];
     if (!spec) { console.error(`⚠️  未知平台 ${p},跳过`); continue; }
@@ -112,7 +115,7 @@ if (recordMode) {
     });
     // 统一库:记录文章分发 + 平台变体(标题)
     if (fs.existsSync(dbWriter)) {
-      spawnSync("python3", [
+      spawnSync(RECORD_PY, [
         dbWriter, "distribute", slug, p,
         spec.editor, cliTitle ?? meta.title ?? "",
         process.env.DOC_SCHEDULE ?? "", "article"
@@ -126,7 +129,7 @@ if (recordMode) {
   const summary = recPlatforms.join(", ");
   fs.appendFileSync(historyPath, `- ${now} - publish-docs: ${summary}\n`);
   if (fs.existsSync(dbWriter)) {
-    spawnSync("python3", [dbWriter, "history", slug, "publish-docs", summary], { stdio: "inherit" });
+    spawnSync(RECORD_PY, [dbWriter, "history", slug, "publish-docs", summary], { stdio: "inherit" });
   }
   console.log(`\n已回写 ${metaPath} 的 distribution[](${meta.distribution.length} 条)`);
   process.exit(0);
@@ -305,19 +308,26 @@ for (const item of plan) {
 }
 
 // ─── patchright 运行时:逐平台 spawnSync .py ────────────
+let publishFailures = 0; // W2.2:聚合子进程状态决定自身退出码(旧版无条件 exit 0 吞失败)
 if (runtime === "patchright" && !dryRun) {
-  const PYTHON = env.PYTHON || "python3";
+  const PYTHON = resolvePython(env.PYTHON || process.env.PYTHON); // W5.2:python3/py/python 探测
   const PLATFORMS_DIR = path.join(VAAS, ".agents", "skills", "fd-vaas-publish-docs", "scripts", "platforms");
   console.log(`\n🚀 patchright 运行时:逐平台 spawnSync (${PYTHON}) 串行`);
-  console.log(`   路由:xiaohongshu/douyin/kuaishou → note_adapter.py(上游 Note 实现);其余 → platforms/<p>.py(自有逻辑)`);
-  console.log(`   发布前确认(仅自有逻辑平台):Claude 看到「等待确认」后问你,你说确认 -> touch /tmp/vaas-doc-<platform>.go 放行\n`);
+  console.log(`   路由:xiaohongshu/douyin/kuaishou → note_adapter.py(上游 Note 实现,同样过确认闸);其余 → platforms/<p>.py(自有逻辑)`);
+  console.log(`   发布前确认:闸凭据=系统临时目录哨兵文件(Windows 可写;VAAS_GATE_DIR 可覆盖基目录)。`);
+  console.log(`   Claude 看到「等待确认」后问你,你说确认 -> touch ${path.join(resolveTempDir(), `vaas-doc-<platform>.go`)} 放行\n`);
   for (const item of plan) {
     const { platform, spec } = item;
     const dir = path.join(adaptedDir, platform);
+    // 哨兵路径与 Python 侧(browser_utils.default_gate_file / note_adapter.gate_file)同命名同语义
+    const gateFile = defaultGateFile(platform, GATE_PREFIX_DOC);
 
     // 上游图文平台 → note_adapter.py(复用 vendored 上游 Note 实现)
     if (UPSTREAM_NOTE.has(platform)) {
       const argv = buildNoteArgv(dir);
+      // W1.3:确认闸参数透传——note 路径与自有路径同形态,未确认零上传
+      argv.push("--confirm-file", gateFile);
+      if (autoPublish) argv.push("--auto-publish");
       if (headless) argv.push("--headless");
       console.log(`\n▶▶ ${platform} (${spec.name}) [上游 Note]`);
       console.log("  " + [PYTHON, ...argv.map((a) => (a.includes(" ") ? `"${a}"` : a))].join(" "));
@@ -327,12 +337,13 @@ if (runtime === "patchright" && !dryRun) {
         env: { ...process.env, VAAS_ROOT: VAAS },
       });
       console.log(`${res.status === 0 ? "✅" : "❌"} ${platform} exit ${res.status}`);
+      if (res.status !== 0) publishFailures++;
       continue;
     }
 
     // 自有逻辑平台 → platforms/<p>.py
     const script = path.join(PLATFORMS_DIR, `${platform}.py`);
-    if (!fs.existsSync(script)) { console.error(`⚠️  无 ${script},跳过 ${platform}`); continue; }
+    if (!fs.existsSync(script)) { console.error(`⚠️  无 ${script},跳过 ${platform}`); publishFailures++; continue; }
     const bodyFile = spec.markdown ? path.join(dir, "body.md") : path.join(dir, "body.txt");
     const argv = [
       script,
@@ -341,7 +352,7 @@ if (runtime === "patchright" && !dryRun) {
       "--tags", fs.readFileSync(path.join(dir, "tags.txt"), "utf8").trim(),
       "--cover", fs.readFileSync(path.join(dir, "cover.txt"), "utf8").trim(),
       "--summary", fs.readFileSync(path.join(dir, "summary.txt"), "utf8").trim(),
-      "--confirm-file", `/tmp/vaas-doc-${platform}.go`,
+      "--confirm-file", gateFile,
       "--preview", path.join(dir, "preview.png"),
     ];
     if (spec.markdown) argv.push("--markdown");
@@ -356,6 +367,7 @@ if (runtime === "patchright" && !dryRun) {
       env: { ...process.env, VAAS_ROOT: VAAS },
     });
     console.log(`${res.status === 0 ? "✅" : "❌"} ${platform} exit ${res.status}`);
+    if (res.status !== 0) publishFailures++;
   }
 }
 
@@ -374,4 +386,10 @@ if (dryRun) {
   console.log("   发完逐平台回写:node publish.mjs --slug <name> --record --platforms <已发> --title \"...\"");
 }
 console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+// W2.2:聚合子进程退出码——任一平台失败即非零(与 videos/publish.mjs 的 failCount 形态同口径)。
+if (publishFailures > 0) {
+  console.log(`\n⚠️  ${publishFailures} 个平台发布失败,见上方逐平台 exit 码`);
+  process.exit(1);
+}
 process.exit(0);

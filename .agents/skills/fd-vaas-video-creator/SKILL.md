@@ -56,6 +56,7 @@ compatibility: Node.js 18+;ffmpeg/ffprobe;Remotion 项目 VAAS/remotion-app;fd-b
 剧本的画面要和内容保持一致，用适量的画面保证视频的表达更有利
 用户制作口播视频的时候，用remotion生成页面，如果不是用户要求，不要用ai生图
 remotion渲染视频前要注意使用正确的音频和字幕文件
+本 skill 走本地 node 链（Remotion）；无本地环境的用户走 hosted MCP `render_video`（HTML 链，支持 BGM、句级字幕）。两条执行体的选择与能力差异见仓库 README「双执行器路由」一节。
 
 
 ## 输入约定
@@ -217,12 +218,13 @@ node $SKILL/fix-tts-timings.mjs \
 ### 3. 算帧数
 
 ```bash
-# 用 captions 最后一个 endMs 更稳(TTS 官方给的音频精确长度)
-python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); print(round(c[-1]["endMs"]/1000*30)+15)' \
-  public/captions-<ts>-fixed.json
-```
+# 用 ffprobe 实测音频时长(唯一正确口径;captions 末 endMs 会因尾部静音偏短,
+# 导致 preflight drift>0.5s 失败——见「关键注意点」;task-render 管线已自动
+# 按实测口径推导,此节仅供手工重渲参考)
+ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 \
+  <task_dir>/voiceover.mp3
+# 帧数 = ceil(duration * fps) + 15
 
-或用 ffprobe:`ceil(duration * fps) + 15`。
 
 ### 4. 体检(preflight)
 

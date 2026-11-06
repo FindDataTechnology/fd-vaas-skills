@@ -132,6 +132,28 @@ if [ ! -f ".env" ]; then
 else
     ok ".env 已存在"
 fi
+
+# mcp-server（MCP 工具平面，stdio）依赖 + .mcp.json 模板
+if [ -d "mcp-server" ] && command -v python3 &>/dev/null; then
+    if python3 -c "import fastmcp" 2>/dev/null && (cd mcp-server && python3 -c "import mcp_server.main" 2>/dev/null); then
+        ok "mcp-server 平面依赖可用（stdio 工具面就绪）"
+    else
+        echo "📦 安装 mcp-server 依赖（stdio 工具平面）..."
+        if python3 -m pip install --quiet -e ./mcp-server; then
+            ok "mcp-server 安装完成（python3 -m pip install -e ./mcp-server）"
+        else
+            warn "mcp-server 依赖安装失败，请手动执行: python3 -m pip install -e $ROOT/mcp-server"
+        fi
+    fi
+    if [ ! -f ".mcp.json" ]; then
+        printf '{\n  "mcpServers": {\n    "vaas": {\n      "command": "python3",\n      "args": ["-m", "mcp_server.main"],\n      "cwd": "%s/mcp-server",\n      "env": {}\n    }\n  }\n}\n' "$ROOT" > .mcp.json
+        ok "已生成 .mcp.json（stdio 接入 23 工具面；密钥走 .env，勿写入此文件）"
+    else
+        ok ".mcp.json 已存在（跳过生成）"
+    fi
+else
+    warn "缺 python3 或 mcp-server 目录，MCP 工具平面未配置；stdio 接入需: python3 -m pip install -e mcp-server"
+fi
 echo ""
 
 # ---------- 3. 技能链接（.claude/skills → .agents/skills） ----------

@@ -1,0 +1,13 @@
+{
+  "_comment": "VAAS 生产计价表（fix-hosted-generation-correctness W3.1）。口径：audio 按 manifest price_note 实价（腾讯云 TTS ¥0.3/万字符 = ¥0.00003/字符）；image/video 车道现网 down（DEBT-LANE-9-01），实价待上游修复后按牌价核对——保持 0.0 并在车道修复时更新。render 面为本地算力，0.0 属设计。hosted 启动对此文件严格校验：缺失/为空 = 拒启，不再静默全零折算。",
+  "currency": "CNY",
+  "generate_image": {"image": 0.0},
+  "generate_voice": {"char": 0.00003},
+  "voiceover_assemble": {"second": 0.0, "render": 0.0},
+  "generate_video_submit": {"second": 0.0},
+  "generate_video": {"second": 0.0},
+  "generate_cover": {"image": 0.0, "render": 0.0},
+  "render_video": {"second": 0.0, "render": 0.0},
+  "render_still": {"image": 0.0, "render": 0.0},
+  "render_document": {"doc": 0.0, "render": 0.0}
+}

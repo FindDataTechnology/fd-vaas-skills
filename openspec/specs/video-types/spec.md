@@ -6,6 +6,7 @@
 VAAS 视频类型注册表：每种视频类型声明输入契约与对应 Remotion composition，支撑可扩展的口播视频模板体系。
 
 ## Requirements
+
 ### Requirement: 图文轮播视频（carousel）
 
 系统 SHALL 提供 carousel 类型：每段口播配一张图片场景（Ken Burns 推拉 + 交叉淡入转场）。输入 SHALL 为口播稿 + 图片列表；图片项 MAY 为本地路径或 seedream 提示词（类型声明 `generate: true` 时自动补图，补图清单 MUST 在渲染前列出供确认）。图片数少于场景数时 SHALL 循环复用且相邻场景不重复同图。
@@ -50,7 +51,7 @@ VAAS 视频类型注册表：每种视频类型声明输入契约与对应 Remot
 
 ### Requirement: 金句文字动画视频（kinetic-quote）
 
-系统 SHALL 提供 kinetic-quote 类型：纯文字动效，逐句入场、关键词放大变色，文字出现时机与逐字 captions 严格同步。关键词 SHALL 优先采用口播稿中的显式标记。该类型 MUST NOT 依赖任何图片素材。
+系统 SHALL 提供 kinetic-quote 类型：纯文字动效，逐句入场、关键词放大变色，文字出现时机与句级字幕对齐。关键词 SHALL 优先采用口播稿中的显式标记。该类型 MUST NOT 依赖任何图片素材。逐字级同步为 stretch 目标，v1 承诺句级对齐（HTML 渲染器口径）。
 
 #### Scenario: 纯文字渲染
 
@@ -58,6 +59,12 @@ VAAS 视频类型注册表：每种视频类型声明输入契约与对应 Remot
 - **THEN** 产出逐句入场的文字动画视频
 - **AND** 标记词以放大变色样式突出
 - **AND** 全程无图片素材依赖
+
+#### Scenario: 句级对齐
+
+- **WHEN** 口播稿含 4 句而音频总时长 T
+- **THEN** 每句入场时刻按其在段内比例位置对齐
+- **AND** 句切换与句级字幕同步
 
 ### Requirement: 热点速报视频（news-flash）
 
@@ -77,3 +84,19 @@ VAAS 视频类型注册表：每种视频类型声明输入契约与对应 Remot
 - **WHEN** 新用户查看任一类型的目录
 - **THEN** 能找到 README 与可直接运行的 example 输入
 - **AND** 用 example 渲染出片无需阅读其他文档
+
+### Requirement: 类型渲染器声明
+
+每个类型的 type.json SHALL 含 `renderer` 字段声明其渲染器（`html` = 类型场景构建器，经 presentation-plane 的 type 模式渲染；历史上 Remotion 管线产物形态保留但不再是 render_video 的执行体）。type.json 的 inputs/pipeline 声明 SHALL 保持为类型输入契约的唯一真源；渲染器切换 MUST NOT 改变 inputs 契约。
+
+#### Scenario: 渲染器切换不改输入契约
+
+- **WHEN** 类型 type.json 标注 renderer=html
+- **THEN** 该类型的 inputs 校验规则与切换前一致
+- **AND** 既有调用方以相同 inputs 调用无需修改
+
+#### Scenario: 结构校验前置不变
+
+- **WHEN** 类型管线声明 validate-structure（如 news-flash 的要点数对照）
+- **THEN** HTML 渲染器在渲染前执行同等结构校验
+- **AND** 校验失败的报错形态与既有口径一致（列出对照、零部分产物）

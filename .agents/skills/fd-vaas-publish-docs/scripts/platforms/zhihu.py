@@ -22,7 +22,7 @@ add_publish_path()
 from browser_utils import (  # noqa: E402
     Browser, cli_log, wait,
     default_profile_dir, paste_text, fill_title, upload_images,
-    click_by_text, confirm_gate,
+    click_by_text, confirm_gate, default_gate_file,
 )
 
 EDITOR = "https://zhuanlan.zhihu.com/write"
@@ -75,7 +75,7 @@ with Browser(profile, headless=args.headless) as b:
     cli_log("🌐 打开知乎专栏编辑器...")
     if not logged_in(b):
         b.goto("https://www.zhihu.com/signin", then_wait=3)
-        if not confirm_gate(b, args.confirm_file or "/tmp/vaas-doc-zhihu-login.go",
+        if not confirm_gate(b, args.confirm_file or default_gate_file("zhihu-login"),
                            hint="扫码登录知乎后回车继续"):
             cli_log("❌ 登录超时,退出")
             sys.exit(1)
@@ -116,7 +116,7 @@ with Browser(profile, headless=args.headless) as b:
     cli_log(f"     3. 点击发布按钮")
 
     # 发布确认门
-    if not confirm_gate(b, args.confirm_file or "/tmp/vaas-doc-zhihu.go",
+    if not confirm_gate(b, args.confirm_file or default_gate_file("zhihu"),
                         screenshot_path=args.preview, hint="发布知乎"):
         cli_log("⚠️  未确认发布,退出")
         sys.exit(1)

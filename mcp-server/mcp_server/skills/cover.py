@@ -5,13 +5,22 @@ Wraps generate-cover.mjs via subprocess.
 """
 
 import json
+import logging
+import os
 import subprocess
 from pathlib import Path
 from typing import Optional
 
-from ..db import insert_content, generate_id, record_usage
+from ..db import insert_content, generate_id, record_usage, scoped_asset_slug
 from ..hosting import current_owner
 from ..utils import generate_slug, ensure_directory_rel, get_relative_path, VAAS_ROOT
+
+log = logging.getLogger("vaas.cover")
+
+# Finite wall clock for the node render subprocess
+# (fix-hosted-generation-correctness). Remotion cold starts are slow —
+# generous but bounded.
+RENDER_TIMEOUT_S = int(os.getenv("VAAS_COVER_TIMEOUT_S", "300"))
 
 # Path to Remotion project and cover generation script
 REMOTION_APP = VAAS_ROOT / "remotion-app"
@@ -102,10 +111,18 @@ def create_cover(
             capture_output=True,
             text=True,
             check=True,
-            cwd=str(REMOTION_APP)
+            cwd=str(REMOTION_APP),
+            timeout=RENDER_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(
+            f"timeout: cover render exceeded {RENDER_TIMEOUT_S}s wall clock "
+            f"(raise VAAS_COVER_TIMEOUT_S only after checking the cold start)"
         )
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Cover generation failed: {e.stderr}")
+        # Raw node stderr can carry /app layout paths — server log only.
+        log.warning("cover render failed: %s", str(e.stderr or "")[-2000:])
+        raise RuntimeError("render_error: cover generation failed (details in server log)") from e
 
     # Parse size to get width/height
     size_str = size or default_size
@@ -127,22 +144,23 @@ def create_cover(
     }
 
     owner = current_owner()
+    scoped = scoped_asset_slug(slug, owner)
     insert_content(
         id=content_id,
         type="image",
-        slug=slug,
+        slug=scoped,
         file_path=get_relative_path("images", slug, filename),
         metadata=metadata,
         status="rendered",
         owner=owner,
     )
 
-    record_usage(owner, "generate_cover", "remotion", None, 1, "render", "env",
+    record_usage(owner, "generate_cover", "remotion", None, 1, "image", "env",
                  asset_id=content_id)
 
     return {
         "id": content_id,
-        "slug": slug,
+        "slug": scoped,
         "file_path": get_relative_path("images", slug, filename),
         "width": width,
         "height": height

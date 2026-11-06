@@ -109,10 +109,17 @@ def _scan_dir(directory: Path, location: str, asset_type: str = 'all'):
             classified = _classify_asset(entry.name)
             if asset_type == 'all' or classified == asset_type:
                 stat = entry.stat()
+                # relative to the repo layout only — hosted tenants never
+                # see /app filesystem coordinates (fix-hosted-generation-
+                # correctness)
+                try:
+                    rel_path = str(entry.relative_to(VAAS_ROOT))
+                except ValueError:
+                    rel_path = entry.name
                 assets.append({
                     'name': entry.name,
                     'type': classified,
-                    'path': str(entry),
+                    'path': rel_path,
                     'size_kb': round(stat.st_size / 1024, 1),
                     'location': location,
                 })

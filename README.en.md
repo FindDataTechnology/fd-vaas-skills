@@ -170,7 +170,7 @@ VAAS/
 └── AGENTS.md                           # engineering guidance for Claude Code
 ```
 
-> **The VAAS root is a git repository** (remote: `github.com/FindDataTechnology/fd-vaas-skills`). `remotion-app/`, `downloads/`, `demands/`, `demand.md`, `.env` are gitignored. `social-auto-upload` upstream vendored into `fd-vaas-publish-videos/scripts/upstream/` (not standalone root directory); use `scripts/sync-upstream.sh` to sync upstream updates.
+> **The VAAS root is a git repository** (remote: `github.com/FindDataTechnology/fd-vaas-skills`). `remotion-app/`, `downloads/`, `demands/`, `demand.md`, `.env` are gitignored. `social-auto-upload` upstream vendored into `fd-vaas-publish-videos/scripts/upstream/` (not standalone root directory); use `.agents/skills/fd-vaas-publish-videos/scripts/sync-upstream.sh` to sync upstream updates (keep edits in the thin adapter layer — hand edits inside the vendor tree are wiped by the next `rsync --delete`). Hosted image single source: canonical `deploy/mcp-server.Dockerfile`; root `./Dockerfile` is generated from it (`bash scripts/gen-root-dockerfile.sh`).
 
 ---
 
@@ -466,7 +466,7 @@ pip install -r scripts/requirements.txt   # only python-dotenv remains; all thre
 
 > **First diagnostic step:** `node scripts/doctor.mjs` — checks Node/ffmpeg/keys/remotion deps/skill links item-by-item, prints fix commands.
 
-- **Distribution stack = vendor upstream + thin adapter layer**: `social-auto-upload` upstream vendored in `fd-vaas-publish-videos/scripts/upstream/` (not standalone root directory, stop looking for root-level `social-auto-upload/`). Sync upstream updates with `scripts/sync-upstream.sh`. To update platform selector status, write back to `_shared/publish/platform-registry.json` (use `probe.py`), do not manually edit docs.
+- **Distribution stack = vendor upstream + thin adapter layer**: `social-auto-upload` upstream vendored in `fd-vaas-publish-videos/scripts/upstream/` (not standalone root directory, stop looking for root-level `social-auto-upload/`). Sync upstream updates with `.agents/skills/fd-vaas-publish-videos/scripts/sync-upstream.sh`. To update platform selector status, write back to `_shared/publish/platform-registry.json` (use `probe.py`), do not manually edit docs.
 - **Cookie expires, need rescan**: publish login failures mostly due to expired cookies, use `/fd-vaas-login` to rescan, no need to manually edit cookie files.
 - **patchright consistent across ALL platforms**: video distribution no longer dispatches by OS, macOS also needs patchright installed. ego-browser has only two uses: screen recording + article own-platforms.
 - **Standalone `voice/image/video-generator` skills no longer exist** - generators merged into `fd-vaas-video-creator/scripts/generators/`. Multi-provider switching still provided by root `scripts/litellm-bridge.py`.

@@ -215,20 +215,16 @@ Ark TTS Skill - 豆包语音合成
 常用选项:
   --input, --text <文本>       要合成的文本内容（必填）
   --input-file, --file <路径>  从文本文件读取内容（替代 --input）
-  --voice <音色ID>             指定音色（默认: zh-CN-Yunxia，云夏-温柔女声）
+  --voice <音色ID>             指定音色（以 voices 子命令实况为准；volcengine 直连=seed-tts-2.0 音色矩阵，ciyuan 档=腾讯数字音色 ID 如 101001）
   --speed <倍率>               语速 [0.25, 4.0]（默认: 1.0）
   --format, --response-format <fmt>  输出格式: mp3, opus, aac, flac, wav, pcm
-  --model <模型名>             指定模型（默认: doubao-tts-2.5l-pro）
+  --model <模型名>             指定模型（默认随 .env TTS_MODEL/TTS_PROVIDER：volcengine=seed-tts-2.0，ciyuan=tencent-tts）
   --api-key <key>              临时指定 API Key（默认读取 .env）
   --base-url <url>             自定义 API 入口地址
   --no-subtitle                关闭逐字时间戳（默认开启，输出 captions.json）
 
-音色示例:
-  中文女声: zh-CN-Yunxia (温柔), zh-CN-Yunxi (成熟), zh-CN-Yunyang (活泼)
-  中文男声: zh-CN-Yunjian (沉稳), zh-CN-Yunhao (阳光), zh-CN-Yunfan (磁性)
-  英文: en-US-Aria, en-US-Davis
-  日语: ja-JP-Nanami
-  韩语: ko-KR-SunHi
+音色示例（历史 Azure 档样例仅作形状参考，实际清单以 voices 子命令为准）:
+  音色清单: node tts-wrapper.js voices（按 provider 实况列出；勿凭记忆猜 ID）
 
 快速示例:
   # 简单文本

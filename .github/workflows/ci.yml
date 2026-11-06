@@ -1,0 +1,50 @@
+name: ci
+
+# 统一测试闸（add-ci-and-provisioning）。语义与 scripts/ci-local.sh 等价；
+# 托管执行器不可用期间以本地闸为准（见 docs/debt-ledger.md DEBT-CI）。
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install mcp-server (editable, dev extras)
+        run: python -m pip install -q -e "mcp-server[dev]"
+
+      - name: pytest mcp-server
+        run: python -m pytest -q mcp-server/tests
+
+      - name: node tests (TTS helpers + publish-common)
+        run: node --test tests/*.test.mjs .agents/skills/_shared/publish/publish-common.test.mjs
+
+      - name: registry consistency
+        run: python .agents/skills/fd-vaas-login/scripts/check-registry-consistency.py
+
+      - name: Dockerfile single-source drift
+        run: cmp -s Dockerfile deploy/mcp-server.Dockerfile
+
+  build-image:
+    # 测试闸红则镜像构建跳过（needs 即闸）。仅构建验证，推送仍是部署侧手动通道。
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build hosted image (no push)
+        run: docker build -f deploy/mcp-server.Dockerfile -t "vaas-mcp-server:${GITHUB_SHA::7}" .

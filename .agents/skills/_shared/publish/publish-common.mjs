@@ -8,6 +8,8 @@
  *   - summarize: 从正文前 N 字生成摘要
  *   - ensureSeconds: 定时串补 :00 秒(视频 skill)
  *   - limitTags: 标签列表按平台上限截断
+ *   - resolvePython: 平台感知的 Python 启动器探测(W5.2;Windows 上 python3 字面量会 ENOENT,
+ *     这里 spawn --version 逐个探测 python3/py/python,是本文件唯一的子进程副作用,仅启动时一次)
  *
  * 无 patchright / 浏览器 / .env 实际依赖,`node --test` 直接可跑。
  * 注意:封面挑选(pickCover / resolveCoverForPlatform)与 distribution[] 回写在两个
@@ -15,6 +17,7 @@
  * 未抽到此处——强行共享会引入行为差异,违背「对拍 diff 为空」的目标。
  */
 import fs from "fs";
+import { spawnSync } from "child_process";
 
 /** 极简 dotenv:读 key=value 行,跳过注释/空行,剥引号。文件不存在返回 {}。 */
 export function loadEnv(file) {
@@ -87,4 +90,23 @@ export function limitTags(tags, max) {
     .map((s) => s.trim())
     .filter(Boolean)
     .slice(0, max);
+}
+
+/**
+ * 平台感知的 Python 启动器解析(W5.2)。优先级:preferred(如 .env/进程环境 PYTHON)
+ * → python3 → py → python。用 `--version` 探测谁真的可用;全失败回退 "python3"
+ * 字面量保持旧报错形态。Windows 只有 `py` 时不再 ENOENT。
+ */
+export function resolvePython(preferred, probe = (c) => spawnSync(c, ["--version"], { stdio: "ignore", timeout: 5000 }).status === 0) {
+  const chain = [];
+  if (preferred) chain.push(preferred);
+  for (const c of ["python3", "py", "python"]) if (!chain.includes(c)) chain.push(c);
+  for (const c of chain) {
+    try {
+      if (probe(c)) return c;
+    } catch {
+      /* 探测异常=该候选不可用,继续下一个 */
+    }
+  }
+  return "python3";
 }

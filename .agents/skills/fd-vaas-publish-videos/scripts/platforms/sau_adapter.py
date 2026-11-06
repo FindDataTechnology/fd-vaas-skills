@@ -269,8 +269,12 @@ def do_login_check(platform: str, headless: bool) -> int:
         return 1
     cookie_auth = getattr(mod, "cookie_auth", None)
     if cookie_auth is None:
-        print("⚠ 该平台上游无 cookie_auth，跳过校验")
-        return 0
+        # W4.1 fail-closed:探测能力缺失 ≠ 有效。旧行为返回 0 会让 login-manager
+        # 显示「cookie 有效」的假绿（spec「登录态检查 fail-closed」）。
+        # exit 3 = unknown（区别于 1=已确认失效），面板据此提示人工扫码复核。
+        print("⚠ unknown：该平台上游模块无 cookie_auth，无法程序化探测登录态")
+        print("  请人工核验：浏览器打开对应创作者后台确认已登录；必要时 --login 重新扫码")
+        return 3
     ok = asyncio.run(cookie_auth(account_file)) if _is_async(cookie_auth) else cookie_auth(account_file)
     print("✅ cookie 有效" if ok else "❌ cookie 已失效，请 --login 重新扫码")
     return 0 if ok else 1

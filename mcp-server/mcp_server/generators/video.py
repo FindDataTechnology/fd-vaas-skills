@@ -14,13 +14,40 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from ..db import insert_content, insert_job, update_job, get_job, expire_stale_jobs, generate_id
+from ..db import (
+    insert_content, insert_job, update_job, get_job, expire_stale_jobs,
+    generate_id, scoped_asset_slug,
+)
 from ..utils import generate_slug, ensure_directory_rel, get_relative_path, VAAS_ROOT
 from .runtime import finish, prepare, run_bridge
+from .errors import classify_upstream_error, is_transient
 
 # Path to litellm-bridge.py
 SCRIPTS_DIR = VAAS_ROOT / "scripts"
 LITELLM_BRIDGE = SCRIPTS_DIR / "litellm-bridge.py"
+
+
+def _probe_video_seconds(path: Path) -> Optional[float]:
+    """Measured duration via ffprobe; None when the tool can't run/parse.
+
+    Honest billing rule (fix-hosted-generation-correctness): callers bill
+    ONLY measured values and disclose a missing measurement instead of
+    falling back to upstream claims or hardcoded constants.
+    """
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=30,
+        )
+        doc = json.loads(out.stdout or "{}")
+        raw = (doc.get("format") or {}).get("duration")
+        if raw is None:
+            return None
+        val = float(raw)
+        return val if val > 0 else None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
 
 
 def _slug_for(prompt: Optional[str], slug: Optional[str], fallback: str) -> str:
@@ -88,15 +115,18 @@ def generate(
     try:
         stdout = run_bridge(cmd, ctx)
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Video generation failed: {e.stderr}")
+        raise classify_upstream_error("generate_video", e.stderr) from e
 
     try:
         output = json.loads(stdout)
     except json.JSONDecodeError as e:
-        raise RuntimeError(f"Failed to parse video generation output: {e}")
+        raise RuntimeError(f"upstream_error: video lane returned unparsable output: {e}") from e
 
     status = "rendered" if wait and output_path.exists() else "pending"
     content_id = generate_id()
+    # Bill measured seconds from the landed file; the requested value is
+    # kept as metadata only (never silently trusted as the billing number).
+    measured = _probe_video_seconds(output_path) if status == "rendered" else None
     metadata = {
         "prompt": prompt,
         "duration": duration,
@@ -104,23 +134,26 @@ def generate(
         "resolution": resolution,
         "model": output.get("model"),
     }
+    if measured is not None:
+        metadata["duration_sec"] = measured
+        metadata["duration_source"] = "measured"
     insert_content(
         id=content_id,
         type="video",
-        slug=slug,
+        slug=scoped_asset_slug(slug, owner),
         file_path=get_relative_path("videos", slug, f"{slug}.mp4"),
         metadata=metadata,
         status=status,
         owner=owner,
     )
 
-    seconds = float(duration or 5)
+    seconds = float(measured) if measured is not None else 0.0
     result = {
         "id": content_id,
-        "slug": slug,
+        "slug": scoped_asset_slug(slug, owner),
         "file_path": get_relative_path("videos", slug, f"{slug}.mp4"),
         "status": status,
-        "duration_sec": duration,
+        "duration_sec": measured if measured is not None else duration,
         "model": output.get("model"),
     }
     result.update(finish(ctx, "generate_video", ctx["resolved"].get("provider") or "volcengine",
@@ -159,12 +192,12 @@ def submit(
     try:
         stdout = run_bridge(cmd, ctx)
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Video submission failed: {e.stderr}")
+        raise classify_upstream_error("generate_video_submit", e.stderr) from e
 
     try:
         output = json.loads(stdout)
     except json.JSONDecodeError as e:
-        raise RuntimeError(f"Failed to parse video submission output: {e}")
+        raise RuntimeError(f"upstream_error: video submission returned unparsable output: {e}") from e
 
     task_id = output.get("task_id") or ""
     if not task_id:
@@ -206,30 +239,65 @@ def poll(job_id: str, owner: Optional[str] = None) -> dict:
     ]
     try:
         stdout = run_bridge(cmd, ctx)
-        output = json.loads(stdout)
-    except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
-        update_job(job_id, status="failed", error=str(e)[:500])
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        # Transient poll failure must NEVER terminally fail a paid job:
+        # the provider task keeps running upstream and the next poll may
+        # still land the artifact. Only explicit provider terminal states
+        # (below) write `failed`. (fix-hosted-generation-correctness)
+        # NOTE: classify on e.stderr — CalledProcessError's own str() does
+        # not carry the body.
+        detail = getattr(e, "stderr", None) or str(e)
+        err = classify_upstream_error("video_job_status", str(detail))
+        if is_transient(e) or is_transient(err):
+            view = _job_view(job)
+            view["last_poll_error"] = str(err)[:300]
+            view["note"] = "job stays running after a transient poll failure; keep polling, do not resubmit"
+            return view
+        update_job(job_id, status="failed", error=str(err)[:500])
         return _job_view(get_job(job_id, owner=owner))
+
+    try:
+        output = json.loads(stdout)
+    except (json.JSONDecodeError, ValueError) as e:
+        # unparsable status read (truncated/corrupted response): retryable,
+        # job stays running; TTL is the backstop.
+        view = _job_view(job)
+        view["last_poll_error"] = f"upstream_transient: unparsable status response ({e})"[:300]
+        view["note"] = "job stays running after a malformed status read; keep polling"
+        return view
 
     status = output.get("status")
     if status in ("succeeded", "completed", "success", "done"):
         asset_id = generate_id()
+        rel = get_relative_path("videos", slug, f"{slug}.mp4") if output.get("local_path") else ""
+        # Bill measured seconds from the downloaded artifact, never the
+        # hardcoded 5s or the upstream self-report.
+        measured = _probe_video_seconds(output_path) if rel else None
+        duration_source = "measured" if measured else "unavailable"
+        metadata = {"provider_task_id": job["provider_task_id"],
+                    "video_url": output.get("video_url")}
+        if measured is not None:
+            metadata["duration_sec"] = measured
+            metadata["duration_source"] = duration_source
         insert_content(
             id=asset_id,
             type="video",
-            slug=slug,
-            file_path=get_relative_path("videos", slug, f"{slug}.mp4")
-            if output.get("local_path") else "",
-            metadata={"provider_task_id": job["provider_task_id"],
-                      "video_url": output.get("video_url")},
+            slug=scoped_asset_slug(slug, job["owner"]),
+            file_path=rel,
+            metadata=metadata,
             status="rendered",
             owner=job["owner"],
         )
         update_job(job_id, status="succeeded", asset_id=asset_id)
+        # No measured seconds => no billable artifact landed: bill 0 and say
+        # so. The old hard-coded 5s is gone (never bill a claimed duration).
+        billed = float(measured) if measured is not None else 0.0
         extras = finish(ctx, "generate_video_submit", ctx["resolved"].get("provider") or "volcengine",
-                        None, float(5), "second", asset_id)
+                        None, billed, "second", asset_id)
         view = _job_view(get_job(job_id, owner=owner))
-        view.update({"asset_id": asset_id, **extras})
+        view.update({"asset_id": asset_id, "duration_sec": measured, **extras})
+        if measured is None:
+            view["warnings"] = ["duration could not be measured (no artifact landed); billed 0 seconds"]
         return view
     if status in ("failed", "error", "cancelled"):
         update_job(job_id, status="failed",

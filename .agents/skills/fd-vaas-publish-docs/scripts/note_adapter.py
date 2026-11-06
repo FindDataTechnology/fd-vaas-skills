@@ -21,6 +21,12 @@ note_adapter.py — 图文笔记薄适配层：复用 fd-vaas-publish-videos ven
   python3 note_adapter.py --platform douyin --login
   # 校验 cookie
   python3 note_adapter.py --platform xiaohongshu --login-check
+
+发布确认闸（enforce-publish-confirmation-gate W1.3）：
+  上游图文路径同样 MUST 过人工确认闸才允许真实上传——与自有 patchright 平台
+  (browser_utils.confirm_gate) 同形态：给 --confirm-file 哨兵(如
+  <系统临时目录>/vaas-doc-<platform>.go，touch 即放行)，未给且非 TTY 即失败关闭；
+  --auto-publish 为显式旁路(回执须标注 auto_publish)。
 """
 from __future__ import annotations
 
@@ -30,6 +36,7 @@ import datetime as _dt
 import importlib
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 # ── 定位兄弟 skill 的 vendor 上游并加入 sys.path ─────────────
@@ -43,6 +50,11 @@ if not (_UPSTREAM / "uploader").is_dir():
     sys.exit(1)
 if str(_UPSTREAM) not in sys.path:
     sys.path.insert(0, str(_UPSTREAM))
+
+# 共享发布库（browser_utils.confirm_gate——与自有平台同形态的确认闸单一实现源）
+_SHARED_PUBLISH = _SKILLS / "_shared" / "publish"
+if str(_SHARED_PUBLISH) not in sys.path:
+    sys.path.insert(0, str(_SHARED_PUBLISH))
 
 # 与 sau_adapter.py 一致：conf.BASE_DIR = scripts/upstream/
 os.environ.setdefault("VAAS_ROOT", str(_UPSTREAM.parents[3]))
@@ -82,6 +94,41 @@ REGISTRY = {
 
 def _account_path(platform: str) -> Path:
     return _UPSTREAM / REGISTRY[platform]["account_file"]
+
+
+# ── 发布确认闸（W1.3）：与自有 patchright 平台同一实现源（browser_utils.confirm_gate）──
+# browser_utils 顶层 import patchright，故闸在发布路径里惰性加载；
+# 加载失败 = 失败关闭（无闸可依赖时绝不放行），绝不静默裸奔。
+def gate_file(platform: str, explicit: str = "") -> str:
+    """确认哨兵路径：--confirm-file 优先；缺省 <系统临时目录>/vaas-doc-<platform>.go。
+
+    W5.1：不硬编码 POSIX /tmp——VAAS_GATE_DIR env 覆盖 ?? tempfile.gettempdir()，
+    与 confirm-gate.mjs / browser_utils.default_gate_file 同命名同语义。
+    """
+    e = (explicit or "").strip()
+    if e:
+        return e
+    base = os.environ.get("VAAS_GATE_DIR") or tempfile.gettempdir()
+    return os.path.join(base, f"vaas-doc-{platform}.go")
+
+
+def gate_publish(platform: str, confirm_file: str, auto_publish: bool, timeout: int = 7200) -> bool:
+    """真实上传前的人工确认闸。返回 True=放行，False=拒绝（调用方必须 exit 非零、零上传）。
+
+    - auto_publish: 显式旁路参数才存在（--auto-publish）；回执必须标注 auto_publish。
+    - confirm_file 空 → 解析成默认哨兵路径（不拿空串去挂满 timeout）。
+    - 哨兵出现=确认放行（消费删除）；超时=拒绝，不存在「超时后自动发布」。
+    """
+    if auto_publish:
+        print("⚠️ --auto-publish 显式旁路人工确认闸（distribution 回执须标注 auto_publish: true）")
+        return True
+    credential = gate_file(platform, confirm_file)
+    try:
+        from browser_utils import confirm_gate  # noqa: 惰性:login/login-check 路径不依赖 patchright
+    except Exception as e:
+        print(f"❌ 确认闸共享实现 browser_utils 加载失败——按未确认处理(fail closed): {e}")
+        return False
+    return confirm_gate(None, credential, hint=f"发布 {platform} 图文", timeout=timeout)
 
 
 def _parse_schedule(s: str | None) -> tuple[_dt.datetime | int, str]:
@@ -208,6 +255,11 @@ def do_publish(args) -> int:
         print("🔍 dry-run：参数已就绪，不执行上传")
         return 0
 
+    # W1.3：人工确认闸——放在构造/启动上游浏览器之前，未确认时零上传请求发出
+    if not gate_publish(platform, args.confirm_file, args.auto_publish):
+        print(f"❌ {platform} 图文未获人工确认，已拒绝（零上传）。补齐方法见上方确认闸提示。")
+        return 1
+
     try:
         app = NoteCls(**kwargs)
     except TypeError as e:
@@ -241,6 +293,9 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--login", action="store_true", help="扫码登录（与视频发布共享 cookie）")
     ap.add_argument("--login-check", action="store_true", help="只校验 cookie 是否有效")
+    # W1.3 确认闸参数（与自有平台 patchright 脚本同形态）
+    ap.add_argument("--confirm-file", default="", help="人工确认哨兵文件（touch 即放行；缺省用系统临时目录 vaas-doc-<platform>.go）")
+    ap.add_argument("--auto-publish", action="store_true", help="显式旁路人工确认闸（回执须标注 auto_publish）")
     args = ap.parse_args()
 
     if args.login:

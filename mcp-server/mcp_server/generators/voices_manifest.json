@@ -4,7 +4,7 @@
   "note": "由 models_voices 工具对外暴露；消费端以此为准，不要猜模型/音色名。voice 为跨车道路由键（语音车道按计划只认 voice，不以 body.model 为准）。",
   "providers": {
     "ciyuan": {
-      "lane": "router.finddatatech.cloud /v1/audio/speech",
+      "lane": "词元网关 /v1/audio/speech（base_url 走凭证记录，不入仓）",
       "captions_supported": false,
       "speed_supported": false,
       "speed_note": "上游按 voice 路由，body model 仅文档名；speed 经上游参数透传但被忽略的概率大，请勿依赖变速。",

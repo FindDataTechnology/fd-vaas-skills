@@ -30,7 +30,8 @@
   "composition": "VoiceoverVideo",
   "defaults": {
     "voice": "auto",
-    "tailPad": 15
+    "tailPad": 15,
+    "subtitlePosition": "center"
   },
   "platforms": [
     "douyin",

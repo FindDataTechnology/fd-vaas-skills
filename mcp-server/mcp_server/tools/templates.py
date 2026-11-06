@@ -43,8 +43,15 @@ _DOC_TEMPLATE_CONTRACT = (
 
 def _load_video_types() -> list[dict]:
     items = []
+    # Missing type directory = broken packaging, not "no templates" — the
+    # discovery surface must not lie with an empty list (deliver-hosted-
+    # surface W3; presentation-plane「标注与真实能力一致」).
     if not VIDEO_TYPES_DIR.is_dir():
-        return items
+        raise RuntimeError(
+            f"templates_unavailable: video type registry directory missing "
+            f"({VIDEO_TYPES_DIR}); image packaging is broken — templates_list "
+            f"refuses to advertise an empty capability set"
+        )
     for d in sorted(VIDEO_TYPES_DIR.iterdir()):
         type_json = d / "type.json"
         if not type_json.is_file():

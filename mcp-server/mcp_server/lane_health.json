@@ -1,0 +1,55 @@
+{
+  "kind": "lane-health",
+  "updated": "2026-11-06",
+  "note": "机读车道健康台账（deliver-hosted-surface W3；spec ciyuan-lane-providers「车道缺陷记录与规避」+ generation-registry「方式可发现性」）。health ∈ active|degraded|down。发现面（models_voices / registry_list_generators）注入此表；down 车道的工具调用按 lane_down 分类拒绝（C1 错误分类层）。字段：reason_class ∈ upstream_blocked|unconfigured|upstream_degraded|none；last_verified=实调证据日期。销账必须附实调 E2E 证据（探针或真产物），不许只翻状态。",
+  "lanes": {
+    "voice.ciyuan": {
+      "health": "active",
+      "reason_class": "none",
+      "reason": "tencent-tts (101001) 全链通（11-05/06 实调）；doubao-speech 子模型仍 upstream-broken 不影响车道主体",
+      "last_verified": "2026-11-06"
+    },
+    "voice.ciyuan.doubao-speech": {
+      "health": "down",
+      "reason_class": "upstream_blocked",
+      "reason": "子模型 acct 43 (doubao 语音) upstream-broken，待 sub2api 侧修复",
+      "last_verified": "2026-10-27"
+    },
+    "voice.volcengine": {
+      "health": "down",
+      "reason_class": "unconfigured",
+      "reason": "ARK 凭据未入 vault（manifest lane 注记：待配凭据后再开）",
+      "last_verified": "2026-10-27"
+    },
+    "image.ciyuan": {
+      "health": "down",
+      "reason_class": "upstream_blocked",
+      "reason": "组9 唯一上游 acct 40 (openai-next) 被 403 site owner blocked → router 503；解封/换号后实调销账（DEBT-LANE-9-01）",
+      "last_verified": "2026-11-05"
+    },
+    "image.volcengine": {
+      "health": "down",
+      "reason_class": "unconfigured",
+      "reason": "在役 ARK key 为 Agent Plan 专用，缺 seedream 权限（deploy README 已知口径）",
+      "last_verified": "2026-10-06"
+    },
+    "video.ciyuan": {
+      "health": "down",
+      "reason_class": "upstream_blocked",
+      "reason": "同 image.ciyuan：组9 acct 40 封禁 → No eligible Seedance accounts（DEBT-LANE-9-01）",
+      "last_verified": "2026-11-05"
+    },
+    "video.volcengine": {
+      "health": "down",
+      "reason_class": "unconfigured",
+      "reason": "ARK 视频凭据未入 vault",
+      "last_verified": "2026-10-06"
+    },
+    "render.local": {
+      "health": "active",
+      "reason_class": "none",
+      "reason": "确定性渲染底座（chromium+ffmpeg）随镜像内置；本地 stdio 依赖宿主 ffmpeg",
+      "last_verified": "2026-11-06"
+    }
+  }
+}

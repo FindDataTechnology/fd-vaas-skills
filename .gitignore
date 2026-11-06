@@ -74,3 +74,9 @@ tmp-*.txt
 
 # Python test cache
 .pytest_cache/
+
+# xhs_uploader API 签名变体的账号文件（上游模板是占位符 changeme，但我们用 web 版
+# xiaohongshu_uploader；加 ignore 洞防止未来 cookie/账号写进这里被误提交）。
+# 注：该文件当前被 git 追踪（内容=上游占位符），ignore 对已追踪文件不生效，
+# 如需彻底生效须 git rm --cached（本次任务不触碰 git 状态，留给运维批次）。
+.agents/skills/fd-vaas-publish-videos/scripts/upstream/uploader/xhs_uploader/accounts.ini

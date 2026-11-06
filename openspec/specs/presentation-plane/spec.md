@@ -7,7 +7,7 @@ VAAS 作为 finddata 全系统展示层的核心契约：一个渲染底座、�
 
 ### Requirement: 渲染底座统一
 
-系统 SHALL 以单一渲染底座产出全部确定性视觉产物：无头浏览器 + 内置 CJK 字体 + 品牌主题令牌（theme.ts）。三类出口（单帧、帧序列、分页文档）MUST 共享同一底座、同一字体栈与同一品牌主题，MUST NOT 为单一模态引入第二套渲染口径。视频与单帧的接口方言 SHALL 为 seek 契约（`window.__DURATION__`/`window.__SIZE__`、`window.seek(t)`、`data-stage` 标记）。
+系统 SHALL 以单一渲染底座产出全部确定性视觉产物：无头浏览器 + 内置 CJK 字体 + 品牌主题令牌（theme.ts）。三类出口（单帧、帧序列、分页文档）MUST 共享同一底座、同一字体栈与同一品牌主题，MUST NOT 为单一模态引入第二套渲染口径。视频与单帧的接口方言 SHALL 为 seek 契约（`window.__DURATION__`/`window.__SIZE__`、`window.seek(t)`、`data-stage` 标记）。托管实例镜像 SHALL 自带渲染底座的完整运行依赖（无头浏览器、CJK 字体、逐帧捕获与音视频合流工具、音频时长测量）：被工具面与模板目录标注为 hosted 可用的能力，MUST 在托管实例部署态可直接执行；底座缺失或目录未打包时 MUST 显式报错，MUST NOT 以空清单或占位假绿静默降级。
 
 #### Scenario: 同主题跨出口一致
 
@@ -15,9 +15,21 @@ VAAS 作为 finddata 全系统展示层的核心契约：一个渲染底座、�
 - **THEN** 两者的字体、品牌色板、尺寸语义一致
 - **AND** 视频场景可内联复用为单帧产物的场景 HTML（seek 契约互拷）
 
+#### Scenario: 托管实例开箱可渲
+
+- **WHEN** 租户在重建后的托管实例上调用 render_still、render_document 或 type 模式渲染
+- **THEN** 产物正常生成并落资产账本
+- **AND** 中文文本以 CJK 字体正确出形（无豆腐块）
+
+#### Scenario: 标注与真实能力一致
+
+- **WHEN** 模板目录将某类型标注 runtime 为 hosted 而实例底座不可用
+- **THEN** 调用返回明确错误指出底座缺失
+- **AND** 系统不返回空清单或静默跳过的假成功
+
 ### Requirement: render_video 双模式统一视频原语
 
-系统 SHALL 提供唯一视频渲染工具 `render_video`，支持两种互斥模式：(1) `storyboard` 模式——调用方提交场景序列（html_intro/html_outro/kenburns/html_full，遵守 seek 契约），系统逐帧渲染合成；(2) `type` 模式——调用方指定 video-types 注册表中的类型及输入，系统按类型声明渲染。同输入双跑 MUST 产出一致结果（确定性重放）。旁白音频 SHALL 可作为输入混流。type 模式依赖本地类型管线（node/Remotion 运行时），MUST 仅在本地 stdio 实例可用；托管实例收到 type 模式调用 MUST 返回指路 storyboard 模式的明确错误。storyboard 的 size 参数 SHALL 同时接受 `[width, height]` 与 `{width, height}` 两种形态；kenburns 等场景的输入文件路径 SHALL 接受渲染工具返回的 downloads 相对路径。
+系统 SHALL 提供唯一视频渲染工具 `render_video`，支持两种互斥模式：(1) `storyboard` 模式——调用方提交场景序列（html_intro/html_outro/kenburns/html_full，遵守 seek 契约），系统逐帧渲染合成；(2) `type` 模式——调用方指定 video-types 注册表中的类型及输入，系统经类型场景构建器（HTML 渲染器）产出场景后按同一逐帧管线渲染。同输入双跑 MUST 产出一致结果（确定性重放）。旁白音频 SHALL 可作为输入混流；type 模式 SHALL 支持 bgm 参数（语义与 storyboard 一致）并 SHALL 接受 `voice_path` 输入以跳过内置 TTS。两种模式在本地 stdio 与托管实例 SHALL 行为一致；托管镜像 MUST NOT 含 node/Remotion 运行时。storyboard 的 size 参数 SHALL 同时接受 `[width, height]` 与 `{width, height}` 两种形态；kenburns 等场景的输入文件路径 SHALL 接受渲染工具返回的 downloads 相对路径。
 
 #### Scenario: storyboard 模式确定性出片
 
@@ -27,8 +39,8 @@ VAAS 作为 finddata 全系统展示层的核心契约：一个渲染底座、�
 
 #### Scenario: type 模式按类型渲染
 
-- **WHEN** 本地 stdio 实例上调用方以 `type=listicle` 与合法 items 输入调用 render_video
-- **THEN** 系统按 listicle 类型声明渲染 hook/条目/CTA 结构
+- **WHEN** 调用方（本地或托管实例）以 `type=listicle` 与合法 items 输入调用 render_video
+- **THEN** 系统经 HTML 场景构建器按 listicle 结构渲染 hook/条目/CTA
 - **AND** 类型不匹配错误在渲染前报出（输入校验前置）
 
 #### Scenario: 双模式互斥
@@ -38,9 +50,9 @@ VAAS 作为 finddata 全系统展示层的核心契约：一个渲染底座、�
 
 #### Scenario: 托管实例 type 模式指路报错
 
-- **WHEN** 托管实例收到 type 模式调用
-- **THEN** 返回明确错误说明 type 模式仅本地 stdio 实例支持（ADR-0004 托管镜像不含 Remotion 运行时）
-- **AND** 错误信息指路 storyboard 模式，不产生任何产物或计费
+- **WHEN** 托管实例收到无 HTML 场景构建器的类型调用（type.json 未标 renderer=html 且未注册 builder）
+- **THEN** 返回明确错误说明该类型仅本地 stdio 实例支持（ADR-0004 托管镜像不含 Remotion 运行时）
+- **AND** 错误信息指路 storyboard 模式或已移植类型清单，不产生任何产物或计费
 
 ### Requirement: render_still 单帧出口
 

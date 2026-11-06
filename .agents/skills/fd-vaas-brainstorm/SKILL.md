@@ -159,6 +159,8 @@ compatibility: 纯知识技能,无脚本无依赖;下游调用 VAAS MCP 工具�
 | 数据配图 | 数据点 → `render_still(kind="chart", spec={echarts_option, size})`;要"讲到哪长到哪"的图表动画则改走 `render_video(type="data-viz")` |
 | 封面 | `render_still(kind="cover", spec={title, subtitle?, tags?})` |
 
+> 上表全部走托管 HTML 链（MCP 工具面）。用户本地装了创作 skill 时，同形态可改走本地 node 链（Remotion，逐字字幕；BGM 两链支持不对称）——选择依据见仓库 README「双执行器路由」。
+
 选型与传参细节(四种场景 kind、seek 契约、chart 桥、BGM)**见 `fd-vaas-storyboard` skill**。动手前的三个查询习惯:
 
 - 音色 / 模型能力先查 `models_voices()`;

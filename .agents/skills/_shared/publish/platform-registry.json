@@ -2,24 +2,24 @@
   "platforms": {
     "xiaohongshu": {
       "docs": { "route": "upstream-note" },
-      "videos": { "route": "upstream" },
+      "videos": { "route": "upstream", "schedule": true },
       "selectorStatus": "upstream",
       "lastVerified": null,
-      "notes": "上游 XiaoHongShuNote 维护;图文/视频 cookie 共享 account.json"
+      "notes": "上游 XiaoHongShuNote/Video 维护;图文/视频 cookie 共享 account.json;视频 2026-10 实发验证通过(wait_for_url publish/success)"
     },
     "douyin": {
       "docs": { "route": "upstream-note" },
-      "videos": { "route": "upstream" },
+      "videos": { "route": "upstream", "schedule": true },
       "selectorStatus": "upstream",
       "lastVerified": null,
-      "notes": "上游 DouYinNote 维护;无 douyin-*.jpg 时复用 xhs-*.jpg"
+      "notes": "上游 DouYinNote/Video 维护;无 douyin-*.jpg 时复用 xhs-*.jpg"
     },
     "kuaishou": {
       "docs": { "route": "upstream-note" },
-      "videos": { "route": "upstream" },
+      "videos": { "route": "upstream", "schedule": true },
       "selectorStatus": "upstream",
       "lastVerified": null,
-      "notes": "上游 KSNote 维护;cookie 共享 kuaishou_creator.json"
+      "notes": "上游 KSNote/Video 维护;cookie 共享 kuaishou_creator.json"
     },
     "zhihu": {
       "docs": { "route": "own" },
@@ -29,7 +29,7 @@
     },
     "weixin": {
       "docs": { "route": "own" },
-      "videos": { "route": "upstream" },
+      "videos": { "route": "upstream", "schedule": true },
       "selectorStatus": "verified",
       "lastVerified": "2026-07-30",
       "notes": "公众号 appmsg URL;标题 #title hidden 需 js;正文 .ProseMirror 粘 HTML;摘要 #js_description;patchright 实测存草稿"
@@ -60,27 +60,41 @@
     },
     "baijiahao": {
       "docs": { "route": "own" },
+      "videos": { "route": "upstream", "schedule": false },
       "selectorStatus": "verified",
       "lastVerified": "2026-07-29",
-      "notes": "baijiahao.baidu.com;封面必填;需选分类"
+      "notes": "图文 baijiahao.baidu.com;封面必填;需选分类;视频路由 2026-10-14 随上游 0012d2c 接入(BaiJiaHaoVideo,no_strategy),视频域未实机验证"
     },
     "weibo": {
       "docs": { "route": "own" },
+      "videos": { "route": "upstream", "schedule": false },
       "selectorStatus": "verified",
       "lastVerified": "2026-07-29",
-      "notes": "weibo.com/newblog 长文;标签以 #话题# 形式放正文"
+      "notes": "图文 weibo.com/newblog 长文,标签以 #话题# 形式放正文;视频路由 2026-10-14 随上游 0012d2c 接入(WeiBoVideo,no_strategy),视频域未实机验证"
     },
     "youtube": {
-      "videos": { "route": "upstream" },
+      "videos": { "route": "upstream", "schedule": false },
       "selectorStatus": "upstream",
       "lastVerified": null,
       "notes": "上游 YouTube 实现(sau_adapter);无 publish_date 故不支持 --schedule"
     },
     "bilibili": {
-      "videos": { "route": "own" },
+      "videos": { "route": "own", "schedule": false },
       "selectorStatus": "unverified",
       "lastVerified": null,
-      "notes": "bilibili.py;上游用 biliup 二进制而非 Playwright;未在真实登录态实机验证"
+      "notes": "bilibili.py;上游用 biliup 二进制而非 Playwright;未在真实登录态实机验证;不支持 --schedule"
+    },
+    "alipay": {
+      "videos": { "route": "upstream", "schedule": false },
+      "selectorStatus": "upstream",
+      "lastVerified": null,
+      "notes": "上游 AlipayVideo 维护;2026-10-14 随上游 0012d2c 接入;no_publish_date(实测 __init__ 无 publish_date 会 TypeError);仅视频域,未实机验证"
+    },
+    "hupu": {
+      "videos": { "route": "upstream", "schedule": false },
+      "selectorStatus": "upstream",
+      "lastVerified": null,
+      "notes": "上游 HuPuVideo 维护;2026-10-14 随上游 0012d2c 接入(no_strategy);仅视频域,未实机验证"
     }
   }
 }

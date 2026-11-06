@@ -8,6 +8,9 @@ platform invariants in one place:
 - hosted mode resolves credentials from the vault and injects them into the
   subprocess env only (bridge still reads .env in local mode)
 - every successful generation writes a generation_usage row
+- every bridge subprocess runs under a finite wall clock
+  (fix-hosted-generation-correctness: an upstream hang must never wedge a
+  tool call indefinitely)
 """
 
 import os
@@ -23,30 +26,82 @@ from ..credentials import (
 )
 from ..db import record_usage
 from ..hosting import current_owner, download_url, is_hosted
+from .errors import classify_upstream_error
 
 SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "scripts")
 SCRIPTS_DIR = os.path.abspath(SCRIPTS_DIR)
+
+# Per-call wall clock for bridge subprocesses (seconds). Sync video lanes
+# legitimately run minutes (submit+wait), so the default is generous but
+# MUST be finite; deploy can tune via env.
+BRIDGE_TIMEOUT_S = int(os.getenv("VAAS_BRIDGE_TIMEOUT_S", "900"))
+
+
+def provider_for(ctx: dict, env_key: str) -> str:
+    """Effective lane provider for a call.
+
+    Hosted: the vault record declares `provider`. Local mode ('env' source):
+    the very lane switch the bridge reads — <KIND>_PROVIDER from .env — so
+    truthfulness checks (speed warnings, voice manifest validation) work
+    against the REAL lane instead of the literal string "env", which used to
+    silently disable both (upstream fallback-to-default stayed invisible).
+    """
+    p = (ctx["resolved"].get("provider") or "").lower()
+    if p:
+        return p
+    if ctx["resolved"].get("source") == "env":
+        return (os.getenv(env_key) or "volcengine").lower()
+    return "volcengine"
 
 
 def prepare(kind: str, params: dict) -> dict:
     """Guard params, resolve owner + credential, return the call context.
 
     kind keys both the vault path (pool/<line>/<kind>) and the bridge env
-    mapping; the vendor (volcengine vs openai-compatible relay) comes from the
-    resolved vault record, not from code.
+    mapping; the vendor (volcengine vs openai-compatible relay) comes from
+    the resolved vault record, not from code.
+
+    Lane health gate (deliver-hosted-surface W3): a ledgered `down` lane
+    refuses the call up front as lane_down — never advertised as usable,
+    never burning a doomed subprocess.
     """
     reject_secrets_in_params(params)
     owner = current_owner()
+    # Lane health gate BEFORE credential resolution: a ledgered `down` lane
+    # refuses up front as lane_down — never advertised as usable, never
+    # burning a doomed subprocess, and vault reachability is irrelevant to
+    # that verdict. Local stdio keeps the historical free-lane behavior (the
+    # operator runs their own keys); opt in locally with VAAS_LANE_HEALTH_GATE=1.
+    from ..lane_health import lane_health  # noqa: E402  (package root module)
+    env_prov = (os.getenv(f"{kind.upper()}_PROVIDER") or "volcengine").lower()
+    gate_on = is_hosted() or os.getenv("VAAS_LANE_HEALTH_GATE", "") == "1"
+    if gate_on and lane_health(kind, env_prov).get("health") == "down":
+        h = lane_health(kind, env_prov)
+        raise CredentialUnavailable(
+            f"lane_down ({kind}/{env_prov}): lane is down per lane_health ledger "
+            f"({h.get('reason_class')}); check registry.list_generators for "
+            f"health and do not retry in a loop"
+        )
     resolved = resolve(kind)
     env = subprocess_env(resolved, kind)
     return {"owner": owner, "resolved": resolved, "env": env}
 
 
-def run_bridge(cmd: list[str], ctx: dict) -> str:
-    """Run a litellm-bridge subprocess with the per-call env overlay."""
+def run_bridge(cmd: list[str], ctx: dict, timeout_s: Optional[int] = None) -> str:
+    """Run a litellm-bridge subprocess with the per-call env overlay.
+
+    Finite wall clock by default (BRIDGE_TIMEOUT_S); a timeout is surfaced as
+    a classified tenant-safe `timeout:` error, raw detail server-side only.
+    """
     env = {**os.environ, **ctx["env"]} if ctx["env"] else None
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True,
-                            cwd=SCRIPTS_DIR, env=env)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True,
+                                cwd=SCRIPTS_DIR, env=env,
+                                timeout=timeout_s or BRIDGE_TIMEOUT_S)
+    except subprocess.TimeoutExpired as e:
+        raise classify_upstream_error(
+            " ".join(str(x) for x in cmd[2:4]) or "bridge", "timed out",
+        ) from e
     return result.stdout
 
 

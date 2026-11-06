@@ -12,6 +12,7 @@ B站视频上传 CLI (patchright 版)
 """
 
 import os
+import re
 import sys
 import argparse
 
@@ -27,7 +28,6 @@ ap.add_argument("--title", required=True)
 ap.add_argument("--desc", default="")
 ap.add_argument("--tags", default="")
 ap.add_argument("--cover", default="")
-ap.add_argument("--tid", default="124")
 ap.add_argument("--dry-run", action="store_true")
 args, _unknown = ap.parse_known_args()
 
@@ -36,7 +36,6 @@ title = args.title
 desc = args.desc
 tags = [t.strip() for t in args.tags.split(",") if t.strip()]
 cover = args.cover
-tid = args.tid
 dry_run = args.dry_run
 
 if not os.path.exists(file):
@@ -58,7 +57,7 @@ cli_log(f"""
 标题:   {title}
 简介:   {desc or '(无)'}
 标签:   {', '.join(tags) or '(无)'}
-分区:   {tid}
+分区:   页面默认推荐分区(旧 --tid 参数从未生效已移除;要指定分区请在浏览器窗口手选)
 封面:   {abs_cover or '(默认)'}
 {'━' * 41}
 """)
@@ -246,11 +245,39 @@ with Browser(profile, headless=False) as b:
         cli_log(b.eval(JS_CLICK_SUBMIT, MICRO_APP))
     except Exception as e:
         cli_log(f"⚠️ 点击发布失败: {e}")
-    wait(5)
 
-    # 验证
+    # ── 验证落地（W2.1 真实性：镜像图文 publish_and_verify 的成功判据形态）──
+    # 判据 = 可观察事实,不是「点了按钮」：
+    #   1) 回跳 URL 命中 success/manager(发布成功页或稿件管理页);或
+    #   2) 投稿管理页能探到本次标题(稿件确实落地)。
+    # 两者都失败 = 非零退出 + 不打印成功 —— publish.mjs 据此不写 distribution 成功行。
+    SUCCESS_URL = re.compile(r"success|manager", re.I)
+    verified = False
     url = page_url(b)
-    success = "success" in url or "manager" in url
-    cli_log("✅ 发布成功！" if success else "⚠️ 请检查发布状态")
+    for _ in range(30):
+        wait(1)
+        url = page_url(b)
+        if SUCCESS_URL.search(url):
+            verified = True
+            cli_log(f"✅ 发布落地已验证(回跳 URL): {url}")
+            break
+    if not verified:
+        # 回跳没命中 → 探投稿管理页:本次标题出现才算发布成功
+        try:
+            cli_log("🔍 未见 success/manager 回跳,探测投稿管理页确认稿件是否落地...")
+            b.goto("https://member.bilibili.com/v2#/content/video", then_wait=6)
+            text = b.eval("document.body.innerText.slice(0, 30000)") or ""
+            if title and title[:20] in text:
+                verified = True
+                cli_log(f"✅ 发布落地已验证(稿件管理页探到标题): {page_url(b)}")
+            else:
+                cli_log(f"⚠️ 稿件管理页未探到标题「{title[:30]}」(当前 URL: {page_url(b)})")
+        except Exception as e:
+            cli_log(f"⚠️ 稿件管理页探测失败: {e}")
 
     b.screenshot()
+    if not verified:
+        cli_log("❌ 无法验证发布落地(既无 success/manager 回跳,稿件管理页也未探到本稿件)。")
+        cli_log("   本次按「未成功」退出——不写 distribution 成功记录;请在浏览器/创作中心人工核对。")
+        sys.exit(1)
+    sys.exit(0)

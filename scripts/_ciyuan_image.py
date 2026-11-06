@@ -38,7 +38,7 @@ def generate(
     if not api_key:
         raise ValueError("CIYUAN_API_KEY is required for ciyuan image")
     if not base_url:
-        raise ValueError("CIYUAN_BASE_URL is required for ciyuan image (e.g. https://router.finddatatech.cloud)")
+        raise ValueError("CIYUAN_BASE_URL is required for ciyuan image (e.g. <CIYUAN_GATEWAY_BASE>)")
     if not output_paths:
         raise ValueError("output_paths must contain at least one path")
 

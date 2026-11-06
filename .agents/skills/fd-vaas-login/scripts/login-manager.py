@@ -22,6 +22,7 @@ bilibili 使用 patchright profile 持久化（bilibili_login.py 打开浏览器
 """
 import json
 import os
+import shutil
 import subprocess
 import threading
 import time
@@ -30,6 +31,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs, urlparse
+
+# W5.2 平台感知 Python 启动器:Windows 无 python3 字面量(只有 py/python),
+# 六处 spawn 统一走 PY,不再硬编码。与 _shared/publish/publish-common.mjs
+# resolvePython 同优先级(python3 → py → python)。
+PY = shutil.which("python3") or shutil.which("py") or shutil.which("python") or "python3"
 
 
 # ─── 配置 ────────────────────────────────────────────────────────
@@ -199,7 +205,7 @@ def _has_stale_qr(platform: str) -> bool:
 def _run_login(platform: str) -> int:
     """后台运行 sau_adapter.py --login。返回 exit code。"""
     cfg = PLATFORM_REGISTRY[platform]
-    cmd = ["python3", str(_SAU_ADAPTER), "--platform", platform, "--login"]
+    cmd = [PY, str(_SAU_ADAPTER), "--platform", platform, "--login"]
 
     # YouTube 需要代理环境变量
     if platform == "youtube":
@@ -266,7 +272,7 @@ def _run_bilibili_login() -> int:
     """后台运行 bilibili_login.py 打开浏览器供用户手动登录（profile 持久化模式）。"""
     cfg = PLATFORM_REGISTRY["bilibili"]
     profile_dir = cfg["profile_dir"]
-    cmd = ["python3", str(_BILIBILI_LOGIN), str(profile_dir)]
+    cmd = [PY, str(_BILIBILI_LOGIN), str(profile_dir)]
 
     print("▶ 启动 bilibili 登录流程...")
     with _lock:
@@ -322,7 +328,7 @@ def _run_youtube_login() -> int:
     """
     cfg = PLATFORM_REGISTRY["youtube"]
     account_file = cfg["account_file"]
-    cmd = ["python3", str(_YOUTUBE_LOGIN), str(account_file)]
+    cmd = [PY, str(_YOUTUBE_LOGIN), str(account_file)]
 
     # youtube.com 需要代理（patchright 启的 chromium 不吃系统代理）。
     # 用 channel="chrome" 走真 Chrome 时，Chrome 自身读系统代理；这里设 env 保险。
@@ -377,28 +383,35 @@ def _run_youtube_login() -> int:
     return 0
 
 
-def _run_login_check(platform: str) -> tuple[bool, str]:
-    """运行 sau_adapter.py --login-check，返回 (is_valid, message)。"""
+def _run_login_check(platform: str) -> tuple[bool | None, str]:
+    """运行 sau_adapter.py --login-check，返回 (valid, message)。
+
+    W4.1 fail-closed:adapter 退出码 0=有效 / 1=失效 / 3=unknown(上游模块缺
+    cookie_auth,探测能力缺失)。unknown 必须与有效区分(valid=None,前端渲染 ⚠️
+    提示人工复核),MUST NOT 当作「有效」假绿。
+    """
     cfg = PLATFORM_REGISTRY[platform]
     account_file = cfg["account_file"]
 
     if not account_file or not account_file.exists():
         return False, "cookie 不存在"
 
-    cmd = ["python3", str(_SAU_ADAPTER), "--platform", platform, "--login-check"]
+    cmd = [PY, str(_SAU_ADAPTER), "--platform", platform, "--login-check"]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=str(_ROOT))
     output = result.stdout + result.stderr
 
     if result.returncode == 0:
         return True, "cookie 有效"
-    else:
-        return False, output.split("\n")[-1] if output else "cookie 检查失败"
+    if result.returncode == 3:
+        # unknown:探测能力缺失 ≠ 有效(spec「登录态检查 fail-closed」)
+        return None, "unknown（探测能力缺失，无法程序化验证）—— 请人工打开创作者后台核验登录态，必要时重新扫码"
+    return False, output.split("\n")[-1] if output else "cookie 检查失败"
 
 
 def _run_docs_action(platform: str, mode: str) -> int:
     """后台跑 docs_login.py --check/--login，结束后把检测结果落盘。"""
     key = f"docs:{platform}"
-    cmd = ["python3", str(_DOCS_LOGIN), platform, f"--{mode}"]
+    cmd = [PY, str(_DOCS_LOGIN), platform, f"--{mode}"]
 
     print(f"▶ 图文[{platform}] {mode} ...")
     with _lock:
@@ -699,7 +712,7 @@ class LoginHandler(BaseHTTPRequestHandler):
                 # bilibili: 跑 bilibili_login.py --check 检查 profile 是否就绪
                 cfg = PLATFORM_REGISTRY[platform]
                 profile_dir = cfg.get("profile_dir")
-                cmd = ["python3", str(_BILIBILI_LOGIN), str(profile_dir), "--check"]
+                cmd = [PY, str(_BILIBILI_LOGIN), str(profile_dir), "--check"]
                 try:
                     result = subprocess.run(
                         cmd, capture_output=True, text=True, timeout=15, cwd=str(_ROOT)
@@ -982,7 +995,9 @@ async function checkCookie(platform) {{
     try {{
         const res = await fetch('/api/check?platform=' + platform, {{ method: 'POST' }});
         const result = await res.json();
-        alert((result.valid ? '✅' : '❌') + ' ' + result.message);
+        // valid: true=有效 / null=unknown(探测能力缺失,W4.1 fail-closed) / false=失效
+        const icon = result.valid === true ? '✅' : (result.valid === null ? '⚠️' : '❌');
+        alert(icon + ' ' + result.message);
         refreshStatus();
     }} catch (e) {{
         alert('检查失败：' + e.message);
