@@ -30,6 +30,20 @@ jobs:
       - name: Install mcp-server (editable, dev extras)
         run: python -m pip install -q -e "mcp-server[dev]"
 
+      # browser_utils.py 顶层 import patchright；node 侧 confirm_gate 哨兵
+      # 语义测试会 spawn python3 导入它（只测闸逻辑，不需要浏览器二进制）。
+      - name: Install patchright (import-time dep of browser_utils)
+        run: python -m pip install -q patchright
+
+      # tts-synthetic-captions.test.mjs（whisper 对齐批次）require 了本机
+      # 绝对路径 @remotion/captions；CI 无该路径。按 remotion-app/package.json
+      # 钉的同版本在 runner 垫出同路径兜底（不改测试文件——治本须改仓内相对
+      # 路径 + 缺依赖时 skip，归并发会话归属批次）。
+      - name: Shim hardcoded @remotion/captions path (owning-session TODO)
+        run: |
+          sudo mkdir -p /Users/chengsishi/VAAS/remotion-app
+          sudo npm install --silent --no-save --prefix /Users/chengsishi/VAAS/remotion-app @remotion/captions@4.0.489
+
       - name: pytest mcp-server
         run: python -m pytest -q mcp-server/tests
 
