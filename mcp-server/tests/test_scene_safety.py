@@ -376,6 +376,13 @@ class _HitHandler(BaseHTTPRequestHandler):
     hits: list[str] = []
 
     def do_GET(self):
+        # 浏览器会机会性请求 /favicon.ico（版本相关：CI runner 的 chromium
+        # 请求、本地构建不请求——run 42219945079 实证）。favicon 与探针
+        # 语义无关，不计入命中，避免环境噪声打断「零外发」断言。
+        if self.path.startswith("/favicon"):
+            self.send_response(200)
+            self.end_headers()
+            return
         type(self).hits.append(self.path)
         self.send_response(200)
         self.end_headers()
