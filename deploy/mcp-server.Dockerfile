@@ -20,7 +20,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app/mcp-server \
+    PYTHONPATH=/app/mcp-server
 
 # ── Rendering base: ffmpeg (concat/mix/duration probes) + CJK fonts (no tofu)
 # + chromium (headless scenes) as system deps. apt layer cached separately.
