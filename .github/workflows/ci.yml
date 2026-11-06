@@ -10,7 +10,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -23,9 +23,18 @@ jobs:
           node-version: "22"
 
       # 渲染/时长探针类测试需要系统 ffmpeg（与 canonical Dockerfile 的 apt 层
-      # 同口径）；Ubuntu runner 默认不带，CI 首跑在此 7 红实证。
+      # 同口径）；Ubuntu runner 默认不带。apt 源偶发抖动（run 42224154782 卡
+      # update 15min 撞 job 超时），加超时+重试兜住。
       - name: Install system ffmpeg
-        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
+        run: >
+          sudo apt-get update -qq
+          -o Acquire::Retries=3
+          -o Acquire::http::Timeout=20
+          -o Acquire::https::Timeout=20
+          && sudo apt-get install -y --no-install-recommends
+          -o Acquire::Retries=3
+          -o Acquire::http::Timeout=20
+          ffmpeg
 
       - name: Install mcp-server (editable, dev extras)
         run: python -m pip install -q -e "mcp-server[dev]"
