@@ -22,6 +22,11 @@ jobs:
         with:
           node-version: "22"
 
+      # 渲染/时长探针类测试需要系统 ffmpeg（与 canonical Dockerfile 的 apt 层
+      # 同口径）；Ubuntu runner 默认不带，CI 首跑在此 7 红实证。
+      - name: Install system ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Install mcp-server (editable, dev extras)
         run: python -m pip install -q -e "mcp-server[dev]"
 

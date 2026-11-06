@@ -380,3 +380,12 @@ class TestListicleRenderSmoke:
         # 容器字节口径（最强）
         assert _md5(fa) == _md5(fb), \
             f"mp4 container bytes differ: {_md5(fa)} vs {_md5(fb)}"
+
+
+def test_read_script_long_inline_text_is_not_treated_as_path():
+    """CI 首跑实证：含换行/长 UTF-8 的内联稿在 Linux 上 Path(...).is_file()
+    抛 ENAMETOOLONG；_read_script 必须原样返回，不得触文件系统。"""
+    from mcp_server.tools.typed_scenes import _read_script
+    assert _read_script(SCRIPT) == SCRIPT
+    long_single_line = "行业观察" * 100  # 1200 bytes, no newline
+    assert _read_script(long_single_line) == long_single_line

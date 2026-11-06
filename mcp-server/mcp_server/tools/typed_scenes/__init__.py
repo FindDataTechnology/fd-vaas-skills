@@ -131,8 +131,15 @@ def _parse_orientation(inputs: dict, type_json: dict) -> list[int]:
 
 
 def _read_script(script: str) -> str:
-    """script 为文件路径则读文本，否则视为内联口播稿。"""
+    """script 为文件路径则读文本，否则视为内联口播稿。
+
+    内联稿常含换行与数百字节 UTF-8，Linux 上 Path(...).is_file() 会抛
+    ENAMETOOLONG（macOS 静默返回 False）；先做保守形状判定再探文件系统，
+    避免把长文案当路径名（CI 首跑实证）。
+    """
     from pathlib import Path
+    if "\n" in script or "\r" in script or len(script.encode("utf-8")) > 240:
+        return script
     p = Path(script).expanduser()
     if p.is_file():
         return p.read_text(encoding="utf-8")
