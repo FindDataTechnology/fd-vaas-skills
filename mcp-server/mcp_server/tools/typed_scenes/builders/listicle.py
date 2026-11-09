@@ -36,56 +36,82 @@ from ..alignment import _resolve_file
 from ..theme import js_str, wrap_scene_html
 
 _STAGE_CSS = (
-    ".stage-bg{position:absolute;inset:0;"
-    "background:linear-gradient(160deg,var(--vaas-bg) 0%,var(--vaas-bg1) 55%,"
-    "var(--vaas-surface) 130%)}"
-    ".card{position:absolute;inset:0;display:flex;flex-direction:column;"
-    "padding:96px 88px;opacity:0}"
+    # 视觉底座：品牌渐变 + 强调色光斑（避免整屏近黑）；内容垂直居中填充画幅
+    # z-index 分层：底(0) < 品牌家具(1) < 内容(2)。家具在 DOM 里先于 .stage-bg，
+    # 底座是不透明整屏渐变，不显式抬层会把家具整块盖住（实测家具 0 亮像素）。
+    ".stage-bg{position:absolute;inset:0;z-index:0;"
+    "background:radial-gradient(120% 80% at 12% 0%,"
+    "color-mix(in srgb,var(--vaas-accent) 22%,transparent) 0%,transparent 55%),"
+    "linear-gradient(160deg,var(--vaas-bg) 0%,var(--vaas-bg1) 45%,"
+    "var(--vaas-surface) 100%)}"
+    ".card{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;"
+    "justify-content:center;padding:7vmin 9vmin;opacity:0;gap:0}"
+    # 品牌家具：左侧强调竖条 + 底部品牌带（填充画幅、稳定视觉锚点）
+    ".furn-side{position:absolute;z-index:1;left:0;top:0;bottom:0;width:1.4vmin;"
+    "background:linear-gradient(180deg,var(--vaas-accent) 0%,"
+    "color-mix(in srgb,var(--vaas-accent) 35%,transparent) 60%,transparent 100%)}"
+    ".furn-band{position:absolute;z-index:1;left:0;right:0;bottom:0;height:11vmin;"
+    "background:linear-gradient(0deg,"
+    "color-mix(in srgb,var(--vaas-accent) 20%,transparent) 0%,transparent 100%)}"
+    ".furn-mark{position:absolute;z-index:1;left:9vmin;bottom:3.4vmin;"
+    "font-size:2.6vmin;letter-spacing:0.8vmin;color:var(--vaas-muted)}"
+    ".furn-idx{position:absolute;z-index:1;right:-2vmin;top:-5vmin;font-size:44vmin;"
+    "font-weight:800;line-height:0.8;"
+    "color:color-mix(in srgb,var(--vaas-accent) 16%,transparent)}"
 )
 
 _HOOK_CSS = _STAGE_CSS + """
 .kicker{align-self:flex-start;background:var(--vaas-accent);color:var(--vaas-bg);
-  font-size:30px;font-weight:700;letter-spacing:10px;padding:12px 28px;
-  border-radius:10px}
-.top{margin-top:56px;font-size:150px;line-height:1;font-weight:800;
-  letter-spacing:4px;
+  font-size:3.4vmin;font-weight:700;letter-spacing:1vmin;padding:1.4vmin 3.2vmin;
+  border-radius:1.2vmin}
+.top{margin-top:4vmin;font-size:22vmin;line-height:1;font-weight:800;
+  letter-spacing:0.4vmin;
   background:linear-gradient(90deg,var(--vaas-accent),var(--vaas-palette-2));
   -webkit-background-clip:text;background-clip:text;color:transparent}
-.headline{margin:48px 0 0;font-size:64px;line-height:1.35;font-weight:700;
+.headline{margin:5vmin 0 0;font-size:7.6vmin;line-height:1.32;font-weight:700;
   color:var(--vaas-text)}
-.rule{margin-top:56px;width:0;height:8px;border-radius:4px;
+.rule{margin-top:6vmin;width:0;height:1vmin;border-radius:0.5vmin;
   background:linear-gradient(90deg,var(--vaas-accent),var(--vaas-palette-2))}
-.subband{margin-top:auto;min-height:200px;border-top:2px solid var(--vaas-border);
-  padding-top:36px;display:flex;align-items:flex-start}
-.sub{font-size:38px;line-height:1.55;color:var(--vaas-text)}
+.subband{position:absolute;left:9vmin;right:9vmin;bottom:8vmin;
+  min-height:14vmin;border-top:0.2vmin solid var(--vaas-border);
+  padding-top:3vmin;display:flex;align-items:flex-start}
+.sub{font-size:3.6vmin;line-height:1.5;color:var(--vaas-text)}
 """
 
 _ITEM_CSS = _STAGE_CSS + """
-.head{display:flex;align-items:baseline;gap:28px}
-.rank{font-size:170px;font-weight:800;line-height:1;opacity:0;
+.head{display:flex;align-items:baseline;gap:2.4vmin}
+.rank{font-size:20vmin;font-weight:800;line-height:0.95;opacity:0;
   font-variant-numeric:tabular-nums}
-.label{font-size:28px;letter-spacing:6px;color:var(--vaas-muted)}
-.row{display:flex;gap:56px;margin-top:40px;align-items:flex-start}
+.label{font-size:3vmin;letter-spacing:0.6vmin;color:var(--vaas-muted)}
+.row{display:flex;gap:5vmin;margin-top:3vmin;align-items:center}
 .col{flex:1;min-width:0}
-.title{font-size:58px;line-height:1.3;font-weight:800;color:var(--vaas-text)}
-.desc{margin-top:32px;font-size:40px;line-height:1.55;color:var(--vaas-text)}
-.fig{margin:0;flex:0 0 360px;width:360px;height:360px;border-radius:24px;
-  overflow:hidden;border:2px solid var(--vaas-border)}
+.title{font-size:8vmin;line-height:1.16;font-weight:800;color:var(--vaas-text)}
+.desc{margin-top:3vmin;font-size:4.2vmin;line-height:1.5;color:var(--vaas-text);
+  opacity:.92}
+.fig{margin:0;flex:0 0 32vmin;width:32vmin;height:32vmin;border-radius:2.4vmin;
+  overflow:hidden;border:0.2vmin solid var(--vaas-border)}
 .img{width:100%;height:100%;object-fit:cover;display:block}
-.subband{margin-top:auto;min-height:220px;border-top:2px solid var(--vaas-border);
-  padding-top:36px;display:flex;align-items:flex-start}
-.sub{font-size:38px;line-height:1.55;color:var(--vaas-text)}
-.progress{position:absolute;left:0;right:0;bottom:0;height:8px;
+/* 位置点阵：条目在榜单中的位置（填充中段留白，兼作进度信息） */
+.dots{display:flex;gap:1.6vmin;margin-top:6vmin}
+.dot{width:2.4vmin;height:2.4vmin;border-radius:50%;
+  background:color-mix(in srgb,var(--vaas-text) 24%,transparent)}
+.dot.on{background:var(--vaas-accent);box-shadow:0 0 0 0.6vmin
+  color-mix(in srgb,var(--vaas-accent) 22%,transparent)}
+.subband{position:absolute;left:9vmin;right:9vmin;bottom:8vmin;
+  min-height:16vmin;border-top:0.2vmin solid var(--vaas-border);
+  padding-top:3vmin;display:flex;align-items:flex-start}
+.sub{font-size:3.6vmin;line-height:1.5;color:var(--vaas-text)}
+.progress{position:absolute;left:0;right:0;bottom:0;height:0.8vmin;
   background:var(--vaas-surface2)}
 .bar{height:100%;width:0;background:var(--vaas-accent)}
 """
 
 _CTA_CSS = _STAGE_CSS + """
-.recap{font-size:130px;line-height:1;font-weight:800;letter-spacing:4px;
+.recap{font-size:20vmin;line-height:1;font-weight:800;letter-spacing:0.4vmin;
   background:linear-gradient(90deg,var(--vaas-accent),var(--vaas-palette-2));
   -webkit-background-clip:text;background-clip:text;color:transparent}
-.lines{margin-top:72px;display:flex;flex-direction:column;gap:36px}
-.line{font-size:52px;line-height:1.4;font-weight:700;color:var(--vaas-text);
+.lines{margin-top:6vmin;display:flex;flex-direction:column;gap:3.2vmin}
+.line{font-size:6vmin;line-height:1.36;font-weight:700;color:var(--vaas-text);
   opacity:0}
 """
 
@@ -193,11 +219,12 @@ def _norm_rank(value) -> int | None:
 # 片段根定位（同页多卡共存，seek_js 按唯一 id 找本卡，互不串台）
 _CLIP_V2_CSS = (
     ".lc-clip{position:absolute;inset:0}"
-    # 句级字幕：同段多句绝对叠放（只切 opacity，无回流抖动；
-    # .subband 提为定位上下文，top 36px 对齐原 padding-top）
-    ".subband{position:relative}"
-    ".s{position:absolute;left:0;right:0;top:36px;opacity:0;font-size:38px;"
-    "line-height:1.55;color:var(--vaas-text)}"
+    # 句级字幕：同段多句绝对叠放（只切 opacity/可见性，无回流抖动）。
+    # 注意不要在这里给 .subband 加 position —— 各卡 CSS 已把它绝对定位到
+    # 画面底部（bottom:8vmin）；此处再写 relative 会覆盖成文档流，导致字幕
+    # 与标题重叠（news-flash 同类缺陷 vmin 改版实测）。
+    ".s{position:absolute;left:0;right:0;top:3.2vmin;opacity:0;"
+    "font-size:3.6vmin;line-height:1.5;color:var(--vaas-text)}"
 )
 
 # 入场阶跃模板（__ROOT__ 换成片段根 id，__DUR__ 换成片段时长）——
@@ -287,11 +314,20 @@ def _sentences(seg: Segment) -> list[dict]:
              "end": float(seg["duration_s"])}]
 
 
-def _clip_fragment(root_id: str, css: str, body: str) -> str:
+def _clip_fragment(root_id: str, css: str, body: str,
+                   ghost: str = "") -> str:
     """视觉 clip 片段：内联 <style>（品牌 :root 变量由 composition 顶层注入）
-    + 自带唯一 id 的片段根——去掉整页 wrapper，片段可单独成卡。"""
+    + 自带唯一 id 的片段根——去掉整页 wrapper，片段可单独成卡。
+
+    ghost = 背景巨型半透明数字/字（填充画幅空白，品牌家具的一层）。
+    """
+    furn = ('<div class="furn-side"></div>'
+            '<div class="furn-band"></div>'
+            '<div class="furn-mark">寻数 · 萬星</div>')
+    if ghost:
+        furn += f'<div class="furn-idx">{_esc(ghost)}</div>'
     return (f"<style>{css}</style>"
-            f'<div class="lc-clip" id="{root_id}">{body}</div>')
+            f'<div class="lc-clip" id="{root_id}">{furn}{body}</div>')
 
 
 def _sentence_spans(sents: list[dict]) -> str:
@@ -546,7 +582,8 @@ class ListicleBuilder(AbstractBuilder):
                 f'{band}'
                 '</div>')
         return {"duration": dur,
-                "html": _clip_fragment(root_id, _HOOK_CSS + _CLIP_V2_CSS, body),
+                "html": _clip_fragment(root_id, _HOOK_CSS + _CLIP_V2_CSS, body,
+                                       ghost=f"{top_n:02d}"),
                 "seek_js": _seek(_HOOK_SEEK_V2, root_id, dur)}
 
     def _item_clip(self, seg: Segment, item: dict, pos: int, total: int,
@@ -555,6 +592,9 @@ class ListicleBuilder(AbstractBuilder):
         root_id = f"lc-item-{pos}"
         fig = ('<figure class="fig"><img class="img" alt="" '
                f'src="{item["image"]}"></figure>') if item.get("image") else ""
+        dots = "".join(
+            f'<span class="dot{" on" if k == pos - 1 else ""}"></span>'
+            for k in range(total))
         body = ('<div class="stage-bg"></div>'
                 '<div class="card">'
                 '<div class="head">'
@@ -565,12 +605,14 @@ class ListicleBuilder(AbstractBuilder):
                 '<div class="row"><div class="col">'
                 f'<div class="title">{_esc(item["title"])}</div>'
                 f'<div class="desc">{_esc(item["desc"])}</div>'
+                f'<div class="dots">{dots}</div>'
                 '</div>' + fig + '</div>'
                 f'<div class="subband">{_sentence_spans(_sentences(seg))}</div>'
                 '<div class="progress"><div class="bar"></div></div>'
                 '</div>')
         return {"duration": dur,
-                "html": _clip_fragment(root_id, _ITEM_CSS + _CLIP_V2_CSS, body),
+                "html": _clip_fragment(root_id, _ITEM_CSS + _CLIP_V2_CSS, body,
+                                       ghost=f"{item['rank']:02d}"),
                 "seek_js": _seek(_ITEM_SEEK_V2, root_id, dur)}
 
     def _cta_clip(self, seg: Segment, top_n: int, theme) -> dict:
@@ -586,7 +628,8 @@ class ListicleBuilder(AbstractBuilder):
                 f'<div class="lines">{lines}</div>'
                 '</div>')
         return {"duration": dur,
-                "html": _clip_fragment(root_id, _CTA_CSS + _CLIP_V2_CSS, body),
+                "html": _clip_fragment(root_id, _CTA_CSS + _CLIP_V2_CSS, body,
+                                       ghost="TOP"),
                 "seek_js": _seek(_CTA_SEEK_V2, root_id, dur)}
 
 

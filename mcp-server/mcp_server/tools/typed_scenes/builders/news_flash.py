@@ -30,44 +30,80 @@ from ..theme import js_str, wrap_scene_html
 from .. import AbstractBuilder, Segment
 
 _STAGE_CSS = (
-    ".stage-bg{position:absolute;inset:0;"
-    "background:linear-gradient(160deg,var(--vaas-bg) 0%,var(--vaas-bg1) 55%,"
-    "var(--vaas-surface) 130%)}"
-    ".card{position:absolute;inset:0;display:flex;flex-direction:column;"
-    "padding:96px 88px;opacity:0}"
+    # 视觉底座：品牌渐变 + 强调色光斑（避免整屏近黑）；内容垂直居中填充画幅
+    # z-index 分层：底(0) < 品牌家具(1) < 内容(2)。家具在 DOM 里先于 .stage-bg，
+    # 底座是不透明整屏渐变，不显式抬层会把家具整块盖住（实测家具 0 亮像素）。
+    ".stage-bg{position:absolute;inset:0;z-index:0;"
+    "background:radial-gradient(120% 80% at 12% 0%,"
+    "color-mix(in srgb,var(--vaas-accent) 22%,transparent) 0%,transparent 55%),"
+    "linear-gradient(160deg,var(--vaas-bg) 0%,var(--vaas-bg1) 45%,"
+    "var(--vaas-surface) 100%)}"
+    ".card{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;"
+    "justify-content:center;padding:7vmin 9vmin;opacity:0;gap:0}"
+    # 品牌家具：左侧强调竖条 + 底部品牌带（填充画幅、稳定视觉锚点）
+    ".furn-side{position:absolute;z-index:1;left:0;top:0;bottom:0;width:1.4vmin;"
+    "background:linear-gradient(180deg,var(--vaas-accent) 0%,"
+    "color-mix(in srgb,var(--vaas-accent) 35%,transparent) 60%,transparent 100%)}"
+    ".furn-band{position:absolute;z-index:1;left:0;right:0;bottom:0;height:11vmin;"
+    "background:linear-gradient(0deg,"
+    "color-mix(in srgb,var(--vaas-accent) 20%,transparent) 0%,transparent 100%)}"
+    ".furn-mark{position:absolute;z-index:1;left:9vmin;bottom:3.4vmin;"
+    "font-size:2.6vmin;letter-spacing:0.8vmin;color:var(--vaas-muted)}"
+    ".furn-idx{position:absolute;z-index:1;right:-2vmin;top:-5vmin;font-size:44vmin;"
+    "font-weight:800;line-height:0.8;"
+    "color:color-mix(in srgb,var(--vaas-accent) 16%,transparent)}"
 )
+
+# 要点清单（开场预告 / 收尾回扣共用）：编号 + 文本的窄条列表。
+# 存在的理由不只是好看——标题卡与 CTA 卡本身只有一两行字，不铺内容就是半屏空白。
+_CHIPS_CSS = """
+.chips{margin-top:4vmin;display:flex;flex-direction:column;gap:1.8vmin;
+  max-width:78vmin}
+.chip{display:flex;align-items:baseline;gap:2vmin;padding:1.6vmin 2.2vmin;
+  border-left:0.5vmin solid var(--vaas-accent);border-radius:1vmin;
+  background:color-mix(in srgb,var(--vaas-surface) 55%,transparent)}
+.chip .n{font-size:2.6vmin;font-weight:800;color:var(--vaas-accent);
+  font-variant-numeric:tabular-nums}
+.chip .t{font-size:3.4vmin;line-height:1.4;color:var(--vaas-text)}
+"""
 
 _TITLE_CSS = _STAGE_CSS + """
 .kicker{align-self:flex-start;background:var(--vaas-accent);color:var(--vaas-bg);
-  font-size:30px;font-weight:700;letter-spacing:10px;padding:12px 28px;
-  border-radius:10px}
-.headline{margin:64px 0 0;font-size:82px;line-height:1.28;font-weight:800;
-  letter-spacing:2px;color:var(--vaas-text)}
-.rule{margin-top:72px;width:0;height:8px;border-radius:4px;
+  font-size:3.4vmin;font-weight:700;letter-spacing:1vmin;padding:1.4vmin 3.2vmin;
+  border-radius:1.2vmin}
+.headline{margin:5vmin 0 0;font-size:9vmin;line-height:1.22;font-weight:800;
+  letter-spacing:0.2vmin;color:var(--vaas-text)}
+.rule{margin-top:6vmin;width:0;height:1vmin;border-radius:0.5vmin;
   background:linear-gradient(90deg,var(--vaas-accent),var(--vaas-palette-2))}
-.source{margin-top:auto;font-size:26px;color:var(--vaas-muted)}
-"""
+/* 来源署名与品牌落款同一基线、靠右（两者都贴底，靠左会压住落款） */
+.source{position:absolute;left:auto;right:9vmin;bottom:3.4vmin;
+  text-align:right;font-size:2.6vmin;color:var(--vaas-muted)}
+""" + _CHIPS_CSS
 
 _POINT_CSS = _STAGE_CSS + """
-.head{display:flex;align-items:baseline;gap:24px}
-.idx{font-size:96px;font-weight:800;line-height:1}
-.label{font-size:28px;letter-spacing:6px;color:var(--vaas-muted)}
-.point{margin-top:56px;font-size:64px;line-height:1.42;font-weight:700;
+.head{display:flex;align-items:baseline;gap:2.4vmin}
+.idx{font-size:15vmin;font-weight:800;line-height:0.95}
+.label{font-size:3vmin;letter-spacing:0.6vmin;color:var(--vaas-muted)}
+.point{margin-top:4vmin;font-size:7.6vmin;line-height:1.38;font-weight:700;
   color:var(--vaas-text)}
-.subband{margin-top:auto;min-height:220px;border-top:2px solid var(--vaas-border);
-  padding-top:36px;display:flex;align-items:flex-start}
-.sub{font-size:38px;line-height:1.55;color:var(--vaas-text)}
-.progress{position:absolute;left:0;right:0;bottom:0;height:8px;
+.subband{position:absolute;left:9vmin;right:9vmin;bottom:8vmin;
+  min-height:16vmin;border-top:0.2vmin solid var(--vaas-border);
+  padding-top:3vmin;display:flex;align-items:flex-start}
+.sub{font-size:3.6vmin;line-height:1.5;color:var(--vaas-text)}
+.progress{position:absolute;left:0;right:0;bottom:0;height:0.8vmin;
   background:var(--vaas-surface2)}
 .bar{height:100%;width:0;background:var(--vaas-accent)}
 """
 
-_CTA_CSS = _STAGE_CSS + """
-.recap{font-size:30px;letter-spacing:4px;color:var(--vaas-muted)}
-.lines{margin-top:72px;display:flex;flex-direction:column;gap:36px}
-.line{font-size:60px;line-height:1.4;font-weight:700;color:var(--vaas-text);
+_CTA_CSS = _STAGE_CSS + _CHIPS_CSS + """
+.recap{font-size:3.4vmin;letter-spacing:0.6vmin;color:var(--vaas-muted)}
+/* 收尾回扣要点清单：把本片 N 个要点列成目录（填充画幅 + 强化记忆） */
+.lines{margin-top:5vmin;display:flex;flex-direction:column;gap:3vmin}
+.line{font-size:6.6vmin;line-height:1.38;font-weight:700;color:var(--vaas-text);
   opacity:0}
-.source{margin-top:auto;font-size:26px;color:var(--vaas-muted)}
+/* 来源署名与品牌落款同一基线、靠右（两者都贴底，靠左会压住落款） */
+.source{position:absolute;left:auto;right:9vmin;bottom:3.4vmin;
+  text-align:right;font-size:2.6vmin;color:var(--vaas-muted)}
 """
 
 _TITLE_JS = """
@@ -139,11 +175,12 @@ window.seek(0);
 # 片段根定位（同页多卡共存，seek_js 按唯一 id 找本卡，互不串台）
 _CLIP_V2_CSS = (
     ".nf-clip{position:absolute;inset:0}"
-    # 句级字幕：同段多句绝对叠放（只切 opacity/可见性，无回流抖动；
-    # .subband 提为定位上下文，top 36px 对齐原 padding-top）
-    ".subband{position:relative}"
-    ".s{position:absolute;left:0;right:0;top:36px;opacity:0;font-size:38px;"
-    "line-height:1.55;color:var(--vaas-text)}"
+    # 句级字幕：同段多句绝对叠放（只切 opacity/可见性，无回流抖动）。
+    # 注意不要在这里给 .subband 加 position —— 各卡的 _POINT_CSS 已把它
+    # 绝对定位到画面底部；此处再写 relative 会覆盖成文档流，导致字幕与
+    # 标题重叠（vmin 改版后实测）。
+    ".s{position:absolute;left:0;right:0;top:3.4vmin;opacity:0;"
+    "font-size:3.4vmin;line-height:1.5;color:var(--vaas-text)}"
 )
 
 # 入场阶跃模板（__ROOT__ 换成片段根 id，__DUR__ 换成片段时长）——
@@ -219,11 +256,20 @@ def _sentences(seg: Segment) -> list[dict]:
              "end": float(seg["duration_s"])}]
 
 
-def _clip_fragment(root_id: str, css: str, body: str) -> str:
+def _clip_fragment(root_id: str, css: str, body: str,
+                   ghost: str = "") -> str:
     """视觉 clip 片段：内联 <style>（品牌 :root 变量由 composition 顶层注入）
-    + 自带唯一 id 的片段根——去掉整页 wrapper，片段可单独成卡。"""
+    + 自带唯一 id 的片段根——去掉整页 wrapper，片段可单独成卡。
+
+    ghost = 背景巨型半透明序号（填充画幅空白，品牌家具的一层）。
+    """
+    furn = ('<div class="furn-side"></div>'
+            '<div class="furn-band"></div>'
+            '<div class="furn-mark">寻数 · 萬星</div>')
+    if ghost:
+        furn += f'<div class="furn-idx">{_esc(ghost)}</div>'
     return (f"<style>{css}</style>"
-            f'<div class="nf-clip" id="{root_id}">{body}</div>')
+            f'<div class="nf-clip" id="{root_id}">{furn}{body}</div>')
 
 
 def _sentence_spans(sents: list[dict]) -> str:
@@ -404,12 +450,12 @@ class NewsFlashBuilder(AbstractBuilder):
                 f"{len(points)} != 口播要点段数 {len(point_segs)}")
         palette = theme.get("palette") or ["var(--vaas-accent)"]
 
-        clips = [self._title_clip(hook, headline, source, theme)]
+        clips = [self._title_clip(hook, headline, source, theme, points)]
         for i, (seg, point) in enumerate(zip(point_segs, points)):
             clips.append(self._point_clip(
                 seg, point, i + 1, len(points),
                 palette[i % len(palette)], theme))
-        clips.append(self._cta_clip(cta, headline, source, theme))
+        clips.append(self._cta_clip(cta, headline, source, theme, points))
         return self._assemble(clips)
 
     @staticmethod
@@ -424,14 +470,22 @@ class NewsFlashBuilder(AbstractBuilder):
             start = round(start + dur, 4)
         return {"visual": visual, "subtitle": []}
 
-    def _title_clip(self, seg: Segment, headline: str, source, theme) -> dict:
+    def _title_clip(self, seg: Segment, headline: str, source, theme,
+                    points: list[str] | None = None) -> dict:
         dur = float(seg["duration_s"])
         root_id = "nf-title"
+        # 开场预告：标题下方列出本片全部要点（否则标题卡只有两行字，半屏空白）
+        chips = "".join(
+            f'<div class="chip"><span class="n">{i + 1:02d}</span>'
+            f'<span class="t">{_esc(p)}</span></div>'
+            for i, p in enumerate(points or []))
+        chips_html = f'<div class="chips">{chips}</div>' if chips else ""
         body = ('<div class="stage-bg"></div>'
                 '<div class="card">'
                 '<div class="kicker">热点速报</div>'
                 f'<h1 class="headline">{_esc(headline)}</h1>'
                 '<div class="rule"></div>'
+                f'{chips_html}'
                 f'<div class="source">{_source_line(source)}</div>'
                 '</div>')
         return {"duration": dur,
@@ -454,19 +508,28 @@ class NewsFlashBuilder(AbstractBuilder):
                 '<div class="progress"><div class="bar"></div></div>'
                 '</div>')
         return {"duration": dur,
-                "html": _clip_fragment(root_id, _POINT_CSS + _CLIP_V2_CSS, body),
+                "html": _clip_fragment(root_id, _POINT_CSS + _CLIP_V2_CSS, body,
+                                       ghost=f"{index:02d}"),
                 "seek_js": _seek(_POINT_SEEK_V2, root_id, dur)}
 
-    def _cta_clip(self, seg: Segment, headline: str, source, theme) -> dict:
+    def _cta_clip(self, seg: Segment, headline: str, source, theme,
+                  points: list[str] | None = None) -> dict:
         dur = float(seg["duration_s"])
         root_id = "nf-cta"
         lines = "".join(
             f'<div class="line" data-s0="{float(s["start"]):.4f}">'
             f'{_esc(str(s["text"]))}</div>'
             for s in _sentences(seg))
+        # 收尾回扣：把本片要点按序重列（末尾卡不再只有一句 CTA，画幅有内容）
+        chips = "".join(
+            f'<div class="chip"><span class="n">{i + 1:02d}</span>'
+            f'<span class="t">{_esc(p)}</span></div>'
+            for i, p in enumerate(points or []))
+        chips_html = f'<div class="chips">{chips}</div>' if chips else ""
         body = ('<div class="stage-bg"></div>'
                 '<div class="card">'
                 f'<div class="recap">{_esc(headline)}</div>'
+                f'{chips_html}'
                 f'<div class="lines">{lines}</div>'
                 f'<div class="source">{_source_line(source)}</div>'
                 '</div>')

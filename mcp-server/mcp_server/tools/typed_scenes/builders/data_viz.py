@@ -321,39 +321,69 @@ class DataVizBuilder(AbstractBuilder):
 
 _DV_V2_CSS = """
 .dv-clip{position:absolute;inset:0}
-.dv-card{position:absolute;inset:0;display:flex;flex-direction:column;
-  padding:96px 88px;opacity:0}
-.dv-bg{position:absolute;inset:0;background:linear-gradient(160deg,
-  var(--vaas-bg) 0%,var(--vaas-bg1) 55%,var(--vaas-surface) 130%)}
-.dv-kicker{align-self:flex-start;background:var(--vaas-accent);
-  color:var(--vaas-bg);font-size:30px;font-weight:700;letter-spacing:10px;
-  padding:12px 28px;border-radius:10px}
-.dv-headline{margin:56px 0 0;font-size:80px;line-height:1.3;font-weight:800;
+/* 底(0) < 品牌家具(1) < 内容(2)：家具在 DOM 里先于不透明底座，须显式抬层
+   （与 news-flash / listicle / kinetic 同一条，实测不抬层家具被整块盖住） */
+.dv-bg{position:absolute;inset:0;z-index:0;
+  background:radial-gradient(120% 80% at 12% 0%,
+  color-mix(in srgb,var(--vaas-accent) 22%,transparent) 0%,transparent 55%),
+  linear-gradient(160deg,var(--vaas-bg) 0%,var(--vaas-bg1) 45%,
+  var(--vaas-surface) 100%)}
+.furn-side{position:absolute;z-index:1;left:0;top:0;bottom:0;width:1.4vmin;
+  background:linear-gradient(180deg,var(--vaas-accent) 0%,
+  color-mix(in srgb,var(--vaas-accent) 35%,transparent) 60%,transparent 100%)}
+.furn-band{position:absolute;z-index:1;left:0;right:0;bottom:0;height:11vmin;
+  background:linear-gradient(0deg,
+  color-mix(in srgb,var(--vaas-accent) 20%,transparent) 0%,transparent 100%)}
+.furn-mark{position:absolute;z-index:1;left:9vmin;bottom:3.4vmin;
+  font-size:2.6vmin;letter-spacing:0.8vmin;color:var(--vaas-muted)}
+.furn-idx{position:absolute;z-index:1;right:-2vmin;top:-5vmin;font-size:44vmin;
+  font-weight:800;line-height:0.8;
+  color:color-mix(in srgb,var(--vaas-accent) 16%,transparent)}
+.dv-card{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;
+  padding:7vmin 9vmin;opacity:0}
+/* hook / cta 用居中版式（图表卡让 flex:1 撑满，不居中） */
+.dv-card.dv-center{justify-content:center}
+.dv-kicker{align-self:flex-start;background:var(--vaas-accent);color:var(--vaas-bg);
+  font-size:3.4vmin;font-weight:700;letter-spacing:1vmin;padding:1.4vmin 3.2vmin;
+  border-radius:1.2vmin}
+.dv-headline{margin:4vmin 0 0;font-size:8vmin;line-height:1.28;font-weight:800;
   color:var(--vaas-text)}
-.dv-subline{margin-top:36px;font-size:34px;letter-spacing:4px;
+.dv-subline{margin-top:3vmin;font-size:3.2vmin;letter-spacing:0.5vmin;
   color:var(--vaas-muted)}
-.dv-rule{margin-top:64px;width:0;height:8px;border-radius:4px;
+.dv-rule{margin-top:5vmin;width:0;height:1vmin;border-radius:0.5vmin;
   background:linear-gradient(90deg,var(--vaas-accent),var(--vaas-palette-2))}
-.dv-source{margin-top:auto;font-size:26px;color:var(--vaas-muted)}
-.dv-head{display:flex;align-items:baseline;gap:24px}
-.dv-idx{font-size:88px;font-weight:800;line-height:1}
-.dv-label{font-size:28px;letter-spacing:6px;color:var(--vaas-muted)}
-.dv-title{margin-top:20px;font-size:54px;line-height:1.3;font-weight:700;
+/* hook 的图表清单：把后续 N 张图先亮成目录（填充画幅，兼作预告） */
+.dv-chips{margin-top:6vmin;display:flex;flex-direction:column;gap:2vmin;
+  max-width:78vmin}
+.dv-chip{display:flex;align-items:baseline;gap:2vmin;padding:1.8vmin 2.4vmin;
+  border-left:0.5vmin solid var(--vaas-accent);border-radius:1vmin;
+  background:color-mix(in srgb,var(--vaas-surface) 55%,transparent)}
+.dv-chip .n{font-size:2.8vmin;font-weight:800;color:var(--vaas-accent);
+  font-variant-numeric:tabular-nums}
+.dv-chip .t{font-size:3.6vmin;line-height:1.4;color:var(--vaas-text)}
+/* 来源署名与品牌落款同一基线、靠右（两者都贴底，靠左会压住落款） */
+.dv-source{position:absolute;left:auto;right:9vmin;bottom:3.4vmin;
+  text-align:right;font-size:2.6vmin;color:var(--vaas-muted)}
+.dv-head{display:flex;align-items:baseline;gap:2vmin}
+.dv-idx{font-size:13vmin;font-weight:800;line-height:1}
+.dv-label{font-size:3vmin;letter-spacing:0.6vmin;color:var(--vaas-muted)}
+.dv-title{margin-top:2vmin;font-size:5.4vmin;line-height:1.3;font-weight:700;
   color:var(--vaas-text)}
-.dv-chartwrap{flex:1;min-height:0;margin-top:28px}
+.dv-chartwrap{flex:1;min-height:0;margin-top:2.5vmin}
 .dv-chart{width:100%;height:100%}
-.dv-stat{display:flex;align-items:baseline;gap:20px;margin-top:20px}
-.dv-statlabel{font-size:26px;letter-spacing:4px;color:var(--vaas-muted)}
-.dv-statval{font-size:44px;font-weight:800;color:var(--vaas-accent)}
-.dv-subband{margin-top:auto;min-height:190px;border-top:2px solid var(--vaas-border);
-  padding-top:30px;display:flex;align-items:flex-start}
-.dv-sub{font-size:36px;line-height:1.55;color:var(--vaas-text)}
-.dv-progress{position:absolute;left:0;right:0;bottom:0;height:8px;
-  background:var(--vaas-surface)}
+.dv-stat{display:flex;align-items:baseline;gap:2vmin;margin-top:1.5vmin}
+.dv-statlabel{font-size:2.8vmin;letter-spacing:0.5vmin;color:var(--vaas-muted)}
+.dv-statval{font-size:4.8vmin;font-weight:800;color:var(--vaas-accent)}
+.dv-subband{margin-top:auto;min-height:14vmin;
+  border-top:0.2vmin solid var(--vaas-border);padding-top:3vmin;
+  display:flex;align-items:flex-start}
+.dv-sub{font-size:3.6vmin;line-height:1.5;color:var(--vaas-text)}
+.dv-progress{position:absolute;left:0;right:0;bottom:0;height:0.8vmin;
+  background:var(--vaas-surface2)}
 .dv-bar{height:100%;width:0;background:var(--vaas-accent)}
-.dv-recap{font-size:30px;letter-spacing:4px;color:var(--vaas-muted)}
-.dv-lines{margin-top:64px;display:flex;flex-direction:column;gap:34px}
-.dv-line{font-size:58px;line-height:1.4;font-weight:700;color:var(--vaas-text);
+.dv-recap{font-size:3.4vmin;letter-spacing:0.6vmin;color:var(--vaas-muted)}
+.dv-lines{margin-top:6vmin;display:flex;flex-direction:column;gap:3.2vmin}
+.dv-line{font-size:6vmin;line-height:1.36;font-weight:700;color:var(--vaas-text);
   opacity:0}
 """
 
@@ -368,7 +398,7 @@ def _helpers_without_init() -> str:
 _CHART_SEEK_TMPL = """function (lt) {
     var D = window.__DATAKEY__;
     if (!D) { return; }
-    // 块作用域注意：__HELPERS__ 在下面的 if 块内声明（function 声明块内可见、
+    // 块作用域注意：注入的 helpers 在下面的 if 块内声明（function 声明块内可见、
     // 块外不可见），因此格式化函数在 seek 顶层自带一份，不跨块引用。
     var fmt = function (x) {
       if (typeof x !== 'number' || !isFinite(x)) { return ''; }
@@ -448,11 +478,23 @@ def _cta_seek_v2(root: str, starts: list) -> str:
     )
 
 
-def _dv_clip_html(root: str, body: str, extra: str = "") -> str:
+def _dv_clip_html(root: str, body: str, extra: str = "",
+                  ghost: str = "", center: bool = False) -> str:
+    """片段包装：品牌家具（侧条/底带/落款/巨型幽灵序号）+ 卡片。
+
+    ghost = 背景巨型半透明序号（填充画幅空白）；center = 内容垂直居中
+    （hook/cta 用，图表卡让 .dv-chartwrap flex:1 撑满，不居中）。
+    """
+    furn = ('<div class="furn-side"></div>'
+            '<div class="furn-band"></div>'
+            '<div class="furn-mark">寻数 · 萬星</div>')
+    if ghost:
+        furn += f'<div class="furn-idx">{_esc(ghost)}</div>'
+    card_cls = "dv-card dv-center" if center else "dv-card"
     return (f"<style>{_DV_V2_CSS}</style>"
-            f'<div class="dv-clip" id="{root}">'
+            f'<div class="dv-clip" id="{root}">{furn}'
             '<div class="dv-bg"></div>'
-            f'<div class="dv-card">{body}</div></div>'
+            f'<div class="{card_cls}">{body}</div></div>'
             + extra)
 
 
@@ -478,12 +520,19 @@ def _dv_build_composition(self, segments, inputs, size, theme) -> dict:
 
     built = []
     src_line = f"来源：{source}" if source else ""
+    chips = "".join(
+        f'<div class="dv-chip"><span class="n">{i + 1:02d}</span>'
+        f'<span class="t">{_esc(str(ch.get("title") or "图表"))}</span></div>'
+        for i, ch in enumerate(charts))
     hook_body = ('<div class="dv-kicker">数据可视化</div>'
                  f'<h1 class="dv-headline">{_esc(title)}</h1>'
                  f'<div class="dv-subline">{len(charts)} 张图表，一图一个重点</div>'
                  '<div class="dv-rule"></div>'
+                 f'<div class="dv-chips">{chips}</div>'
                  f'<div class="dv-source">{_esc(src_line)}</div>')
-    built.append({"html": _dv_clip_html("dv-hook", hook_body),
+    built.append({"html": _dv_clip_html("dv-hook", hook_body,
+                                        ghost=f"{len(charts):02d}",
+                                        center=True),
                   "seek_js": _hook_seek_v2("dv-hook")})
 
     for i, (seg, ch) in enumerate(zip(chart_segs, charts)):
@@ -522,14 +571,16 @@ def _dv_build_composition(self, segments, inputs, size, theme) -> dict:
                 .replace("__ROOT__", root)
                 .replace("__HELPERS__", _helpers_without_init())
                 .replace("__DRIVER__", chart_driver_js(island["kind"])))
-        built.append({"html": _dv_clip_html(root, body, extra), "seek_js": seek})
+        built.append({"html": _dv_clip_html(root, body, extra,
+                                            ghost=f"{i + 1:02d}"),
+                      "seek_js": seek})
 
     sents = cta["sentences"] or _sentence_fallback(cta)
     lines = "".join(f'<div class="dv-line">{_esc(s["text"])}</div>' for s in sents)
     cta_body = (f'<div class="dv-recap">{_esc(title)}</div>'
                 f'<div class="dv-lines">{lines}</div>'
                 f'<div class="dv-source">{_esc(src_line)}</div>')
-    built.append({"html": _dv_clip_html("dv-cta", cta_body),
+    built.append({"html": _dv_clip_html("dv-cta", cta_body, center=True),
                   "seek_js": _cta_seek_v2(
                       "dv-cta", [round(float(s["start"]), 4) for s in sents])})
 
@@ -544,7 +595,7 @@ def _dv_build_composition(self, segments, inputs, size, theme) -> dict:
                              "duration": round(float(s["end"]) - float(s["start"]), 4),
                              "text": s["text"]})
         start = round(start + dur, 4)
-    return {"visual": visual, "subtitle": subtitle}
+    return {"visual": visual, "subtitle": []}  # 卡内已自绘字幕（.dv-sub）
 
 
 # 挂到既有类上（同一类，不重复定义，保留 v1 的 validate_inputs/build）

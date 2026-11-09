@@ -98,19 +98,36 @@ _CJK_RUN_RE = re.compile(r"[\u4e00-\u9fff]+")
 # 契约 v2 逐句片段 CSS（clip 自带样式；品牌变量在 composition :root 单点注入）。
 # 句文本初始 opacity:0 —— 开窗前的 clip 不闪字，首帧由 seek_js 落到 k/3。
 _CLIP_CSS = (
-    ".kq-bg{position:absolute;inset:0;background:linear-gradient(160deg,"
-    "var(--vaas-bg) 0%,var(--vaas-bg1) 55%,var(--vaas-surface) 130%)}"
-    ".kq-kicker{position:absolute;top:110px;left:0;right:0;text-align:center;"
-    "font-size:26px;letter-spacing:14px;color:var(--vaas-muted)}"
-    ".kq-quote{position:absolute;inset:0 0 230px 0;display:flex;"
-    "align-items:center;justify-content:center;padding:0 88px}"
-    ".kq-text{width:100%;text-align:center;font-size:92px;line-height:1.45;"
-    "font-weight:800;letter-spacing:2px;color:var(--vaas-text);"
-    "text-wrap:balance;opacity:0;transform:translateY(20px)}"
-    ".kw{color:var(--vaas-accent);font-size:1.12em;font-weight:900;"
+    # 底(0) < 品牌家具(1) < 内容(2)：家具在 DOM 里先于不透明底座，须显式抬层
+    # （与 news-flash / listicle 同一条，实测不抬层家具被整块盖住）
+    ".kq-bg{position:absolute;inset:0;z-index:0;"
+    "background:radial-gradient(120% 80% at 12% 0%,"
+    "color-mix(in srgb,var(--vaas-accent) 22%,transparent) 0%,transparent 55%),"
+    "linear-gradient(160deg,var(--vaas-bg) 0%,var(--vaas-bg1) 45%,"
+    "var(--vaas-surface) 100%)}"
+    ".furn-side{position:absolute;z-index:1;left:0;top:0;bottom:0;width:1.4vmin;"
+    "background:linear-gradient(180deg,var(--vaas-accent) 0%,"
+    "color-mix(in srgb,var(--vaas-accent) 35%,transparent) 60%,transparent 100%)}"
+    ".furn-band{position:absolute;z-index:1;left:0;right:0;bottom:0;height:11vmin;"
+    "background:linear-gradient(0deg,"
+    "color-mix(in srgb,var(--vaas-accent) 20%,transparent) 0%,transparent 100%)}"
+    ".furn-mark{position:absolute;z-index:1;left:9vmin;bottom:3.4vmin;"
+    "font-size:2.6vmin;letter-spacing:0.8vmin;color:var(--vaas-muted)}"
+    ".furn-q{position:absolute;z-index:1;left:-3vmin;top:0;font-size:56vmin;"
+    "line-height:0.8;font-weight:800;font-family:Georgia,serif;"
+    "color:color-mix(in srgb,var(--vaas-accent) 14%,transparent)}"
+    ".kq-kicker{position:absolute;z-index:2;top:10vmin;left:0;right:0;"
+    "text-align:center;font-size:2.8vmin;letter-spacing:1.6vmin;"
+    "color:var(--vaas-muted)}"
+    ".kq-quote{position:absolute;z-index:2;inset:14vmin 9vmin 20vmin 9vmin;"
+    "display:flex;align-items:center;justify-content:center}"
+    ".kq-text{width:100%;text-align:center;font-size:8.6vmin;line-height:1.42;"
+    "font-weight:800;letter-spacing:0.2vmin;color:var(--vaas-text);"
+    "text-wrap:balance;opacity:0;transform:translateY(2vmin)}"
+    ".kw{color:var(--vaas-accent);font-size:1.1em;font-weight:900;"
     "word-break:keep-all}"
-    ".kq-progress{position:absolute;left:0;right:0;bottom:0;height:8px;"
-    "background:var(--vaas-border)}"
+    ".kq-progress{position:absolute;z-index:3;left:0;right:0;bottom:0;"
+    "height:0.8vmin;background:var(--vaas-surface2)}"
     ".kq-bar{height:100%;width:0;background:var(--vaas-accent)}"
 )
 
@@ -252,7 +269,7 @@ class KineticQuoteBuilder(AbstractBuilder):
                                  "text": _strip_markers(s["text"])})
                 index += 1
             start = round(start + seg_dur, 4)
-        return {"visual": visual, "subtitle": subtitle}
+        return {"visual": visual, "subtitle": []}  # 字即画面，句文本已随卡片渲染
 
     def _sentence_clip(self, index: int, text: str, kw_re) -> str:
         """单句 visual clip HTML（品牌底纹 + 题签 + 本句强调文本 + 进度条）。
@@ -264,6 +281,10 @@ class KineticQuoteBuilder(AbstractBuilder):
             "<style>" + _CLIP_CSS + "</style>"
             '<div class="kq-bg"></div>'
             '<div class="kq-kicker">金句</div>'
+            '<div class="furn-side"></div>'
+            '<div class="furn-band"></div>'
+            '<div class="furn-mark">寻数 · 萬星</div>'
+            '<div class="furn-q">\u201c</div>'
             '<div class="kq-quote"><div class="kq-text" '
             f'id="hf-kq-s{index}">'
             + _render_sentence_html(text, kw_re)
@@ -286,7 +307,7 @@ class KineticQuoteBuilder(AbstractBuilder):
             "if(!(k>=0)){k=0}if(k>" + steps + "){k=" + steps + "};"
             f"var el=document.getElementById('hf-kq-s{index}');"
             "el.style.opacity=String(k/" + steps + ");"
-            "el.style.transform='translateY('+(" + steps + "-k)*20+'px)';"
+            "el.style.transform='translateY('+(" + steps + "-k)*2+'vmin)';"
             f"var bar=document.getElementById('hf-kq-bar{index}');"
             "if(bar){"
             "var r=(" + _num(clip_start) + "+lt)/" + denom + ";"
