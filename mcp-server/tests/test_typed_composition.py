@@ -252,7 +252,8 @@ class TestVoicePathComposition:
         html = built_voice["html"]
         assert 'data-composition-id="main"' in html
         assert 'data-start="0"' in html
-        assert 'data-duration="8.5"' in html  # 8.0 旁白 + 15/30s tailPad
+        # 尾垫并入末片段（末帧保持可见，不再追加空白黑段）→ 时长仍 8.5
+        assert 'data-duration="8.5"' in html
         assert 'data-width="1080"' in html
         assert 'data-height="1920"' in html
         assert 'data-fps="30"' in html
@@ -284,6 +285,7 @@ class TestVoicePathComposition:
         assert meta["plan_slug"].startswith("typed-")
         assert meta["size"] == [1080, 1920]
         assert meta["fps"] == 30
+        # 尾垫延长最后画面片段（末帧可见），总时长 = 画面末点 8.5
         assert meta["duration_s"] == 8.5
         assert meta["scene_seconds"] == 8.0
         assert meta["tail_pad_frames"] == 15

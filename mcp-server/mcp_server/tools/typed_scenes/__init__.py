@@ -390,7 +390,13 @@ def build_typed_composition(type_id: str, script: str, inputs: Optional[dict],
     visual_end = max(
         [float(c["start"]) + float(c["duration"])
          for c in visual_clips + subtitle_clips] or [0.0])
-    duration_s = round(max(audio_s, visual_end) + tail_pad / FPS_DEFAULT, 4)
+    # 尾垫：延长最后一个画面片段（保持末帧可见），而不是在末尾加出无片段的黑段
+    tail_s = round(tail_pad / FPS_DEFAULT, 4)
+    if visual_clips and tail_s > 0:
+        last = visual_clips[-1]
+        last["duration"] = round(float(last["duration"]) + tail_s, 4)
+        visual_end = round(visual_end + tail_s, 4)
+    duration_s = round(max(audio_s, visual_end), 4)
 
     # 音频轨：旁白整轨 start=0；BGM 独立轨（下一轨），volume/fade_out 来自
     # resolve_bgm 的解析结果（默认 0.2 / fade_out=True 与 compose 同口径）
@@ -436,7 +442,9 @@ def build_typed_composition(type_id: str, script: str, inputs: Optional[dict],
          "tracks": tracks},
         theme)
 
-    scene_seconds = round(sum(float(c["duration"]) for c in visual_clips), 3)
+    # 计费口径 = 内容秒数（不含尾垫；尾垫只是让末帧多停留）
+    scene_seconds = round(
+        sum(float(c["duration"]) for c in visual_clips) - tail_s, 3)
     meta = {
         "type": type_id,
         "renderer": type_json.get("renderer"),

@@ -243,7 +243,7 @@ class CarouselBuilder(AbstractBuilder):
             subtitle.append({"start": start, "duration": dur,
                              "text": " ".join(seg["text"].split())})
             start = round(start + dur, 4)
-        return {"visual": visual, "subtitle": subtitle}
+        return {"visual": visual, "subtitle": subtitle}  # 轮播卡无字幕带 → 由合成字幕轨承担
 
     def _clip_html(self, index: int, cur_src: str, motion: str,
                    prev_src, prev_end) -> str:

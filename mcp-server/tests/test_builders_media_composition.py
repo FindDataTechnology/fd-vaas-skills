@@ -76,8 +76,9 @@ def test_carousel_structure_and_reuse(theme, images):
     html = "".join(c["html"] for c in visual)
     assert "data:image/png;base64," in html, "图片必须 data: 内联（零外链）"
     validate_no_external_refs(html)
-    # 字幕轨按段给出
+    # 轮播卡没有字幕带 → 字幕由合成级字幕轨承担（不重复）
     assert out["subtitle"] and len(out["subtitle"]) == 3
+    assert 'class="subband"' not in html
 
 
 def test_carousel_single_image_no_prev_layer(theme, images):
@@ -107,7 +108,7 @@ def test_kinetic_structure_zero_img(theme):
     assert ".kw{" in html and "var(--vaas-accent)" in html
     assert 'class="kw"' in html
     validate_no_external_refs(html)
-    assert out["subtitle"] and len(out["subtitle"]) == 2
+    assert out["subtitle"] == []  # 字即画面
 
 
 def test_kinetic_rejects_images(theme):

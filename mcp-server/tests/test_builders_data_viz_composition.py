@@ -53,7 +53,7 @@ def test_structure_and_timeline(theme):
     for i in range(1, len(v)):
         prev = v[i - 1]
         assert abs(v[i]["start"] - (prev["start"] + prev["duration"])) < 1e-6
-    assert len(out["subtitle"]) == 4
+    assert out["subtitle"] == []  # 卡内自绘（.dv-sub）
 
 
 def test_seek_js_purity_and_lazy_init(theme):
