@@ -59,7 +59,7 @@ const PATH_BASES = [
 
 /** 已知退役词：出现可以，但必须紧邻「退役/已删/已移除/不再」上下文 */
 const RETIRED = ["new-task.mjs", "task-render.mjs", "fix-tts-timings", "remotion-app"];
-const RETIRED_OK = ["退役", "已删", "已移除", "不再", "不支持", "无 `--", "缺 ", "legacy", "retired"];
+const RETIRED_OK = ["退役", "已删", "已移除", "不再", "不支持", "无 `--", "缺 `--", "legacy", "retired"];
 
 /** 文档 ↔ 其引用脚本（用于参数层比对；跨脚本引用必须列全，否则误报） */
 const FLAG_SOURCES = {
@@ -100,6 +100,7 @@ const NON_CLI_FLAGS = new Set([
   "--troubleshooting", "--proxy-notes", "--ciyuan", "--volcengine", "--flag",
   "--variable-asset-authoring--syndication",
   "--ciyuan-",           // markdown 锚点残片（…volcengine--ciyuan-双档）
+  "--flag", "--flags",   // 元描述：文档在讲「参数」这个概念本身（audit-docs 说明段）
 ]);
 
 /**
