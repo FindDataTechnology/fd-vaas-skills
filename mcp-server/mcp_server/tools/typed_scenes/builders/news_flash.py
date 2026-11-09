@@ -176,8 +176,8 @@ function(lt){
   // 保持到本卡结束——与原整页 seek 的「最后一句查表」口径一致）
   var ss = root.querySelectorAll('.s');
   for (var i = 0; i < ss.length; i++) {
-    var s0 = parseFloat(ss[i].getAttribute('data-start'));
-    var s1 = parseFloat(ss[i].getAttribute('data-end'));
+    var s0 = parseFloat(ss[i].getAttribute('data-s0'));
+    var s1 = parseFloat(ss[i].getAttribute('data-s1'));
     var on = lt >= s0 - 1e-9 && (i === ss.length - 1 || lt < s1);
     ss[i].style.opacity = on ? '1' : '0';
   }
@@ -195,7 +195,7 @@ function(lt){
   // 逐句阶跃显现：lt 越过该行 data-start 才入场（局部时间查属性，纯函数）
   var lines = root.querySelectorAll('.line');
   for (var i = 0; i < lines.length; i++) {
-    var s0 = parseFloat(lines[i].getAttribute('data-start'));
+    var s0 = parseFloat(lines[i].getAttribute('data-s0'));
     var on = lt >= s0 - 1e-9;
     lines[i].style.opacity = on ? '1' : '0';
     lines[i].style.transform = on ? 'translateY(0)' : 'translateY(12px)';
@@ -229,8 +229,8 @@ def _clip_fragment(root_id: str, css: str, body: str) -> str:
 def _sentence_spans(sents: list[dict]) -> str:
     """句级字幕 → 叠放 span（data-start/data-end = 段内局部时间，秒）。"""
     return "".join(
-        f'<span class="s" data-start="{float(s["start"]):.4f}" '
-        f'data-end="{float(s["end"]):.4f}">{_esc(str(s["text"]))}</span>'
+        f'<span class="s" data-s0="{float(s["start"]):.4f}" '
+        f'data-s1="{float(s["end"]):.4f}">{_esc(str(s["text"]))}</span>'
         for s in sents)
 
 
@@ -461,7 +461,7 @@ class NewsFlashBuilder(AbstractBuilder):
         dur = float(seg["duration_s"])
         root_id = "nf-cta"
         lines = "".join(
-            f'<div class="line" data-start="{float(s["start"]):.4f}">'
+            f'<div class="line" data-s0="{float(s["start"]):.4f}">'
             f'{_esc(str(s["text"]))}</div>'
             for s in _sentences(seg))
         body = ('<div class="stage-bg"></div>'
