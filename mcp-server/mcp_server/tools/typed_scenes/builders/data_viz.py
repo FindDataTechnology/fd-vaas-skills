@@ -27,6 +27,7 @@ from html import escape as _esc
 
 from ..theme import js_str, wrap_scene_html
 from .. import AbstractBuilder, Segment
+from ._stage import BASE_BG, FURNITURE_HTML, ghost_html
 from ._charts import (CHART_HELPERS_JS, chart_driver_js, chart_errors,
                       inline_echarts_script, normalize_chart)
 
@@ -324,10 +325,7 @@ _DV_V2_CSS = """
 /* 底(0) < 品牌家具(1) < 内容(2)：家具在 DOM 里先于不透明底座，须显式抬层
    （与 news-flash / listicle / kinetic 同一条，实测不抬层家具被整块盖住） */
 .dv-bg{position:absolute;inset:0;z-index:0;
-  background:radial-gradient(120% 80% at 12% 0%,
-  color-mix(in srgb,var(--vaas-accent) 22%,transparent) 0%,transparent 55%),
-  linear-gradient(160deg,var(--vaas-bg) 0%,var(--vaas-bg1) 45%,
-  var(--vaas-surface) 100%)}
+  background:""" + BASE_BG + """}
 .furn-side{position:absolute;z-index:1;left:0;top:0;bottom:0;width:1.4vmin;
   background:linear-gradient(180deg,var(--vaas-accent) 0%,
   color-mix(in srgb,var(--vaas-accent) 35%,transparent) 60%,transparent 100%)}

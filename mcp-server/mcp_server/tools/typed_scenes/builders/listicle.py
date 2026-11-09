@@ -32,6 +32,7 @@ import re
 from html import escape as _esc
 
 from .. import AbstractBuilder, Segment
+from ._stage import BASE_BG, FURNITURE_HTML, ghost_html
 from ..alignment import _resolve_file
 from ..theme import js_str, wrap_scene_html
 
@@ -40,10 +41,7 @@ _STAGE_CSS = (
     # z-index 分层：底(0) < 品牌家具(1) < 内容(2)。家具在 DOM 里先于 .stage-bg，
     # 底座是不透明整屏渐变，不显式抬层会把家具整块盖住（实测家具 0 亮像素）。
     ".stage-bg{position:absolute;inset:0;z-index:0;"
-    "background:radial-gradient(120% 80% at 12% 0%,"
-    "color-mix(in srgb,var(--vaas-accent) 22%,transparent) 0%,transparent 55%),"
-    "linear-gradient(160deg,var(--vaas-bg) 0%,var(--vaas-bg1) 45%,"
-    "var(--vaas-surface) 100%)}"
+    "background:" + BASE_BG + "}"
     ".card{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;"
     "justify-content:center;padding:7vmin 9vmin;opacity:0;gap:0}"
     # 品牌家具：左侧强调竖条 + 底部品牌带（填充画幅、稳定视觉锚点）
@@ -321,11 +319,7 @@ def _clip_fragment(root_id: str, css: str, body: str,
 
     ghost = 背景巨型半透明数字/字（填充画幅空白，品牌家具的一层）。
     """
-    furn = ('<div class="furn-side"></div>'
-            '<div class="furn-band"></div>'
-            '<div class="furn-mark">寻数 · 萬星</div>')
-    if ghost:
-        furn += f'<div class="furn-idx">{_esc(ghost)}</div>'
+    furn = FURNITURE_HTML + ghost_html(ghost)
     return (f"<style>{css}</style>"
             f'<div class="lc-clip" id="{root_id}">{furn}{body}</div>')
 

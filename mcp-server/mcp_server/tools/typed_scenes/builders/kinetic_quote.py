@@ -28,6 +28,7 @@ from typing import Optional, Pattern
 
 from ..theme import js_str, wrap_scene_html
 from .. import AbstractBuilder, Segment
+from ._stage import BASE_BG, FURNITURE_HTML, quote_html
 
 # 对齐 type.json defaults.minKeywordLen（fallback 关键词最短长度）
 MIN_KEYWORD_LEN = 2
@@ -101,10 +102,7 @@ _CLIP_CSS = (
     # 底(0) < 品牌家具(1) < 内容(2)：家具在 DOM 里先于不透明底座，须显式抬层
     # （与 news-flash / listicle 同一条，实测不抬层家具被整块盖住）
     ".kq-bg{position:absolute;inset:0;z-index:0;"
-    "background:radial-gradient(120% 80% at 12% 0%,"
-    "color-mix(in srgb,var(--vaas-accent) 22%,transparent) 0%,transparent 55%),"
-    "linear-gradient(160deg,var(--vaas-bg) 0%,var(--vaas-bg1) 45%,"
-    "var(--vaas-surface) 100%)}"
+    "background:" + BASE_BG + "}"
     ".furn-side{position:absolute;z-index:1;left:0;top:0;bottom:0;width:1.4vmin;"
     "background:linear-gradient(180deg,var(--vaas-accent) 0%,"
     "color-mix(in srgb,var(--vaas-accent) 35%,transparent) 60%,transparent 100%)}"
@@ -281,10 +279,7 @@ class KineticQuoteBuilder(AbstractBuilder):
             "<style>" + _CLIP_CSS + "</style>"
             '<div class="kq-bg"></div>'
             '<div class="kq-kicker">金句</div>'
-            '<div class="furn-side"></div>'
-            '<div class="furn-band"></div>'
-            '<div class="furn-mark">寻数 · 萬星</div>'
-            '<div class="furn-q">\u201c</div>'
+            + FURNITURE_HTML + quote_html() + "\n"
             '<div class="kq-quote"><div class="kq-text" '
             f'id="hf-kq-s{index}">'
             + _render_sentence_html(text, kw_re)
