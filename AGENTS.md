@@ -225,9 +225,9 @@ See `mcp-server/README.md` for full documentation.
   `--schedule "YYYY-MM-DD HH:MM"` for timed publish (omitted = immediate); only some platforms support it.
 - **Config**: the `fd-vaas-*` skills read preferences from the project-root `.env` (see
   `.env.example`). Two namespaces coexist:
-  - **Video**: `PLATFORMS`, `TAGS`, `<PLATFORM>_TAGS`, `BILIBILI_TID`, `TENCENT_SHORT_TITLE`,
+  - **Video**: `PLATFORMS`, `TAGS`, `<PLATFORM>_TAGS`, `<PLATFORM>_SHORT_TITLE`,
     `YOUTUBE_VISIBILITY`, `SCHEDULE`, `HEADLESS`.
-  - **Docs**: `PLATFORMS_DOCS`, `DOC_TAGS`, `<PLATFORM>_DOC_TAGS`, `DOC_SCHEDULE`, `DOC_HEADLESS`.
+  - **Docs**: `PLATFORMS_DOCS`, `DOC_TAGS`, `<PLATFORM>_DOC_TAGS`, `DOC_SCHEDULE` (record-only).
   - Per-task overrides go in `downloads/fd-videos/<slug>/.publish.env` (video) or
     `downloads/fd-docs/<slug>/.publish.env` (docs). Priority: `CLI --flag > <task>/.publish.env > <VAAS>/.env > built-in default`.
 - **Generation runs on the hosted MCP plane** (`generate_voice` / `generate_image` /

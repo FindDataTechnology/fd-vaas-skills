@@ -105,7 +105,7 @@ VAAS 是架在两半之上的一个**编排层**，自身没有应用代码：
    - **口播视频**：`generate_voice（volcengine 直连=官方逐字时间戳；词元 ciyuan 档=出口层分段合成+合成字幕，captions_source 可审计）-> render_video(type=… | storyboard=…) -> <slug>.mp4`。渲染由**独立无状态渲染面**承担（HyperFrames，API 面无 Node）；本地 `new-task.mjs`/`task-render.mjs`/`fix-tts-timings` 已于 2026-11-09 随 Remotion 退役，字幕时间以出口层实测/合成口径为准。
    - **录屏/网页操作视频**：用 ego-browser 打开目标页面操作，过程中用 cap 录屏，产出 mp4（可配麦克风解说）。
    所有产物落在 `downloads/<kind>/<slug>/`。画面层 = 已有素材 / seedance 视频 / seedream 图片 / ppt 母带。**生成能力在托管 MCP 面**（`generate_voice` / `generate_image` / `generate_video_submit` / `render_*`），多模态桥在根 `scripts/litellm-bridge.py`（volcengine / ciyuan 两档）。
-3. **`/fd-vaas-publish-videos`**--一支视频 -> 6 个平台。分发走「**vendor 上游 + 薄适配层**」：上游 `social-auto-upload` vendored 在 `scripts/upstream/`，`sau_adapter.py` 把 CLI 翻译成上游 `<Platform>Video(...).main()` 调用，统一 **py 运行时（patchright）**；bilibili 例外（上游用 biliup 二进制，走本地 `bilibili.py`）。登录态是 cookie 文件（`upstream/cookies/<platform>_uploader/account.json`，快手用 `kuaishou_creator.json`），由 `/fd-vaas-login` 统一扫码。从 `.env` 读取各平台偏好（标签、`BILIBILI_TID`、`TENCENT_SHORT_TITLE`、`YOUTUBE_VISIBILITY`、定时），把结果回写到 `task.json` 的 `distribution[]`。`--dry-run` 可预览命令。
+3. **`/fd-vaas-publish-videos`**--一支视频 -> 6 个平台。分发走「**vendor 上游 + 薄适配层**」：上游 `social-auto-upload` vendored 在 `scripts/upstream/`，`sau_adapter.py` 把 CLI 翻译成上游 `<Platform>Video(...).main()` 调用，统一 **py 运行时（patchright）**；bilibili 例外（上游用 biliup 二进制，走本地 `bilibili.py`）。登录态是 cookie 文件（`upstream/cookies/<platform>_uploader/account.json`，快手用 `kuaishou_creator.json`），由 `/fd-vaas-login` 统一扫码。从 `.env` 读取各平台偏好（标签、`<PLATFORM>_SHORT_TITLE`、`YOUTUBE_VISIBILITY`、定时（`SCHEDULE`）），把结果回写到 `task.json` 的 `distribution[]`。`--dry-run` 可预览命令。
 
 ```bash
 export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $VAAS 指代
@@ -465,8 +465,8 @@ pip install -r scripts/requirements.txt   # 只剩 python-dotenv，三车道全�
 ## 配置与代理说明
 
 - **`fd-vaas-*` 配置**：从项目根 `.env` 读取（见 `.env.example`）。两套命名空间共存：
-  - **视频**：`PLATFORMS`、`TAGS`、`<PLATFORM>_TAGS`、`BILIBILI_TID`、`TENCENT_SHORT_TITLE`、`YOUTUBE_VISIBILITY`、`SCHEDULE`、`HEADLESS`。
-  - **图文**：`PLATFORMS_DOCS`、`DOC_TAGS`、`<PLATFORM>_DOC_TAGS`、`DOC_SCHEDULE`、`DOC_HEADLESS`（`_DOC_TAGS` 后缀避免和视频 skill 的 `<PLATFORM>_TAGS` 冲突）。
+  - **视频**：`PLATFORMS`、`TAGS`、`<PLATFORM>_TAGS`、`<PLATFORM>_SHORT_TITLE`（如 `TENCENT_SHORT_TITLE`）、`<PLATFORM>_DESC_MAX`、`YOUTUBE_VISIBILITY`、`SCHEDULE`。（`BILIBILI_TID`/`HEADLESS` 已移除：无代码读取，分区与无头分别走页手选 / `--headless`）
+  - **图文**：`PLATFORMS_DOCS`、`DOC_TAGS`、`<PLATFORM>_DOC_TAGS`、`DOC_SCHEDULE`（仅 `--record` 记台账用；发布时间不可配）。（`DOC_HEADLESS` 已移除：无头走 CLI `--headless`）
 - **单任务覆盖**：视频放 `downloads/fd-videos/<slug>/.publish.env`，图文放 `downloads/fd-docs/<slug>/.publish.env`。优先级：`--flag CLI > <task>/.publish.env > <VAAS>/.env > 内置默认`。
 - **登录态**：视频与图文都走 cookie 文件（`upstream/cookies/<platform>_uploader/account.json`），由 `/fd-vaas-login` 统一扫码。图文自有平台用 `--runtime patchright` 时走独立持久 profile（`VAAS/.profiles/<platform>/`）。同一平台必须串行；不同平台可并发。
 - **发布后清理**：ego-browser 驱动的图文自有平台发布完成后，关闭 ego 任务窗口，别留给用户自己关；抖音手动发布需等用户确认「发布完成」再跑 `completeTaskSpace` 兜底清理。
