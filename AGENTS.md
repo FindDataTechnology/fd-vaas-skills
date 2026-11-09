@@ -14,8 +14,10 @@ over two halves:
 2. **Distribution** - the two publish skills ship the asset to platforms. `fd-vaas-publish-videos`
    ships a video to 10 video platforms; `fd-vaas-publish-docs` ships an article to 11 图文 platforms.
    Video upload runs a **unified py runtime** (patchright): 9 upstream platforms go through a
-   vendored copy of `social-auto-upload` under `scripts/upstream/` via the thin adapter
-   `scripts/platforms/sau_adapter.py`; `bilibili.py` stays local (patchright-driven; upstream's
+   vendored copy of `social-auto-upload` under
+   `.agents/skills/fd-vaas-publish-videos/scripts/upstream/` via the thin adapter
+   `.agents/skills/fd-vaas-publish-videos/scripts/platforms/sau_adapter.py`; `bilibili.py` stays
+   local (patchright-driven; upstream's
    biliup binary path is not used). `.agents/skills/fd-vaas-publish-videos/scripts/sync-upstream.sh`
    re-syncs the vendor from the upstream repo.
 
@@ -181,7 +183,7 @@ that unifies generation, publishing, material management, and generator discover
 Namespaced tools (MCP tool names forbid dots, so `prefix_` namespaces):
 
 - `generate_*`: `generate_voice/image/video/cover` — dispatch through the **generation
-  registry** (`mcp-server/registry.json`, drivers in `mcp_server/registry.py`); add a
+  registry** (`mcp-server/mcp_server/registry.json`, drivers in `mcp_server/registry.py`); add a
   new generation/copy method = one registry entry + one driver line.
 - `orchestrate_*`: `orchestrate_voiceover`, `orchestrate_brainstorm`
 - `publish_*`: `publish_video/article`, `publish_validate_ready`, `publish_get_config`,

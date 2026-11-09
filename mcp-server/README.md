@@ -38,7 +38,7 @@ multi-tenant — workspace ADR-0004).
 
 ## Generation registry
 
-Generation methods are registered in `mcp-server/registry.json`, grouped by
+Generation methods are registered in `mcp_server/registry.json`, grouped by
 asset type. Each entry: `{name, provider, model, driver}` — `driver` resolves to
 a callable in `mcp_server/registry.py::DRIVERS`. `${ENV_VAR}` in `model` resolves
 from `VAAS/.env`.

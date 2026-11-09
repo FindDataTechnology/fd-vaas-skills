@@ -15,7 +15,7 @@ fd-vaas-publish-videos）直接可用的目录结构。
 ```bash
 # 方式 A：谦面调用键（推荐）——自动按 owner 过滤，可浏览整个内容库
 python3 scripts/pull_from_cloud.py --call-key "$FACET_CALL_KEY" --list
-python3 scripts/pull-from-cloud.py --call-key "$FACET_CALL_KEY" --asset <asset-id>
+python3 scripts/pull_from_cloud.py --call-key "$FACET_CALL_KEY" --asset <asset-id>
 
 # 方式 B：签名下载 URL（生成响应里直接给的 download_url）
 python3 scripts/pull_from_cloud.py --url "http://.../download/<asset-id>?owner=...&exp=...&signature=..."

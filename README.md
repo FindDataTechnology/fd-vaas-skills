@@ -101,7 +101,7 @@ VAAS 是架在两半之上的一个**编排层**，自身没有应用代码：
 ### 视频主线（「做一支视频并发布」）
 
 1. **`/fd-vaas-brainstorm`** *（可选）*--给定赛道/主题，按口播 / 图文模式返回选题矩阵（热点/痛点/争议/干货/人设）、脚本框架或图文草稿（Markdown 版 + 纯文本简洁版）、差异化角度，以及可选的完整大纲。内置合规红线：口播稿不出现其他平台名、不引流站外。
-2. **`/fd-vaas-video-creator`**--把文案变成成片。通过**类型注册表**（`new-task --type <id>`）选视频类型，`node scripts/types/list.mjs` 看全部类型。稳定类型：口播 `voiceover`、录屏 `screen-recording`；实验类型：`carousel`（轮播）、`kinetic-quote`（动态金句）、`news-flash`（快讯）、`listicle`（盘点）、`data-viz`（数据可视化）。
+2. **`/fd-vaas-video-creator`**--把文案变成成片。通过**类型注册表**（`types/<id>/type.json`，`renderer: "hyperframes"`）选视频类型，`templates_list(domain="video")` 看全部类型。稳定类型：口播 `voiceover`、录屏 `screen-recording`；实验类型：`carousel`（轮播）、`kinetic-quote`（动态金句）、`news-flash`（快讯）、`listicle`（盘点）、`data-viz`（数据可视化）。
    - **口播视频**：`generate_voice（volcengine 直连=官方逐字时间戳；词元 ciyuan 档=出口层分段合成+合成字幕，captions_source 可审计）-> render_video(type=… | storyboard=…) -> <slug>.mp4`。渲染由**独立无状态渲染面**承担（HyperFrames，API 面无 Node）；本地 `new-task.mjs`/`task-render.mjs`/`fix-tts-timings` 已于 2026-11-09 随 Remotion 退役，字幕时间以出口层实测/合成口径为准。
    - **录屏/网页操作视频**：用 ego-browser 打开目标页面操作，过程中用 cap 录屏，产出 mp4（可配麦克风解说）。
    所有产物落在 `downloads/<kind>/<slug>/`。画面层 = 已有素材 / seedance 视频 / seedream 图片 / ppt 母带。**生成能力在托管 MCP 面**（`generate_voice` / `generate_image` / `generate_video_submit` / `render_*`），多模态桥在根 `scripts/litellm-bridge.py`（volcengine / ciyuan 两档）。
