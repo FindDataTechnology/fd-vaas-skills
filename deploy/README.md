@@ -49,7 +49,7 @@ secret/vaas/service/default/download-hmac  # 下载签名密钥 {value}
 {"api_key": "sk-...", "base_url": "<CIYUAN_GATEWAY_BASE>",
  "model": "qwen3-tts-flash", "voice": "101001", "provider": "ciyuan"}
 
-// secret/vaas/pool/wanxing/image —— 组9 image-video（上游账号 40 openai-next）
+// secret/vaas/pool/wanxing/image —— 组9 image-video（上游账号由运维侧台账管理）
 {"api_key": "sk-...", "base_url": "<CIYUAN_GATEWAY_BASE>",
  "model": "gemini-3-pro-image", "provider": "ciyuan"}
 
@@ -60,7 +60,7 @@ secret/vaas/service/default/download-hmac  # 下载签名密钥 {value}
 
 > ⚠️ 词元密钥按「分组」锁能力：**语音一把（组3 core）、图像+视频一把（组9 image-video）**，一把通吃做不到。配错分组得到「模型不可路由」类错误，不是密钥错误。
 > **voice 字段是数字音色 ID（如 101001），不是 "Cherry"**——ciyuan 车道音色以 `models_voices` 工具为准（`_ciyuan_tts.py` 有硬校验，错误音色直接拒，不让上游静默回落）。旧文档/示例里的 "Cherry" 是过时口径。
-> **2026-11-05 实测**：voice 腿（qwen3-tts-flash + 101001）200 出 MP3 全链通；**image/video 腿 HTTP 503**（`No available compatible accounts` / `No eligible Seedance accounts`）——根因是组9 唯一上游账号（openai-next，acct 40）被上游 `403 site owner blocked access`，router 侧无健康图像/视频账号可调度。这是**上游订阅问题，非 router key 问题**（凭证链已实证解析到 driver）；解法=恢复/替换 openai-next 图像视频账号。
+> **2026-11-05/11-06 实测**：voice 腿（qwen3-tts-flash + 数字音色）200 出 MP3 全链通；**image/video 腿不可用**——组9 唯一上游账号被上游站点级封禁（先 `403 site owner blocked`，11-06 起演变为「HTTP 200 + 站点页面 + 正常计费但零产物」的软封锁形态），router 侧无健康图像/视频账号可调度。这是**上游账号问题，非 router key 问题**（凭证链已实证解析到 driver，key 本体可用）；解法=在上游控制台恢复或替换该账号（账号坐标与状态归运维侧台账 `docs/debt-ledger.md` DEBT-LANE-9-01）。
 > 换模型前先实调——`/v1/models` 列的是「可识别」不是「可服务」。
 
 ## OpenBAO 运维（以 registry 栈所在节点为例）

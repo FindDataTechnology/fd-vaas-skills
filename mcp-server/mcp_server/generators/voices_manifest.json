@@ -11,7 +11,6 @@
       "models": [
         {
           "public_model": "tencent-tts",
-          "upstream_account_id": 44,
           "status": "active",
           "price_note": "腾讯云精品音色 后付费 ¥0.3/万字符（通用档）",
           "voices": [
@@ -23,7 +22,6 @@
         },
         {
           "public_model": "doubao-speech",
-          "upstream_account_id": 43,
           "status": "upstream-broken（上游待修）",
           "price_note": "豆包语音合成模型 2.0 ¥3/万字符",
           "voices": []
