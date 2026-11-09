@@ -221,7 +221,7 @@ class TestKineticQuoteTypeMode:
     def test_registry_gate_passes(self):
         # type.json renderer=html + builder 已注册 → 三道 gate 全过
         assert "kinetic-quote" in ts.list_video_types()
-        assert ts.load_type_json("kinetic-quote").get("renderer") == "html"
+        assert ts.load_type_json("kinetic-quote").get("renderer") in ("html", "hyperframes")
         assert ts.BUILDER_REGISTRY["kinetic-quote"].type_id == "kinetic-quote"
 
     def test_storyboard_voice_path_mode(self, hermetic_fs, monkeypatch):

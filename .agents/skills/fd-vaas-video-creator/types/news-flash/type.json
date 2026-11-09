@@ -4,7 +4,7 @@
   "description": "固定结构卡片视频：标题卡 -> 要点卡×N -> CTA。meta.json 提供 headline/points/source；要点数与口播段数渲染前校验一致。",
   "version": 1,
   "status": "experimental",
-  "renderer": "html",
+  "renderer": "hyperframes",
   "inputs": {
     "script": {
       "required": true,

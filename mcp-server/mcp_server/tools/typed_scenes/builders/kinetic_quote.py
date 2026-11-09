@@ -13,6 +13,13 @@ translateY，3 步/句，无 CSS transition/JS 补间——逐帧重放确定性
 零图片依赖（spec：MUST NOT 依赖任何图片素材）：validate_inputs 拒绝
 inputs.images 非空，并把 `**` 标记不成对的段一次列全——渲染前、零产物。
 逐字级同步为 stretch 目标，v1 承诺句级对齐（HTML 渲染器口径）。
+
+契约 v2（adopt-hyperframes-video-renderer W3.5）：build_composition 把整页
+场景拆成**逐句片段**——每句一个 visual clip（本句文本 + 局部时间 seek_js 的
+3 步阶跃入场），字幕轨同句表逐条对齐；clip 的时间窗/轨位由 composition
+编译器落地，运行时按窗切换可见性（同一时刻只上当前句，与 v1 句块替换同观
+感）。片段只写自身元素样式，品牌变量在 composition 的 :root 单点注入；零
+图片、零外链。旧 build() 保留到 W4 切流。
 """
 
 import html as _html
@@ -87,6 +94,31 @@ window.seek(0);
 
 _MARK_KW_RE = re.compile(r"\*\*([^*]+?)\*\*")
 _CJK_RUN_RE = re.compile(r"[\u4e00-\u9fff]+")
+
+# 契约 v2 逐句片段 CSS（clip 自带样式；品牌变量在 composition :root 单点注入）。
+# 句文本初始 opacity:0 —— 开窗前的 clip 不闪字，首帧由 seek_js 落到 k/3。
+_CLIP_CSS = (
+    ".kq-bg{position:absolute;inset:0;background:linear-gradient(160deg,"
+    "var(--vaas-bg) 0%,var(--vaas-bg1) 55%,var(--vaas-surface) 130%)}"
+    ".kq-kicker{position:absolute;top:110px;left:0;right:0;text-align:center;"
+    "font-size:26px;letter-spacing:14px;color:var(--vaas-muted)}"
+    ".kq-quote{position:absolute;inset:0 0 230px 0;display:flex;"
+    "align-items:center;justify-content:center;padding:0 88px}"
+    ".kq-text{width:100%;text-align:center;font-size:92px;line-height:1.45;"
+    "font-weight:800;letter-spacing:2px;color:var(--vaas-text);"
+    "text-wrap:balance;opacity:0;transform:translateY(20px)}"
+    ".kw{color:var(--vaas-accent);font-size:1.12em;font-weight:900;"
+    "word-break:keep-all}"
+    ".kq-progress{position:absolute;left:0;right:0;bottom:0;height:8px;"
+    "background:var(--vaas-border)}"
+    ".kq-bar{height:100%;width:0;background:var(--vaas-accent)}"
+)
+
+
+def _num(value: float) -> str:
+    """数值 → 紧凑 JS 字面量（12.0 → "12"，1.2 → "1.2"，编译期常量直出）。"""
+    return f"{float(value):.6f}".rstrip("0").rstrip(".") or "0"
+
 
 
 def _extract_keywords(text: str) -> list[str]:
@@ -183,6 +215,85 @@ class KineticQuoteBuilder(AbstractBuilder):
         if not segments:
             raise ValueError("kinetic-quote build: segments is empty")
         return [self._quote_scene(seg, size, theme) for seg in segments]
+
+    # ── 契约 v2：声明式片段（visual 每句一 clip + 字幕逐句一条） ──────────
+    #
+    # 逐句拆片段：clip 窗口 = 句窗口（段内句子连续、跨段也连续），运行时按窗
+    # 切换可见性 → 同一时刻只上当前句（与 v1 句块替换同观感）；clip 内 seek_js
+    # 只做本句的 3 步阶跃入场 + 全局进度条（常量在编译期烘死，纯函数）。
+
+    def build_composition(self, segments: list[Segment], inputs: dict,
+                          size: list[int], theme: dict) -> dict:
+        if not segments:
+            raise ValueError("kinetic-quote build_composition: segments is empty")
+        total = round(sum(float(s["duration_s"]) for s in segments), 4)
+        denom = _num(max(total, 1e-6))  # 进度条分母（0 时长防御，正常不会到这）
+        visual: list[dict] = []
+        subtitle: list[dict] = []
+        start = 0.0
+        index = 0
+        for seg in segments:
+            seg_dur = float(seg["duration_s"])
+            sents = seg["sentences"] or _fallback_sentences(seg)
+            kw_re = _keyword_regex(_extract_keywords(seg["text"]))
+            for s in sents:
+                dur = round(float(s["end"]) - float(s["start"]), 4)
+                if dur <= 0:  # 零宽句没有可渲窗口（编译器要求 duration > 0）
+                    continue
+                clip_start = round(start + float(s["start"]), 4)
+                visual.append({
+                    "start": clip_start,
+                    "duration": dur,
+                    "html": self._sentence_clip(index, s["text"], kw_re),
+                    "seek_js": self._sentence_seek_js(index, clip_start, denom),
+                })
+                # 句级字幕轨：与句窗口严格同起同止（`**` 标记不进字幕）
+                subtitle.append({"start": clip_start, "duration": dur,
+                                 "text": _strip_markers(s["text"])})
+                index += 1
+            start = round(start + seg_dur, 4)
+        return {"visual": visual, "subtitle": subtitle}
+
+    def _sentence_clip(self, index: int, text: str, kw_re) -> str:
+        """单句 visual clip HTML（品牌底纹 + 题签 + 本句强调文本 + 进度条）。
+
+        元素 id 按 clip 序号唯一（getElementById 在整页内取首个命中，重复 id
+        会让 seek_js 写错元素）。
+        """
+        return (
+            "<style>" + _CLIP_CSS + "</style>"
+            '<div class="kq-bg"></div>'
+            '<div class="kq-kicker">金句</div>'
+            '<div class="kq-quote"><div class="kq-text" '
+            f'id="hf-kq-s{index}">'
+            + _render_sentence_html(text, kw_re)
+            + "</div></div>"
+            '<div class="kq-progress"><div class="kq-bar" '
+            f'id="hf-kq-bar{index}"></div></div>'
+        )
+
+    def _sentence_seek_js(self, index: int, clip_start: float,
+                          denom: str) -> str:
+        """句 clip 的局部时间 seek 函数（lt = 全局 t - clip.start）。
+
+        纯函数：阶跃步数与步长、clip 起点、全片时长均为编译期常量；只读写
+        自身 clip 内的两个元素，无日期、无随机、无跨 clip 状态。
+        """
+        steps = str(_STEPS)
+        return (
+            "function(lt){"
+            "var k=Math.floor(lt/" + repr(_STEP_S) + ")+1;"
+            "if(!(k>=0)){k=0}if(k>" + steps + "){k=" + steps + "};"
+            f"var el=document.getElementById('hf-kq-s{index}');"
+            "el.style.opacity=String(k/" + steps + ");"
+            "el.style.transform='translateY('+(" + steps + "-k)*20+'px)';"
+            f"var bar=document.getElementById('hf-kq-bar{index}');"
+            "if(bar){"
+            "var r=(" + _num(clip_start) + "+lt)/" + denom + ";"
+            "if(!(r>=0)){r=0}if(r>1){r=1};"
+            "bar.style.width=(r*100).toFixed(3)+'%';"
+            "}}"
+        )
 
     # ── 场景：html_full 整页（seek 契约 + 品牌 wrapper，零外链零图片） ───
 

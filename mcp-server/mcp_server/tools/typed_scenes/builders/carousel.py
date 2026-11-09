@@ -29,6 +29,14 @@ validate_inputs 一次列全全部违规（渲染前零产物，TTS 花费之前
 自动分段。颜色字体全部取 theme（brand 变量 + palette 槽位）——不硬编码色
 值；两种 orientation（1080x1920 / 1920x1080）共用同一套固定 px 版式
 （1080 类画幅）。
+
+契约 v2（adopt-hyperframes-video-renderer W3.3）：build_composition 把同一
+视觉拆成**声明式片段**——每段一个 visual clip（当前图 + 交叉淡入上一层图 +
+局部时间 seek_js 驱动 transform/opacity），段级字幕一条 clip 覆盖该段窗口；
+clip 的 data-start/data-duration 与轨位由 composition 编译器统一落地，运行时
+按窗切换可见性。片段 HTML 不复用整页 wrapper（品牌变量在 composition 的
+:root 单点注入），图片仍 data: URI 内联——渲染面零外链。旧 build() 保留到
+W4 切流（storyboard 路径不动）。
 """
 
 import base64
@@ -57,6 +65,18 @@ _MOTION_END = {
     "zoom_in": "scale(1.08)",
     "pan_right": "translate(-5%,0) scale(1.06)",
 }
+
+# rel=0 起始态（契约 v2 clip 首帧初值：开窗前最后一帧不闪跳）
+_MOTION_START = {
+    "pan_down": "translate(0,0%) scale(1)",
+    "zoom_in": "scale(1)",
+    "pan_right": "translate(0%,0) scale(1.06)",
+}
+
+# 契约 v2 片段图的内联样式（composition 的 .clip 自带 overflow:hidden；
+# 图片放大 8% 给 Ken Burns 平移留边）
+_CLIP_IMG_STYLE = ("position:absolute;top:-4%;left:-4%;width:108%;height:108%;"
+                   "object-fit:cover;will-change:transform")
 
 _SCENE_CSS = (
     ".kb{position:absolute;top:-4%;left:-4%;width:108%;height:108%;"
@@ -95,6 +115,11 @@ def _data_uri(path) -> str:
     """图片文件 → data: URI（场景页零外链口径，与 kenburns 场景同）。"""
     mime = mimetypes.guess_type(path.name)[0] or "image/png"
     return f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+def _num(value: float) -> str:
+    """数值 → 紧凑 JS 字面量（2.0 → "2"，1.2 → "1.2"，编译期常量直出）。"""
+    return f"{float(value):.6f}".rstrip("0").rstrip(".") or "0"
 
 
 def _resolve_image_srcs(inputs: dict) -> list[str]:
@@ -180,6 +205,82 @@ class CarouselBuilder(AbstractBuilder):
             scenes.append(self._scene(seg, cur_src, motion, prev_src, prev_end,
                                       size, theme))
         return scenes
+
+    # ── 契约 v2：声明式片段（visual 每段一图 KB + 字幕每段一条） ──────────
+    #
+    # 与 build() 同一视觉口径，但不整页：每段一个 visual clip，clip 内只有
+    # 当前图（+ 交叉淡入的上一层图）与一段 seek_js（局部时间 lt 驱动的纯函数
+    # transform/opacity）。clip 的时间窗（data-start/data-duration）由
+    # composition 编译器落地，HyperFrames 运行时按窗切换可见性——因此段间
+    # 交叉淡入仍需 clip 内的上一层图（上一段末帧冻结态），否则是硬切。
+
+    def build_composition(self, segments: list[Segment], inputs: dict,
+                          size: list[int], theme: dict) -> dict:
+        srcs = _resolve_image_srcs(inputs)
+        m = len(srcs)
+        visual: list[dict] = []
+        subtitle: list[dict] = []
+        start = 0.0
+        for i, seg in enumerate(segments):
+            dur = round(float(seg["duration_s"]), 4)
+            if dur <= 0:  # 无时长的段没有可渲窗口（编译器要求 duration > 0）
+                continue
+            cur_src = srcs[i % m]
+            motion = _MOTION_ORDER[i % len(_MOTION_ORDER)]
+            # 交叉淡入上一层：上一段的图（同图复用时省略——淡入无意义）
+            prev_src = srcs[(i - 1) % m] if i > 0 else None
+            if prev_src == cur_src:
+                prev_src = None
+            prev_end = _MOTION_END[_MOTION_ORDER[(i - 1) % len(_MOTION_ORDER)]] \
+                if prev_src else None
+            visual.append({
+                "start": start,
+                "duration": dur,
+                "html": self._clip_html(i, cur_src, motion, prev_src, prev_end),
+                "seek_js": self._clip_seek_js(i, dur, motion, prev_src is not None),
+            })
+            # 段字幕轨：一条字幕覆盖整段窗口（段内句级细节留在旧 build() 路径）
+            subtitle.append({"start": start, "duration": dur,
+                             "text": " ".join(seg["text"].split())})
+            start = round(start + dur, 4)
+        return {"visual": visual, "subtitle": subtitle}
+
+    def _clip_html(self, index: int, cur_src: str, motion: str,
+                   prev_src, prev_end) -> str:
+        """clip 片段 HTML：当前图 + （可选）交叉淡入的上一层图。
+
+        两层都是 data: URI 内联（零外链）；DOM 顺序 = 绘制顺序，上一层图在
+        后（盖住当前图），seek_js 前 FADE 秒把它淡到 0，露出底下的 Ken Burns。
+        """
+        cur = (f'<img id="hf-kb-{index}" src="{cur_src}" '
+               f'style="{_CLIP_IMG_STYLE};transform:{_MOTION_START[motion]}">')
+        if not prev_src:
+            return cur
+        prev = (f'<img id="hf-kb-prev-{index}" src="{prev_src}" '
+                f'style="{_CLIP_IMG_STYLE};transform:{prev_end}">')
+        return cur + prev
+
+    def _clip_seek_js(self, index: int, duration_s: float, motion: str,
+                      has_prev: bool) -> str:
+        """clip 的局部时间 seek 函数（lt = 全局 t - clip.start）。
+
+        纯函数：只读 lt 与编译期常量，写自身 clip 内两个元素的 transform /
+        opacity；无日期、无随机、无跨 clip 状态。
+        """
+        parts = [
+            "var rel=lt/" + _num(duration_s) + ";",
+            "if(!(rel>=0)){rel=0}if(rel>1){rel=1};",
+            f"var el=document.getElementById('hf-kb-{index}');",
+            "el.style.transform=" + _MOTION_JS[motion] + ";",
+        ]
+        if has_prev:
+            parts += [
+                f"var pv=document.getElementById('hf-kb-prev-{index}');",
+                "var f=lt/" + _num(_FADE_S) + ";",
+                "if(!(f>=0)){f=0}if(f>1){f=1};",
+                "pv.style.opacity=String(1-f);",
+            ]
+        return "function(lt){" + "".join(parts) + "}"
 
     # ── 场景：html_full 整页（图 KB 推拉 + 顶层交叉淡入 + 字幕带，零外链） ──
 

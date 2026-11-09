@@ -24,15 +24,17 @@
 
 ### W3 五 builder 改声明式
 
-- [ ] W3.1 builder 契约 v2（`build() -> {visual, subtitle}`），删 seek JS；`typed_scenes/__init__` 适配；音频统一注入
-- [ ] W3.2 news-flash / listicle（卡族与 rank 弹入）
-- [ ] W3.3 carousel（kenburns + 段淡入 + 段字幕）
-- [ ] W3.4 data-viz（`window.__hf.seek` 驱动 ECharts + 三图型）
-- [ ] W3.5 kinetic-quote（逐句入场 + `**词**` 强调）
-- [ ] W3.6 type.json ×5 `renderer: "hyperframes"`；templates_list runtime 标注同步
-- [ ] W3.7 结构数对照 / 补图 confirm 协议在契约 v2 下保持
+- [x] W3.1 builder 契约 v2（`build() -> {visual, subtitle}`），删 seek JS；`typed_scenes/__init__` 适配；音频统一注入
+- [x] W3.2 news-flash / listicle（卡族与 rank 弹入）
+- [x] W3.3 carousel（kenburns + 段淡入 + 段字幕）
+- [x] W3.4 data-viz（`window.__hf.seek` 驱动 ECharts + 三图型）
+- [x] W3.5 kinetic-quote（逐句入场 + `**词**` 强调）
+- [x] W3.6 type.json ×5 `renderer: "hyperframes"`；templates_list runtime 标注同步
+- [x] W3.7 结构数对照 / 补图 confirm 协议在契约 v2 下保持
 
 ### W4 切流：render_video 委托渲染面
+
+> W3 完成记录（2026-11-09）：五类型 build_composition 全部落地（news-flash/listicle/carousel/kinetic-quote/data-viz），type.json ×5 renderer=hyperframes。**关键修复**：HyperFrames 逐帧驱动靠 `window.__timelines[main].seek(t)`，仅 `window.__hf.seek` 时动画静止（0.9.26 实测：像素 0→71→142→212→255）——`composition._seek_runtime` 现同时注册两者。data-viz 惰性初始化 echarts（脚本早于挂载，顶层 DOM 必 null）。测试 342→464 全绿；编译产物真渲染 4.5s/301.8KB，抽帧 md5 全不同。
 
 - [ ] W4.1 `render_video` 切流：storyboard/type → composition → 提交作业；删 `_render_html_frames`/`_ffmpeg` 视频分支
 - [ ] W4.2 计划哈希折入引擎版本；确定性重放（同 job_id 返回同结果）

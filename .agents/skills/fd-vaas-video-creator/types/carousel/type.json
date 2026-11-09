@@ -4,7 +4,7 @@
   "description": "一张图对应一个口播段，Ken Burns 缓推/拉 + 交叉淡入；图少于段时循环复用且相邻不重复。支持 seedream 自动补图。",
   "version": 1,
   "status": "experimental",
-  "renderer": "html",
+  "renderer": "hyperframes",
   "inputs": {
     "script": {
       "required": true,

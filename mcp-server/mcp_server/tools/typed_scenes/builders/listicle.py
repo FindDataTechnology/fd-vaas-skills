@@ -16,10 +16,20 @@ wrapper，零外链），动效由 window.seek(t) 纯函数阶跃驱动（卡片
 orientation（1080x1920 / 1920x1080）共用同一套固定 px 版式（1080 类画幅）。
 配图解析用 alignment._resolve_file（绝对直用，相对按 downloads/VAAS_ROOT
 次序），读字节按魔数定 MIME 后 base64 内联——场景页不落任何文件路径引用。
+
+契约 v2（adopt-hyperframes-video-renderer W3.2）：build_composition 产出
+**卡片片段**（hook → item×N → cta），每片段自带 <style> 与唯一根 id，
+seek_js 是局部时间纯函数（lt = 全局 t - clip.start）：卡片入场阶跃、rank
+弹入、句级字幕切换与进度条全部由它驱动；句级字幕以 span/div 的
+data-start/data-end（段内局部时间）承载，seek_js 直接读属性判窗（无 JS
+数据表、无 window.seek 整页契约）。句级字幕内嵌卡内，故 subtitle 轨置空：
+单一屏上文本源，避免与编译器内置字幕条同句双显。配图仍以 data: URI 内联，
+品牌变量由 composition 的 :root 注入。
 """
 
 import base64
 import re
+from html import escape as _esc
 
 from .. import AbstractBuilder, Segment
 from ..alignment import _resolve_file
@@ -176,6 +186,120 @@ def _norm_rank(value) -> int | None:
     if isinstance(value, str) and _INT_RE.fullmatch(value.strip()):
         return int(value.strip())
     return None
+
+
+# ─── 契约 v2：卡片片段 + 局部时间 seek_js ───────────────────────────────────
+
+# 片段根定位（同页多卡共存，seek_js 按唯一 id 找本卡，互不串台）
+_CLIP_V2_CSS = (
+    ".lc-clip{position:absolute;inset:0}"
+    # 句级字幕：同段多句绝对叠放（只切 opacity，无回流抖动；
+    # .subband 提为定位上下文，top 36px 对齐原 padding-top）
+    ".subband{position:relative}"
+    ".s{position:absolute;left:0;right:0;top:36px;opacity:0;font-size:38px;"
+    "line-height:1.55;color:var(--vaas-text)}"
+)
+
+# 入场阶跃模板（__ROOT__ 换成片段根 id，__DUR__ 换成片段时长）——
+# 全部为局部时间纯函数：无 Date.now / Math.random / 过渡 / 定时器
+_HOOK_SEEK_V2 = """
+function(lt){
+  var root = document.getElementById('__ROOT__');
+  if (!root) { return; }
+  var card = root.querySelector('.card');
+  var rule = root.querySelector('.rule');
+  // 3 步阶跃入场（0.18s/步）：opacity/位移/分隔线全部由局部时间决定，无过渡
+  var k = Math.min(3, Math.max(0, Math.floor(lt / 0.18) + 1));
+  card.style.opacity = String(k / 3);
+  card.style.transform = 'translateY(' + ((3 - k) * 16) + 'px)';
+  rule.style.width = (k / 3 * 64) + '%';
+  // 钩子首句做大字标题（静态），其余句走字幕带（data-start 判窗，末句保持到卡尾）
+  var ss = root.querySelectorAll('.s');
+  for (var i = 0; i < ss.length; i++) {
+    var s0 = parseFloat(ss[i].getAttribute('data-start'));
+    var s1 = parseFloat(ss[i].getAttribute('data-end'));
+    var on = lt >= s0 - 1e-9 && (i === ss.length - 1 || lt < s1);
+    ss[i].style.opacity = on ? '1' : '0';
+  }
+}
+"""
+
+_ITEM_SEEK_V2 = """
+function(lt){
+  var root = document.getElementById('__ROOT__');
+  if (!root) { return; }
+  var card = root.querySelector('.card');
+  var rank = root.querySelector('.rank');
+  var bar = root.querySelector('.bar');
+  // 卡片入场 3 步阶跃（0.16s/步）
+  var k = Math.min(3, Math.max(0, Math.floor(lt / 0.16) + 1));
+  card.style.opacity = String(k / 3);
+  card.style.transform = 'translateY(' + ((3 - k) * 16) + 'px)';
+  // rank 弹入：卡片落位后（t0=0.16 延迟起步）3 步阶跃，scale 2.08→1 纯函数
+  var r = Math.min(3, Math.max(0, Math.floor((lt - 0.16) / 0.14) + 1));
+  rank.style.opacity = (r > 0) ? '1' : '0';
+  rank.style.transform = 'scale(' + (1 + (3 - r) * 0.36).toFixed(3) + ')';
+  // 句级字幕：按句 span 的 data-start/data-end 判窗（局部时间读属性，末句
+  // 保持到本卡结束）
+  var ss = root.querySelectorAll('.s');
+  for (var i = 0; i < ss.length; i++) {
+    var s0 = parseFloat(ss[i].getAttribute('data-start'));
+    var s1 = parseFloat(ss[i].getAttribute('data-end'));
+    var on = lt >= s0 - 1e-9 && (i === ss.length - 1 || lt < s1);
+    ss[i].style.opacity = on ? '1' : '0';
+  }
+  bar.style.width = (Math.min(1, Math.max(0, lt / __DUR__))).toFixed(3) + '%';
+}
+"""
+
+_CTA_SEEK_V2 = """
+function(lt){
+  var root = document.getElementById('__ROOT__');
+  if (!root) { return; }
+  var card = root.querySelector('.card');
+  var k = Math.min(3, Math.max(0, Math.floor(lt / 0.16) + 1));
+  card.style.opacity = String(k / 3);
+  // 逐句阶跃显现：lt 越过该行 data-start 才入场（局部时间查属性，纯函数）
+  var lines = root.querySelectorAll('.line');
+  for (var i = 0; i < lines.length; i++) {
+    var s0 = parseFloat(lines[i].getAttribute('data-start'));
+    var on = lt >= s0 - 1e-9;
+    lines[i].style.opacity = on ? '1' : '0';
+    lines[i].style.transform = on ? 'translateY(0)' : 'translateY(12px)';
+  }
+}
+"""
+
+
+def _seek(template: str, root_id: str, duration: float) -> str:
+    """seek_js 模板 → 缝合后的局部时间函数串（str.replace，避开 % 格式化）。"""
+    return (template.replace("__ROOT__", root_id)
+            .replace("__DUR__", f"{float(duration):.6f}").strip())
+
+
+def _sentences(seg: Segment) -> list[dict]:
+    """段句表（空句表兜底整段一句：字幕带始终有内容，与原 build 同口径）。"""
+    sents = [s for s in (seg["sentences"] or [])
+             if str(s.get("text") or "").strip()]
+    if sents:
+        return sents
+    return [{"text": seg["text"], "start": 0.0,
+             "end": float(seg["duration_s"])}]
+
+
+def _clip_fragment(root_id: str, css: str, body: str) -> str:
+    """视觉 clip 片段：内联 <style>（品牌 :root 变量由 composition 顶层注入）
+    + 自带唯一 id 的片段根——去掉整页 wrapper，片段可单独成卡。"""
+    return (f"<style>{css}</style>"
+            f'<div class="lc-clip" id="{root_id}">{body}</div>')
+
+
+def _sentence_spans(sents: list[dict]) -> str:
+    """句级字幕 → 叠放 span（data-start/data-end = 段内局部时间，秒）。"""
+    return "".join(
+        f'<span class="s" data-start="{float(s["start"]):.4f}" '
+        f'data-end="{float(s["end"]):.4f}">{_esc(str(s["text"]))}</span>'
+        for s in sents)
 
 
 def _image_data_uri(path) -> str:
@@ -365,6 +489,105 @@ class ListicleBuilder(AbstractBuilder):
                                         duration_s=seg["duration_s"],
                                         body=body, css=_CTA_CSS,
                                         js=js, theme=theme)}
+
+    # ── 契约 v2：卡片片段（声明的视觉轨，seek_js 局部时间） ────────────────
+
+    def build_composition(self, segments: list[Segment], inputs: dict,
+                          size: list[int], theme: dict) -> dict:
+        """契约 v2：hook 卡 → 条目卡×N（rank 弹入）→ CTA，每段一 clip。
+
+        返回 {"visual": [clip…], "subtitle": []}：句级字幕内嵌卡内（.s/.line
+        由 seek_js 按局部时间切换），不重复投递全局字幕轨（避免同句双显）。
+        片段首尾相接覆盖 [0, Σ段时长]；composition 时长由适配层按
+        max(画面末点, 旁白时长) + tailPad 决定。
+        """
+        items = _normalize_items(inputs.get("items"))
+        if len(items) != max(0, len(segments) - 2):
+            raise ValueError(
+                "listicle build_composition: items 数与条目段数不一致 "
+                f"(items={len(items)}, item segments={len(segments) - 2})")
+        hook, item_segs, cta = segments[0], segments[1:-1], segments[-1]
+        palette = theme.get("palette") or ["var(--vaas-accent)"]
+
+        clips = [self._hook_clip(hook, len(items), theme)]
+        for i, (seg, item) in enumerate(zip(item_segs, items)):
+            clips.append(self._item_clip(
+                seg, item, i + 1, len(items),
+                palette[i % len(palette)], theme))
+        clips.append(self._cta_clip(cta, len(items), theme))
+        return self._assemble(clips)
+
+    @staticmethod
+    def _assemble(clips: list[dict]) -> dict:
+        """卡片片段 → 视觉轨（start 首尾相接，duration = 段时长，4 位小数）。"""
+        visual: list[dict] = []
+        start = 0.0
+        for clip in clips:
+            dur = round(float(clip["duration"]), 4)
+            visual.append({"start": start, "duration": dur,
+                           "html": clip["html"], "seek_js": clip["seek_js"]})
+            start = round(start + dur, 4)
+        return {"visual": visual, "subtitle": []}
+
+    def _hook_clip(self, seg: Segment, top_n: int, theme) -> dict:
+        dur = float(seg["duration_s"])
+        root_id = "lc-hook"
+        sents = _sentences(seg)
+        headline = sents[0]["text"]
+        rest = sents[1:]
+        band = (f'<div class="subband">{_sentence_spans(rest)}</div>'
+                if rest else "")
+        body = ('<div class="stage-bg"></div>'
+                '<div class="card">'
+                '<div class="kicker">榜单合集</div>'
+                f'<div class="top">TOP {top_n}</div>'
+                f'<h1 class="headline">{_esc(str(headline))}</h1>'
+                '<div class="rule"></div>'
+                f'{band}'
+                '</div>')
+        return {"duration": dur,
+                "html": _clip_fragment(root_id, _HOOK_CSS + _CLIP_V2_CSS, body),
+                "seek_js": _seek(_HOOK_SEEK_V2, root_id, dur)}
+
+    def _item_clip(self, seg: Segment, item: dict, pos: int, total: int,
+                   palette_color: str, theme) -> dict:
+        dur = float(seg["duration_s"])
+        root_id = f"lc-item-{pos}"
+        fig = ('<figure class="fig"><img class="img" alt="" '
+               f'src="{item["image"]}"></figure>') if item.get("image") else ""
+        body = ('<div class="stage-bg"></div>'
+                '<div class="card">'
+                '<div class="head">'
+                f'<span class="rank" style="color:{palette_color}">'
+                f'{item["rank"]}</span>'
+                f'<span class="label">第 {pos} / {total} 项</span>'
+                '</div>'
+                '<div class="row"><div class="col">'
+                f'<div class="title">{_esc(item["title"])}</div>'
+                f'<div class="desc">{_esc(item["desc"])}</div>'
+                '</div>' + fig + '</div>'
+                f'<div class="subband">{_sentence_spans(_sentences(seg))}</div>'
+                '<div class="progress"><div class="bar"></div></div>'
+                '</div>')
+        return {"duration": dur,
+                "html": _clip_fragment(root_id, _ITEM_CSS + _CLIP_V2_CSS, body),
+                "seek_js": _seek(_ITEM_SEEK_V2, root_id, dur)}
+
+    def _cta_clip(self, seg: Segment, top_n: int, theme) -> dict:
+        dur = float(seg["duration_s"])
+        root_id = "lc-cta"
+        lines = "".join(
+            f'<div class="line" data-start="{float(s["start"]):.4f}">'
+            f'{_esc(str(s["text"]))}</div>'
+            for s in _sentences(seg))
+        body = ('<div class="stage-bg"></div>'
+                '<div class="card">'
+                f'<div class="recap">TOP {top_n}</div>'
+                f'<div class="lines">{lines}</div>'
+                '</div>')
+        return {"duration": dur,
+                "html": _clip_fragment(root_id, _CTA_CSS + _CLIP_V2_CSS, body),
+                "seek_js": _seek(_CTA_SEEK_V2, root_id, dur)}
 
 
 BUILDER = ListicleBuilder()

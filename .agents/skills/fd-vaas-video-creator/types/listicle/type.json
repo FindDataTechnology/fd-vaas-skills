@@ -4,7 +4,7 @@
   "description": "倒数排名卡片视频：hook 大字卡 -> 条目卡×N（rank 弹出动画，可选配图）-> CTA。items 为 [{rank,title,desc,image?}] 数组；条目数与口播段数渲染前校验一致。",
   "version": 1,
   "status": "experimental",
-  "renderer": "html",
+  "renderer": "hyperframes",
   "inputs": {
     "script": {
       "required": true,
