@@ -51,6 +51,7 @@ const JOB_DIR = path.join(cfg.workdir, 'jobs');
 // ── 常量 ────────────────────────────────────────────────────────────────────
 const ENGINE_PKG = 'hyperframes'; // 版本在启动时从 CLI 读，钉版见 package.json
 const QUALITIES = new Set(['draft', 'looks', 'delivery', 'standard', 'high']);
+const BITRATE_RE = /^\d+[kKmM]$/;
 const FORMATS = new Set(['mp4', 'webm', 'mov', 'gif', 'png-sequence', 'hls']);
 const DIR_FORMATS = new Set(['png-sequence', 'hls']);
 const SHA256_RE = /^[0-9a-f]{64}$/;
@@ -369,6 +370,20 @@ function validateRenderRequest(body) {
   if (typeof format !== 'string' || !FORMATS.has(format)) {
     problems.push(`format: one of ${[...FORMATS].join('|')}`);
   }
+  // 码率控制（可选）：深色/大面积平坦内容按 CRF 会压到很低，成片出现色带与
+  // 前帧残影。这里只做透传与形状校验，策略留给调用方。
+  if (body.crf !== undefined) {
+    if (!Number.isInteger(body.crf) || body.crf < 0 || body.crf > 51) {
+      problems.push('crf: integer 0-51');
+    }
+  }
+  for (const k of ['video_bitrate', 'max_bitrate']) {
+    if (body[k] !== undefined) {
+      if (typeof body[k] !== 'string' || !BITRATE_RE.test(body[k].trim())) {
+        problems.push(`${k}: string like "8M" or "4000k"`);
+      }
+    }
+  }
   const comp = body.composition;
   if (!comp || typeof comp !== 'object') {
     problems.push('composition: object required');
@@ -431,6 +446,9 @@ function contentKey(body, engineVersion) {
     fps: body.fps ?? cfg.defaultFps,
     quality: body.quality ?? cfg.defaultQuality,
     format: body.format ?? 'mp4',
+    crf: body.crf ?? null,
+    video_bitrate: body.video_bitrate ?? null,
+    max_bitrate: body.max_bitrate ?? null,
     html: body.composition.html,
     assets: (body.composition.assets || []).map((a) => [a.sha256, a.path || a.name]).sort(),
   }));
@@ -782,7 +800,14 @@ async function handleRender(req, res) {
     const isDir = DIR_FORMATS.has(format);
     const outName = isDir ? 'out' : `out.${format}`;
     artifactPath = path.join(jobDir, outName);
-    const args = ['render', `-f`, String(fps), `-q`, quality, `-w`, '1', '--format', format, '-o', artifactPath, jobDir];
+    const args = ['render', `-f`, String(fps), `-q`, quality, `-w`, '1', '--format', format, '-o', artifactPath];
+    // 码率透传：MOV(ProRes) 不支持 crf/bitrate（见 CLI --help），只对 mp4/webm 生效。
+    if (format === 'mp4' || format === 'webm') {
+      if (body.crf !== undefined) args.push('--crf', String(body.crf));
+      if (body.video_bitrate !== undefined) args.push('--video-bitrate', body.video_bitrate.trim());
+      if (body.max_bitrate !== undefined) args.push('--max-bitrate', body.max_bitrate.trim());
+    }
+    args.push(jobDir);
 
     const result = await runEngine(args, {
       cwd: jobDir,

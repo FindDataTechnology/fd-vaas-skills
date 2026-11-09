@@ -24,6 +24,7 @@ compose_storyboard）。
 import hashlib
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -180,7 +181,10 @@ def _request(url: str, *, data: bytes, method: str, headers: dict,
 def submit_render(html: str, assets=None, fps: int = 30, quality: str = "looks",
                   format: str = "mp4", job_id: str = "",
                   base_url: Optional[str] = None,
-                  timeout: Optional[float] = None) -> tuple[bytes, dict]:
+                  timeout: Optional[float] = None,
+                  crf: Optional[int] = None,
+                  video_bitrate: Optional[str] = None,
+                  max_bitrate: Optional[str] = None) -> tuple[bytes, dict]:
     """提交 composition 到渲染面，返回 (成片字节, 响应头)。
 
     参数：
@@ -192,6 +196,12 @@ def submit_render(html: str, assets=None, fps: int = 30, quality: str = "looks",
       job_id  作业键（计划 slug；同一 job_id 的重放语义由渲染面决定）
       base_url 覆盖 VAAS_RENDER_URL（缺省读环境变量）
       timeout  覆盖 VAAS_RENDER_TIMEOUT_S（秒）
+      crf      覆盖编码 CRF（0-51，越小越清晰；深色平坦画面按默认 CRF 会压出
+               色带与前帧残影，需要时下调）
+      video_bitrate 目标码率（如 "6M"），与 crf 互斥（渲染面 CLI 同源约束）
+      max_bitrate   峰值码率上限（如 "10M"）
+
+    码率三项只对 mp4/webm 生效（MOV/ProRes 不支持），None 即交给 quality 档。
 
     实现：素材逐个 PUT /v1/assets/<sha256>（内容寻址，天然幂等），再
     POST /v1/render；响应 body 即视频字节，不落盘（调用方决定落盘/计费）。
@@ -206,6 +216,17 @@ def submit_render(html: str, assets=None, fps: int = 30, quality: str = "looks",
         raise ValueError("submit_render: quality 必须是非空 string")
     if not isinstance(format, str) or not format.strip():
         raise ValueError("submit_render: format 必须是非空 string")
+    if crf is not None:
+        if isinstance(crf, bool) or not isinstance(crf, int) or not 0 <= crf <= 51:
+            raise ValueError(f"submit_render: crf 必须是 0-51 整数，收到 {crf!r}")
+    if crf is not None and video_bitrate is not None:
+        raise ValueError("submit_render: crf 与 video_bitrate 互斥（渲染面 CLI 同源约束）")
+    for _label, _val in (("video_bitrate", video_bitrate),
+                         ("max_bitrate", max_bitrate)):
+        if _val is not None:
+            if not isinstance(_val, str) or not re.fullmatch(r"\d+[kKmM]", _val.strip()):
+                raise ValueError(
+                    f"submit_render: {_label} 须形如 '8M' / '4000k'，收到 {_val!r}")
 
     bases = _base_urls(base_url) if base_url is None else [_base_url(base_url)]
     tmo = _timeout(timeout)
@@ -216,11 +237,20 @@ def submit_render(html: str, assets=None, fps: int = 30, quality: str = "looks",
     # 内容寻址：同一资产的 PUT 天然幂等，重试/换实例无需特殊处理
     digests = [(rel, blob, hashlib.sha256(blob).hexdigest())
                for rel, blob in prepared]
+    rate: dict = {}
+    if crf is not None:
+        rate["crf"] = int(crf)
+    if video_bitrate is not None:
+        rate["video_bitrate"] = video_bitrate.strip()
+    if max_bitrate is not None:
+        rate["max_bitrate"] = max_bitrate.strip()
+
     body = json.dumps({
         "job_id": job_id.strip(),
         "fps": fps,
         "quality": quality.strip(),
         "format": format.strip(),
+        **rate,
         "composition": {"html": html,
                         "assets": [{"sha256": d, "name": rel, "path": rel}
                                    for rel, _b, d in digests]},

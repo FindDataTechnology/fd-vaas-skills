@@ -59,6 +59,33 @@ FPS_DEFAULT = 30
 # 渲染面引擎（计划哈希折入；升级即失效旧重放）
 RENDER_ENGINE = os.getenv("VAAS_RENDER_ENGINE", "hyperframes@0.9.26")
 RENDER_QUALITY = os.getenv("VAAS_RENDER_QUALITY", "looks")
+
+
+def _render_rate_kwargs() -> dict:
+    """编码码率覆盖（可选，环境变量驱动）。
+
+    为什么需要：品牌底色是深色（#0a0e14），画面大面积平坦，x264 按 CRF 会压得
+    很低（实测 1080x1920/12.2s 仅 682 kbps），深色渐变处出现色带与前帧文字残影。
+    本地 PNG 序列同帧干净、只有成片有残影 → 属编码侧，不是版式。
+
+    VAAS_RENDER_CRF=12        覆盖 CRF（0-51，越小越清晰、文件越大）
+    VAAS_RENDER_VIDEO_BITRATE=6M   目标码率（与 CRF 互斥）
+    VAAS_RENDER_MAX_BITRATE=10M    峰值上限（可与 CRF 同用）
+    """
+    raw_crf = (os.getenv("VAAS_RENDER_CRF") or "").strip()
+    kwargs: dict = {}
+    if raw_crf:
+        try:
+            kwargs["crf"] = int(raw_crf)
+        except ValueError as exc:
+            raise ValueError(f"VAAS_RENDER_CRF 不是整数: {raw_crf!r}") from exc
+    vb = (os.getenv("VAAS_RENDER_VIDEO_BITRATE") or "").strip()
+    if vb:
+        kwargs["video_bitrate"] = vb
+    mb = (os.getenv("VAAS_RENDER_MAX_BITRATE") or "").strip()
+    if mb:
+        kwargs["max_bitrate"] = mb
+    return kwargs
 FONT_STACK = ("'PingFang SC','Hiragino Sans GB','Noto Sans CJK SC','Noto Sans SC',"
               "'Microsoft YaHei',sans-serif")
 VAT_CSS_FALLBACK = (
@@ -447,7 +474,7 @@ def compose_storyboard(
     try:
         blob, headers = render_client.submit_render(
             comp_html, assets=assets, fps=fps, quality=RENDER_QUALITY,
-            format=format, job_id=scoped)
+            format=format, job_id=scoped, **_render_rate_kwargs())
     except render_client.RenderPlaneError as exc:
         raise RuntimeError(f"render plane unavailable: {exc}") from exc
     out_path.write_bytes(blob)
@@ -786,7 +813,8 @@ def _render_typed_video(type: str, script: str, inputs: Optional[dict],
     try:
         blob, headers = render_client.submit_render(
             comp_html, assets=assets, fps=fps or FPS_DEFAULT,
-            quality=RENDER_QUALITY, format=format or "mp4", job_id=target_slug)
+            quality=RENDER_QUALITY, format=format or "mp4", job_id=target_slug,
+            **_render_rate_kwargs())
     except render_client.RenderPlaneError as exc:
         raise RuntimeError(f"render plane unavailable: {exc}") from exc
     out_path.write_bytes(blob)

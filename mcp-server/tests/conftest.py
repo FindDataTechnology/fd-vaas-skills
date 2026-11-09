@@ -18,10 +18,13 @@ class FakeRenderPlane:
         self.fail_with = None
 
     def __call__(self, html, assets=None, fps=30, quality="looks",
-                 format="mp4", job_id="", base_url=None, timeout=None):
+                 format="mp4", job_id="", base_url=None, timeout=None,
+                 crf=None, video_bitrate=None, max_bitrate=None):
         self.calls.append({"html": html, "assets": list(assets or []),
                            "fps": fps, "quality": quality,
-                           "format": format, "job_id": job_id})
+                           "format": format, "job_id": job_id,
+                           "crf": crf, "video_bitrate": video_bitrate,
+                           "max_bitrate": max_bitrate})
         if self.fail_with is not None:
             raise self.fail_with
         return (b"\x00\x00\x00\x20ftypisom" + b"\x00" * 64,
