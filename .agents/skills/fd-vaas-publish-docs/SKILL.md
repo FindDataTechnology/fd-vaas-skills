@@ -73,7 +73,7 @@ compatibility: Node.js 18+;ego-browser 已装(`which ego-browser`);目标平台�
 | `cover` | ❌ | 封面图绝对路径。不给用 `meta.json` 的 `cover` |
 | `summary` | ❌ | 摘要(公众号必填);不给 publish.mjs 从正文前 N 字生成 |
 | 目标平台 | ❌ | CLI `--platforms`,不给用 .env `PLATFORMS_DOCS` |
-| 定时 | ❌ | CLI `--schedule "YYYY-MM-DD HH:MM"`,不给立即发(公众号默认存草稿) |
+| 定时 | ❌ | **图文链不支持定时**（`publish.mjs` 无 `--schedule`，2026-11-10 核实）；要定时请在平台后台排期(公众号可先存草稿) |
 
 标题、正文用户没给 -> **问用户**,不要瞎编。发出去挂在自家账号上,内容质量不能猜。
 

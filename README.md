@@ -316,7 +316,7 @@ officecli --version
 | `douyin` | upstream（`sau_adapter`） | `--schedule`；tag ≤ 10 | 🔄 上游维护 |
 | `kuaishou` | upstream（`sau_adapter`） | tag ≤ **4**；cookie = `kuaishou_creator.json` | 🔄 上游维护 |
 | `xiaohongshu` | upstream（`sau_adapter`） | title ≤ 20 字；tag ≤ 10 | 🔄 上游维护 |
-| `bilibili` | own（`bilibili.py` + biliup） | biliup 二进制（非 Playwright）；`--tid` 分区；不支持 `--schedule` | ⚠️ 未实机验证 |
+| `bilibili` | own（`bilibili.py` + biliup） | biliup 二进制（非 Playwright）；分区在页面上传时手选（`--tid` 从未生效已移除）；不支持 `--schedule` | ⚠️ 未实机验证 |
 | `weixin`（视频号） | upstream（`sau_adapter`） | Wujie shadow DOM；无独立标题；处理后自动发布 | ✅ 已验证（2026-07-30） |
 | `youtube` | upstream（`sau_adapter`） | `--visibility`；不支持 `--schedule`（无 publish_date） | 🔄 上游维护 |
 

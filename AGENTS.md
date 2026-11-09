@@ -104,7 +104,7 @@ patchright-driven):
 |---|---|---|
 | `douyin` | `sau_adapter` → upstream | standard DOM |
 | `xiaohongshu` | `sau_adapter` → upstream ✓已实发 | title ≤ 20 字; tag ≤ 10 |
-| `bilibili` | `bilibili.py` (上游用 biliup) | **micro-app shadow DOM**; needs `--tid`; `--cover` not `--thumb` |
+| `bilibili` | `bilibili.py` (上游用 biliup) | **micro-app shadow DOM**; partition picked in the upload page (`--tid` removed); `--cover` not `--thumb` |
 | `kuaishou` | `sau_adapter` → upstream | **React Joyride overlay** + off-screen publish btn; tag ≤ **4** |
 | `weixin` (视频号) | `sau_adapter` → upstream | **Wujie shadow DOM** |
 | `youtube` | `sau_adapter` → upstream（需代理） | **Polymer dialog** + 4-step flow; `--visibility`; "not for kids" mandatory |

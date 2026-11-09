@@ -2,7 +2,7 @@
 """
 B站视频上传 CLI (patchright 版)
 
-从 bilibili.mjs port。CLI 参数与 .mjs 一致（含 --tid 分区）。
+从 bilibili.mjs port。CLI 参数与 .mjs 一致（**不含 --tid**：该参数从未生效，已移除；分区走页面上传时手选）。
 ⚠️ 技术要点：
 - B站用 micro-app 微前端，页面内容在 micro-app[name=video-up].shadowRoot 内
 - Playwright/patchright 的 locator 默认穿透 **open** shadow DOM，所以 set_input_files
