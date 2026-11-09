@@ -334,7 +334,7 @@ _DV_V2_CSS = """
   color-mix(in srgb,var(--vaas-accent) 20%,transparent) 0%,transparent 100%)}
 .furn-mark{position:absolute;z-index:1;left:9vmin;bottom:3.4vmin;
   font-size:2.6vmin;letter-spacing:0.8vmin;color:var(--vaas-muted)}
-.furn-idx{position:absolute;z-index:1;right:-2vmin;top:-5vmin;font-size:44vmin;
+.furn-idx{position:absolute;z-index:1;right:-6vmin;top:-7vmin;font-size:40vmin;
   font-weight:800;line-height:0.8;
   color:color-mix(in srgb,var(--vaas-accent) 16%,transparent)}
 .dv-card{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;
