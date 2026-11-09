@@ -64,6 +64,12 @@ via its built-in uploaders under `scripts/platforms/` (thin adapter `sau_adapter
   root copy with `bash scripts/gen-root-dockerfile.sh`). A red gate blocks image builds; do not
   merge or ship with the gate red. Deferred cross-repo debts are tracked in `docs/debt-ledger.md` —
   check it before closing any change wave.
+  **Doc/code truthfulness**: run `node scripts/audit-docs.mjs` after any refactor that removes
+  or renames things — it audits five layers (documented paths exist · documented commands exist ·
+  documented `--flags` are implemented · `.env.example` keys are read · active code does not
+  describe retired implementations). It is advisory (not wired into ci-local) so a false positive
+  never blocks a merge, but treat a red as a real finding: fix the doc, or add the retirement
+  wording next to the retired name.
 
 ## Skills (`.agents/skills/` - the source of truth)
 
