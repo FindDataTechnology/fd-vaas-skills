@@ -64,4 +64,4 @@
 - [x] W6.3 文档：`fd-vaas-storyboard` SKILL.md 改 composition 格式/适配器/轨模型；deploy README（渲染面 + 钉版 + 隔离）
 - [x] W6.4 ADR-0004 增补（渲染面独立、API 面保持无 Node）
 - [x] W6.5 退役 Remotion —— 完成：`skills/cover.py` 重写为 chromium 单帧（品牌渐变/强调条/标题/标签）+ `download_url`；registry `video/voiceover` 驱动下线、`skills/voiceover.py` 删除；品牌令牌真源迁 `brand/theme.ts`（生成器/漂移测试同步）；`remotion-app/`(719M) 与 `fd-vaas-video-creator/scripts` 删除，技能收敛为类型注册表。**残留提示**：产品线 `fd-vaas-publish-videos` 的发布脚本不在本仓、与渲染无关。
-- [ ] W6.6 TTS 腿 E2E 复验 —— **change 外挂账，不阻归档**（等用户重出词元组3语音 key；渲染面链路已用 voice_path 腿全绿验证，TTS 仅换音频来源）+ 计价复核已做（render_video/second 口径不变，provider=render-plane）
+- [x] W6.6 TTS 腿 E2E 复验 —— 完成（2026-11-09）：词元 voice key（11-05 自铸 id161）仍在效；`generate_voice` qwen3-tts-flash + voice 101001 → 15408B MP3 签名下载 PASS；**全链**：TTS 产物作 voice_path → type 模式 350KB mp4、storyboard 模式 80KB mp4（engine=hyperframes@0.9.26）。无需用户新 key。
