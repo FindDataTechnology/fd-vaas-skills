@@ -3,7 +3,7 @@ name: fd-vaas-storyboard
 description: >
   VAAS 展示层创作手册(纯知识,无脚本):render_video 双模式选型 + seek 契约分镜撰写 + 配音/BGM 链。
   覆盖:(1) storyboard 模式四种场景 kind(html_intro/html_outro/html_full/kenburns)的字段、
-  window.__DURATION__/window.seek(t) 逐帧契约、data-stage 标记、无外链/data: URI 纪律、
+  HyperFrames composition 契约（data-start/duration/track-index + window.__timelines 逐帧 seek）、无外链/data: URI 纪律、
   kenburns 图片输入;(2) storyboard vs type(carousel|listicle|data-viz|kinetic-quote|news-flash)
   选型决策;(3) render_still(kind="chart") 图表静帧作为视频视觉输入的数据→视频桥;
   (4) 视频内图表动画走 type=data-viz、静态图走 render_still 的分工;(5) generate_voice /
@@ -28,8 +28,8 @@ compatibility: VAAS MCP 工具面(render_video / render_still / generate_voice /
 
 模式语义:
 
-- **storyboard = 确定性渲染**:逐帧由 `window.seek(t)` 重放,同一 storyboard → 同一字节流。slug 缺省按 storyboard 内容哈希派生,重复提交同一 storyboard 会幂等重放既有资产(不重渲、不重计费)。
-- **type = 类型管线(HTML 场景构建器)**:五类型均由 HTML 场景构建器产出 seek 契约场景,再走与 storyboard 同一渲染实现——**本地与托管实例同一行为**(不依赖 node/Remotion,托管直接可用)。`script` 可传内联文本或文件路径;`inputs` 的每个键变成管线参数(契约见 `templates_get(domain="video", id=<type>)`)。`templates_list(domain="video")` 每项带 `runtime` 标注:`hosted` = 该类型托管实例可用(五类型皆如此);`local_stdio_only` = 未移植类型仅本地 stdio 实例支持,托管上调用会指路报错。
+- **storyboard = 确定性渲染**:场景序列编译为 HyperFrames composition 后交**渲染面**(独立服务)渲染,同一 storyboard → 同一字节流。slug 缺省按 storyboard 内容哈希派生,重复提交同一 storyboard 会幂等重放既有资产(不重渲、不重计费)。
+- **type = 类型管线(HTML 场景构建器)**:五类型均由场景构建器直接产出 composition 片段,再走与 storyboard 同一渲染面——**本地与托管实例同一行为**(API 面不依赖 node,渲染全在渲染面)。`script` 可传内联文本或文件路径;`inputs` 的每个键变成管线参数(契约见 `templates_get(domain="video", id=<type>)`)。`templates_list(domain="video")` 每项带 `runtime` 标注:`hosted` = 该类型托管实例可用(五类型皆如此);`local_stdio_only` = 未移植类型仅本地 stdio 实例支持,托管上调用会指路报错。
 - type 模式的配音与 BGM:`voice_path` 给定时**跳过 TTS**,按实测音频总时长×各段字符数加权分摊段时长;不给则管线内逐段 TTS(音色 `inputs.voice`,默认 auto)。`bgm={asset_id|path, volume?, fade_out?}` 与 storyboard 同语义,合成后混流。
 - **补图 confirm 协议**:inputs 含提示词待补图(`{"prompt":...}`,或 `generate=true` 下的纯字符串)且未确认时,零产物返回 `pending_images` 清单;确认后重试传 `inputs.confirm_images=true`,先 generate_image 补图入账、再渲染。也可把对应条目直接换成已就绪的图片路径。
 - slug 缺省按计划哈希派生(type+script+inputs+voice_path+bgm 全折入),同输入命中既有资产即幂等重放(跳过补图/TTS/渲染,不重渲、不重复计费)。
@@ -50,7 +50,7 @@ compatibility: VAAS MCP 工具面(render_video / render_still / generate_voice /
 
 还是拿不准 → 对照各类型 `type.json` 的 description / platforms(`templates_list(domain="video")`),都不匹配再问用户,别硬套。
 
-## 2. storyboard 分镜撰写(seek 契约)
+## 2. storyboard 分镜撰写(编译为 composition)
 
 storyboard 结构:
 
@@ -74,40 +74,29 @@ storyboard 结构:
 | `html_full` | `duration_s` + `html`(整页内联 HTML) | — | 完全自定义的一屏,必须遵守 seek 契约 |
 | `kenburns` | `duration_s` + `images`(非空文件路径数组) | `caption`, `motion`(`pan_down` 默认 / `zoom_in` / `pan_right`) | 图片缓推缓拉;多图**均分**场景时长逐张切换,caption 前 1/4 段淡入 |
 
-### seek 契约(自写 HTML 场景必须遵守)
+### 渲染契约(W4 起：编译为 HyperFrames composition)
 
-每帧都是"从时刻 t 重放",所以场景 HTML 要满足:
+**W4 起 storyboard 场景会被编译成 HyperFrames composition**（渲染在独立渲染面完成），因此只写「场景内容」，不要自己搭整页运行时：
 
-1. **声明变量**:页面里设 `window.__DURATION__`(本场景时长,秒)和 `window.__SIZE__=[w,h]`(与 storyboard.size 一致)。
-2. **实现 `window.seek(t)`**:渲染器对每一帧调用一次,`t` 为场景内秒数。画面状态必须是 **t 的纯函数**——不依赖随机数、时钟、网络、CSS animation/transition、rAF 计数器。这是"同一 storyboard → 同一字节流"的前提。
-3. **data-stage 标记**:顶层 `<div data-stage>` 就是截图区域,尺寸 w×h、`overflow:hidden`,所有视觉内容放它内部。
-4. **无外链纪律**:页面经 `set_content` 加载在 `about:blank` origin 上,**取不到 file:// 和任何相对资源**——CSS / JS 全部内联,位图只能内联成 `data:` URI(kenburns 的 `images` 由服务端自动转 data: URI;`html_full` 里要自己转)。禁止 `<img src="http…">`、`<link>`、`fetch`。
-5. **`window.seek(0)` 收尾**:加载完先 seek 到 0,保证首帧状态就位。
+1. **`html_intro` / `html_outro`**：只给 `title` / `sub`（可选 `css`），编译器生成入场阶跃动效与版式。
+2. **`kenburns`**：给 `images`（本地路径或 downloads 相对路径）+ `duration_s`（可选 `motion`、`caption`）；图片由服务端内联为 `data:` URI，推拉动效由编译器生成。
+3. **`html_full`**：给一段内联 HTML，作为该 clip 的内容原样注入——**视为静态**。需要动效时用 CSS animation（HyperFrames 会逐帧 seek 驱动），不要写自写帧循环 / `rAF` / `transition`。
+4. **无外链纪律（硬性）**：拷贝会被编译期扫描，出现 `http(s)://` / `file://` 资源即拒绝，报错点名场景与资源；位图必须 `data:` URI 内联，`<link>` / `fetch` / 外链字体一律禁止。
+5. **确定性**：画面状态必须是时间（引擎 seek）的纯函数——不依赖随机数、时钟、网络。
 
-最小骨架(可直接抄,完整可运行的场景模板见 `references/seek-contract.md`):
+最小 `html_full` 片段（CSS animation 版，可逐帧 seek）：
 
 ```html
-<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<script>window.__DURATION__=4;window.__SIZE__=[1080,1920];</script>
 <style>
-  html,body{margin:0;padding:0;background:#070a20}
-  [data-stage]{position:relative;width:1080px;height:1920px;overflow:hidden}
-</style></head>
-<body><div data-stage>
-  <div id="msg" style="position:absolute;inset:40% 8%;color:#fff;
-       font:700 64px/1.4 sans-serif;text-align:center;opacity:0"></div>
-</div>
-<script>
-  const el = document.getElementById('msg');
-  el.textContent = '你好,VAAS';
-  window.seek = function(t){
-    const p = Math.min(1, t / window.__DURATION__);   // 只由 t 决定
-    el.style.opacity = String(p);
-  };
-  window.seek(0);
-</script></body></html>
+  .msg{position:absolute;inset:40% 8%;color:#fff;font:700 64px/1.4 sans-serif;
+       text-align:center;animation:in 1.2s linear both}
+  @keyframes in{from{opacity:0;transform:translateY(24px)}
+                to{opacity:1;transform:translateY(0)}}
+</style>
+<div class="msg">你好，VAAS</div>
 ```
+
+type 模式的五个构建器已经产出 composition 片段，不需要手写上述任何内容——直接用 `templates_get(domain="video", id=<type>)` 看输入契约。
 
 ### 时长与音频纪律(硬性)
 
@@ -230,6 +219,6 @@ data-viz 的图表规格(`inputs.data`):
 
 ## 参考
 
-- `references/seek-contract.md` —— 四种 kind 的场景模板片段(html_intro/outro 内置版式行为、html_full 骨架、chart→kenburns 完整示例)
+- `references/seek-contract.md` —— 四种 kind 的场景模板片段（W4 起 html_full 片段为静态注入；html_intro/outro/kenburns 由编译器生成动效）
 - `fd-vaas-video-creator` skill —— type 模式的执行体;类型注册表在 `.agents/skills/fd-vaas-video-creator/types/<id>/type.json`
 - `fd-vaas-brainstorm` skill —— 上游内容策划(选题矩阵 → 口播稿 / 图文草稿)

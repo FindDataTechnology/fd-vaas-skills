@@ -112,3 +112,53 @@ secret/vaas/service/default/download-hmac  # 下载签名密钥 {value}
 - 在役 ARK key 为 **Agent Plan 专用**（视频/对话），不支持 seedream 图片模型
   （/api/plan/v3 404 UnsupportedModel；/api/v3 401）。图片生成要等一枚开了
   seedream 权限的**标准 Ark key** 入 vault（顺带完成旧 key 轮换）。
+
+## 渲染面（Render Plane，W4 起）
+
+视频渲染已从 API 面剥离为**独立、无状态、可多实例**的服务（HyperFrames 0.9.26）。
+API 面只编译 composition 并提交作业；渲染面只做 composition → MP4。API 镜像
+**保持无 Node**（ADR-0004 增补）。
+
+### 接口
+
+| 端点 | 说明 |
+|---|---|
+| `GET /healthz` | 引擎版本 / Chrome / workers / 队列 / doctor 摘要 |
+| `GET /v1/version` | 引擎版本（API 面钉版校验） |
+| `PUT /v1/assets/<sha256>` | 素材内容寻址入库 |
+| `POST /v1/render` | `{job_id, fps, quality, format, composition:{html, assets}}` → 成片字节流 |
+
+成功响应头：`X-Engine`、`X-Render-Ms`、`X-Warnings`。失败：`4xx`（composition 不合规，不重试）/`429`（队列满）/`5xx`（可换实例重试）。
+
+### 部署（示例：`render-plane/` 目录）
+
+```bash
+cd render-plane
+docker build -t vaas-render-plane:0.1.0 .
+docker network create --internal vaas-render-net     # 无外网出口
+docker run -d --name vaas-renderer --network vaas-render-net \
+  --shm-size=512m --memory=3g vaas-render-plane:0.1.0
+```
+
+API 面接入（`/opt/vaas-deploy/docker-compose.vaas.yml`）：
+
+```yaml
+services:
+  vaas-wanxing:
+    environment:
+      VAAS_RENDER_URL: "http://vaas-renderer:8099"     # 多实例：VAAS_RENDER_URLS="http://a:8099,http://b:8099"
+    networks: [default, vaas-render-net]
+
+networks:
+  vaas-render-net:
+    external: true
+```
+
+### 容量与运维
+
+- 每 worker 一个 Chrome ≈256MB；`/dev/shm` ≥512m；3.8G 内存机用 `VAAS_RENDER_MAX_CONCURRENCY=1`
+- 重试/多实例：`VAAS_RENDER_RETRIES`（默认 2）、`VAAS_RENDER_RETRY_BACKOFF_S`（默认 0.5）；
+  不可达 / 429 / 5xx 会换实例重试，400/413 立即失败（composition 问题，重试无意义）
+- 隔离：渲染面容器只接 internal 网络（无出网）；作业 env 白名单，不含任何平台密钥
+- 引擎升级：先跑双跑确定性门禁（`hyperframes@<ver>` 变更会改变计划键，旧重放自动失效）
+- 回滚：镜像/渲染面 tag 级

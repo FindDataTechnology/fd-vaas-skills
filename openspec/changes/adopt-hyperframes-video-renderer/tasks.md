@@ -6,6 +6,8 @@
 
 ### W1 渲染面服务（独立，可单测）
 
+> W6 完成记录（2026-11-09）：渲染面部署 cheap-2（`--network vaas-render-net` internal + `--shm-size=512m --memory=3g`，健康），API 面 join 同网、`VAAS_RENDER_URL=http://vaas-renderer:8099`，镜像 sha-419036e 上产。**生产 E2E 全绿**：五类型（news-flash 295KB / carousel 430KB / listicle 374KB / data-viz 236KB / kinetic-quote 250KB，enginx=hyperframes@0.9.26 + 签名下载）+ still/doc 回归 + 确定性双跑 md5 一致（fb62dc17bd12）。E2E 抓出并修复：data-viz 的 `fmtNum` 块作用域跨引用（渲染面 500）。文档：deploy README 渲染面一节、SKILL.md 契约改 composition、ADR-0004 增补。
+
 - [x] W1.1 渲染面镜像：Node 22 + `hyperframes@0.9.26`（npmmirror 构建、精确钉版、lockfile）+ chromium + ffmpeg + CJK 字体；构建期 `hyperframes doctor` 门禁
 - [x] W1.2 `POST /v1/render` 作业 API（无状态）：composition + 素材（multipart/sha256）→ 成片（流式或上传地址）+ 引擎版本 + 耗时 + 告警
 - [x] W1.3 幂等作业（`job_id` 去重）+ 并发上限（`-w` 可配）+ 硬超时 + 进程组 kill
@@ -55,9 +57,9 @@
 
 ### W6 上产与收口
 
-- [ ] W6.1 渲染面部署（推荐 cheap-6 8c/7.9G，不绑单机）+ `VAAS_RENDER_URL` 接入 API 面；多实例派发冒烟
-- [ ] W6.2 生产 E2E：五类型 voice_path 腿（mp4 + 签名下载 + 帧级确定性）+ still/doc 回归
-- [ ] W6.3 文档：`fd-vaas-storyboard` SKILL.md 改 composition 格式/适配器/轨模型；deploy README（渲染面 + 钉版 + 隔离）
-- [ ] W6.4 ADR-0004 增补（渲染面独立、API 面保持无 Node）
-- [ ] W6.5 退役 Remotion app 与 fd-vaas-video-creator 渲染管线（types/ 契约保留）；清 `remotion-app/`
+- [x] W6.1 渲染面部署（推荐 cheap-6 8c/7.9G，不绑单机）+ `VAAS_RENDER_URL` 接入 API 面；多实例派发冒烟
+- [x] W6.2 生产 E2E：五类型 voice_path 腿（mp4 + 签名下载 + 帧级确定性）+ still/doc 回归
+- [x] W6.3 文档：`fd-vaas-storyboard` SKILL.md 改 composition 格式/适配器/轨模型；deploy README（渲染面 + 钉版 + 隔离）
+- [x] W6.4 ADR-0004 增补（渲染面独立、API 面保持无 Node）
+- [ ] W6.5 退役 Remotion —— **部分完成**：typed 视频管线（new-task.mjs/task-render.mjs）已不被 render_video 使用（render_video 走渲染面）；但 `skills/cover.py`（render_still kind=cover 的静帧）与 `skills/voiceover.py`（registry 的 voiceover 驱动）仍依赖 `remotion-app/`，故 **remotion-app/ 暂保留**，待 cover/voiceover 迁到 chromium 静态出口后一并删除（后续 change）
 - [ ] W6.6 TTS 腿 E2E 复验 + 计价复核（render_video/second 口径不变）
