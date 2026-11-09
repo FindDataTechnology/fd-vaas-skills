@@ -165,6 +165,31 @@ def resolve(kind: str, provider_hint: str = "volcengine") -> dict:
     )
 
 
+def provider_peek(kind: str) -> Optional[str]:
+    """Best-effort lane provider for `kind` — never raises, never blocks a call.
+
+    Why this exists (2026-11-10): the lane-health gate wants the provider the
+    call will ACTUALLY use (vault `provider`, e.g. ciyuan) so a `down` verdict
+    names the real lane. But the gate must still outrank credential
+    availability (C2 discipline: an unreachable vault must not mask a lane_down
+    refusal). So this reads the vault opportunistically and returns None on any
+    failure — the caller then falls back to the env switch / volcengine.
+
+    Local mode (`VAAS_HOSTED != 1`) returns None on purpose: the bridge reads
+    .env itself, so the env switch is the truth there.
+    """
+    if os.getenv("VAAS_HOSTED", "").strip() != "1":
+        return None
+    for path in (f"pool/{LINE}/{kind}", f"service/default/{kind}"):
+        try:
+            raw = _cached(path)
+        except Exception:  # vault unreachable/misconfigured — gate decides anyway
+            return None
+        if isinstance(raw, dict) and raw.get("provider"):
+            return str(raw["provider"]).lower()
+    return None
+
+
 def service_secret(name: str) -> str:
     """Read one service-default secret value (e.g. the download HMAC key)."""
     raw = _cached(f"service/default/{name}")

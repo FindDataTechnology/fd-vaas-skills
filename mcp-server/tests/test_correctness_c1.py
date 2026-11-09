@@ -565,3 +565,48 @@ class TestConcurrentInsertRace:
         with pytest.raises(Exception):
             # 缺必填 type/slug 触发的是 sqlite 的 NOT NULL/约束，不该被吞成 replay
             insert_asset_idempotent(type=None, slug=None)
+
+
+class TestLaneGateUsesVaultProvider:
+    """2026-11-10 生产实测：provider=ciyuan 却报 `image/volcengine (unconfigured)`。
+    闸门必须指向「实际在用的车道」（vault 记录优先），且仍先于凭证解析。"""
+
+    def test_gate_names_vault_provider_not_env_default(self, monkeypatch, isolated_downloads):
+        from mcp_server.generators import image as imod
+        from mcp_server.generators import runtime as rt
+        from mcp_server import credentials as creds
+        monkeypatch.setattr(rt, "current_owner", lambda: "service")
+        monkeypatch.setenv("VAAS_HOSTED", "1")
+        monkeypatch.setenv("OPENBAO_ADDR", "http://localhost:0")  # 解析必失败
+        monkeypatch.setenv("OPENBAO_TOKEN", "test-token")
+        monkeypatch.delenv("IMAGE_PROVIDER", raising=False)       # env 未设 → 旧逻辑会猜 volcengine
+        # vault 记录声明实际车道 = ciyuan（容错预读只取 provider，不解析凭据）
+        monkeypatch.setattr(creds, "provider_peek", lambda kind: "ciyuan")
+        monkeypatch.setattr(imod, "run_bridge", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not run")))
+
+        with pytest.raises(Exception) as ei:
+            imod.generate(prompt="测试", output_format="jpeg")
+        msg = str(ei.value)
+        assert "lane_down (image/ciyuan)" in msg, msg
+        assert "volcengine" not in msg, msg
+
+    def test_healthy_vault_lane_not_blocked_by_down_env_lane(self, monkeypatch, isolated_downloads):
+        """env 未设 → 旧逻辑按 volcengine(down) 假拦截；真实车道 ciyuan(active) 必须放行。"""
+        from mcp_server.generators import runtime as rt
+        from mcp_server import credentials as creds
+        from mcp_server import lane_health as lh
+        monkeypatch.setattr(rt, "current_owner", lambda: "service")
+        monkeypatch.setenv("VAAS_HOSTED", "1")
+        monkeypatch.delenv("IMAGE_PROVIDER", raising=False)
+        monkeypatch.setattr(creds, "provider_peek", lambda kind: "ciyuan")
+        fake_resolved = {"source": "pool", "api_key": "k", "base_url": None,
+                         "model": None, "voice": None, "provider": "ciyuan",
+                         "path": "vaas/pool/x/image"}
+        monkeypatch.setattr(rt, "resolve", lambda kind, provider_hint="volcengine": fake_resolved)
+        monkeypatch.setattr(rt, "subprocess_env", lambda resolved, kind: {})
+        # volcengine 车道 down，ciyuan 车道 active
+        monkeypatch.setattr(lh, "lane_health", lambda kind, prov: {
+            "health": "down" if prov == "volcengine" else "active",
+            "reason_class": "unconfigured"})
+        ctx = rt.prepare("image", {"prompt": "x"})  # 不得抛 lane_down
+        assert ctx["resolved"]["provider"] == "ciyuan"

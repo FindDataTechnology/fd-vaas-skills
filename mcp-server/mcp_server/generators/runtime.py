@@ -17,6 +17,7 @@ import os
 import subprocess
 from typing import Optional
 
+from .. import credentials as _credentials
 from ..credentials import (
     CredentialUnavailable,
     credential_source_label,
@@ -37,21 +38,30 @@ SCRIPTS_DIR = os.path.abspath(SCRIPTS_DIR)
 BRIDGE_TIMEOUT_S = int(os.getenv("VAAS_BRIDGE_TIMEOUT_S", "900"))
 
 
-def provider_for(ctx: dict, env_key: str) -> str:
-    """Effective lane provider for a call.
+def effective_provider(resolved: dict, env_key: str) -> str:
+    """Effective lane provider for a call — the ONE rule both the lane-health
+    gate and the truthfulness checks must agree on.
 
-    Hosted: the vault record declares `provider`. Local mode ('env' source):
-    the very lane switch the bridge reads — <KIND>_PROVIDER from .env — so
-    truthfulness checks (speed warnings, voice manifest validation) work
-    against the REAL lane instead of the literal string "env", which used to
-    silently disable both (upstream fallback-to-default stayed invisible).
+    Hosted: the vault record declares `provider` (it wins — it is what the
+    bridge actually injects). Local mode ('env' source): the very lane switch
+    the bridge reads — <KIND>_PROVIDER from .env. Fallback: volcengine.
+
+    2026-11-10 修：车道闸此前自己读 `<KIND>_PROVIDER`（未设即 volcengine），
+    与 vault 记录脱钩——生产 provider=ciyuan 却报 `image/volcengine
+    (unconfigured)`，既误导客户（真因是 ciyuan 上游封禁），又会在
+    「env 未设 + volcengine down + ciyuan 健康」时假拦截健康车道。
     """
-    p = (ctx["resolved"].get("provider") or "").lower()
+    p = (resolved.get("provider") or "").lower()
     if p:
         return p
-    if ctx["resolved"].get("source") == "env":
+    if resolved.get("source") == "env":
         return (os.getenv(env_key) or "volcengine").lower()
     return "volcengine"
+
+
+def provider_for(ctx: dict, env_key: str) -> str:
+    """Effective lane provider for a prepared call (see effective_provider)."""
+    return effective_provider(ctx["resolved"], env_key)
 
 
 def prepare(kind: str, params: dict) -> dict:
@@ -67,18 +77,24 @@ def prepare(kind: str, params: dict) -> dict:
     """
     reject_secrets_in_params(params)
     owner = current_owner()
-    # Lane health gate BEFORE credential resolution: a ledgered `down` lane
-    # refuses up front as lane_down — never advertised as usable, never
-    # burning a doomed subprocess, and vault reachability is irrelevant to
-    # that verdict. Local stdio keeps the historical free-lane behavior (the
-    # operator runs their own keys); opt in locally with VAAS_LANE_HEALTH_GATE=1.
+    # Lane health gate — BEFORE credential resolution (C2 discipline): a
+    # ledgered `down` lane refuses up front as lane_down, and vault
+    # reachability must not mask that verdict.
+    # 2026-11-10 修：车道取「有效 provider」——vault 记录优先（容错预读，读不到
+    # 就退回本地 <KIND>_PROVIDER / volcengine）。此前闸门自读环境变量，生产
+    # provider=ciyuan 却报 `image/volcengine (unconfigured)`：既误导客户（真因是
+    # ciyuan 上游封禁），又会在「env 未设 + volcengine down + ciyuan 健康」时
+    # 假拦截健康车道。预读不抛错，闸门顺序不变。
+    # Local stdio keeps the historical free-lane behavior (the operator runs
+    # their own keys); opt in locally with VAAS_LANE_HEALTH_GATE=1.
     from ..lane_health import lane_health  # noqa: E402  (package root module)
-    env_prov = (os.getenv(f"{kind.upper()}_PROVIDER") or "volcengine").lower()
+    env_key = f"{kind.upper()}_PROVIDER"
+    lane_prov = _credentials.provider_peek(kind) or (os.getenv(env_key) or "volcengine").lower()
     gate_on = is_hosted() or os.getenv("VAAS_LANE_HEALTH_GATE", "") == "1"
-    if gate_on and lane_health(kind, env_prov).get("health") == "down":
-        h = lane_health(kind, env_prov)
+    if gate_on and lane_health(kind, lane_prov).get("health") == "down":
+        h = lane_health(kind, lane_prov)
         raise CredentialUnavailable(
-            f"lane_down ({kind}/{env_prov}): lane is down per lane_health ledger "
+            f"lane_down ({kind}/{lane_prov}): lane is down per lane_health ledger "
             f"({h.get('reason_class')}); check registry.list_generators for "
             f"health and do not retry in a loop"
         )
