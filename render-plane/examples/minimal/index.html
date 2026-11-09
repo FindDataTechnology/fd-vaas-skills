@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=640, height=360" />
+    <!--
+      最小 composition：零外链（无 CDN、无远程字体），可直接
+        render-plane/node_modules/.bin/hyperframes render -o out.mp4 render-plane/examples/minimal
+      或经渲染面 POST /v1/render 提交。
+      动画由 window.__hf 自定义运行时驱动（不依赖 GSAP）：
+        window.__hf = { duration, seek(t) }
+    -->
+    <style>
+      :root {
+        /* 品牌令牌：与静态出口共用同一套 kebab 变量 */
+        --vaas-bg: #0b1020;
+        --vaas-ink: #f5f7ff;
+        --vaas-accent: #ff5c39;
+        --vaas-muted: #8b93b5;
+        --vaas-font-display: "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 640px;
+        height: 360px;
+        overflow: hidden;
+        background: var(--vaas-bg);
+        font-family: var(--vaas-font-display);
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+      .glow {
+        position: absolute;
+        left: -120px;
+        top: -120px;
+        width: 420px;
+        height: 420px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255, 92, 57, 0.35), rgba(255, 92, 57, 0) 65%);
+      }
+      .title {
+        position: absolute;
+        left: 48px;
+        top: 128px;
+        color: var(--vaas-ink);
+        font-size: 46px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+      }
+      .subtitle {
+        position: absolute;
+        left: 48px;
+        top: 196px;
+        color: var(--vaas-muted);
+        font-size: 18px;
+        letter-spacing: 0.08em;
+      }
+      .bar-track {
+        position: absolute;
+        left: 48px;
+        bottom: 56px;
+        width: 544px;
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(245, 247, 255, 0.12);
+      }
+      .bar-fill {
+        height: 100%;
+        width: 0;
+        border-radius: 3px;
+        background: var(--vaas-accent);
+      }
+      .frame {
+        position: absolute;
+        right: 24px;
+        bottom: 20px;
+        color: var(--vaas-muted);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="3"
+      data-width="640"
+      data-height="360"
+      data-fps="10"
+    >
+      <div class="clip glow" data-start="0" data-duration="3" data-track-index="0"></div>
+      <div class="clip title" data-start="0" data-duration="3" data-track-index="0">VAAS 渲染面</div>
+      <div class="clip subtitle" data-start="0" data-duration="3" data-track-index="1">HYPERFRAMES 0.9.26 · 无状态作业</div>
+      <div class="clip bar-track" data-start="0" data-duration="3" data-track-index="0">
+        <div class="bar-fill" id="bar-fill"></div>
+      </div>
+      <div class="clip frame" id="frame" data-start="0" data-duration="3" data-track-index="1"></div>
+    </div>
+    <script>
+      // 自定义运行时：引擎逐帧调用 seek(t)，t 为秒。
+      // 纯函数式（无随机、无 Date、无 toLocaleString），保证双跑逐帧一致。
+      const DURATION = 3;
+      const barFill = document.getElementById("bar-fill");
+      const frameLabel = document.getElementById("frame");
+
+      window.__hf = {
+        duration: DURATION,
+        seek(t) {
+          const p = Math.max(0, Math.min(1, t / DURATION));
+          barFill.style.width = (544 * p).toFixed(2) + "px";
+          frameLabel.textContent = `frame ${String(Math.round(t * 10)).padStart(2, "0")}`;
+        },
+      };
+    </script>
+  </body>
+</html>

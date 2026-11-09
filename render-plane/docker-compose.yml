@@ -1,0 +1,38 @@
+# VAAS 渲染面（单机示例）
+#
+# 网络模型：
+#   - vaas-render-net 为 internal 网络（无外网出口）——渲染面只接这一张网
+#   - API 面（vaas-wanxing）同时接 internal 网络与自身业务网络：
+#       networks: [default, vaas-render-net]
+#     API 通过 http://vaas-renderer:8099 提交作业（VAAS_RENDER_URL）
+#   - 多机/多实例：在每台渲染机跑本 compose，API 侧用 VAAS_RENDER_URL 指向 LB 或轮询多实例
+
+services:
+  vaas-renderer:
+    build: .
+    image: vaas-render-plane:0.1.0
+    container_name: vaas-renderer
+    restart: unless-stopped
+    # Chrome 需要 >=256MB 共享内存；给 512m
+    shm_size: 512m
+    # 每 worker 一个 Chrome ~256MB；3g 给 1-2 worker 留余量
+    mem_limit: 3g
+    environment:
+      VAAS_RENDER_PORT: "8099"
+      VAAS_RENDER_WORKDIR: /tmp/vaas-render
+      VAAS_RENDER_MAX_CONCURRENCY: "1"
+      VAAS_RENDER_QUEUE_MAX: "32"
+      VAAS_RENDER_TIMEOUT_S: "600"
+    networks:
+      - vaas-render-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8099/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  vaas-render-net:
+    # 关键：internal 网络无外网出口（作业天然断网）
+    internal: true

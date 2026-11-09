@@ -1,0 +1,17 @@
+{
+  "name": "vaas-render-plane",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VAAS 渲染面：无状态 composition -> 成片 作业服务（HyperFrames 钉版）",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test/selftest.mjs"
+  },
+  "dependencies": {
+    "hyperframes": "0.9.26"
+  }
+}

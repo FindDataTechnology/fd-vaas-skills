@@ -6,14 +6,16 @@
 
 ### W1 渲染面服务（独立，可单测）
 
-- [ ] W1.1 渲染面镜像：Node 22 + `hyperframes@0.9.26`（npmmirror 构建、精确钉版、lockfile）+ chromium + ffmpeg + CJK 字体；构建期 `hyperframes doctor` 门禁
-- [ ] W1.2 `POST /v1/render` 作业 API（无状态）：composition + 素材（multipart/sha256）→ 成片（流式或上传地址）+ 引擎版本 + 耗时 + 告警
-- [ ] W1.3 幂等作业（`job_id` 去重）+ 并发上限（`-w` 可配）+ 硬超时 + 进程组 kill
-- [ ] W1.4 按作业沙箱：独立 tmpdir、env 白名单（剔除平台密钥）、无外网（internal 网络优先 / unshare -n 备选）、`--shm-size=512m`、内存限额
-- [ ] W1.5 健康检查（`/healthz`：引擎版本 + doctor 摘要 + 容量）+ 版本回报
-- [ ] W1.6 渲染面单测/自测：最小 composition 出片、幂等、超时零残留、密钥 env 不可见、零外链拒绝
+- [x] W1.1 渲染面镜像：Node 22 + `hyperframes@0.9.26`（npmmirror 构建、精确钉版、lockfile）+ chromium + ffmpeg + CJK 字体；构建期 `hyperframes doctor` 门禁
+- [x] W1.2 `POST /v1/render` 作业 API（无状态）：composition + 素材（multipart/sha256）→ 成片（流式或上传地址）+ 引擎版本 + 耗时 + 告警
+- [x] W1.3 幂等作业（`job_id` 去重）+ 并发上限（`-w` 可配）+ 硬超时 + 进程组 kill
+- [x] W1.4 按作业沙箱：独立 tmpdir、env 白名单（剔除平台密钥）、无外网（internal 网络优先 / unshare -n 备选）、`--shm-size=512m`、内存限额
+- [x] W1.5 健康检查（`/healthz`：引擎版本 + doctor 摘要 + 容量）+ 版本回报
+- [x] W1.6 渲染面单测/自测：最小 composition 出片、幂等、超时零残留、密钥 env 不可见、零外链拒绝
 
 ### W2 spec + 编译器（VAAS 侧，离线）
+
+> W1 完成记录（2026-11-09，容器实测）：镜像 2.0GB（node22+hyperframes0.9.26+chromium+ffmpeg+fonts）；`healthz` 通（engine/chrome/workers/doctor）；同网络容器访问 OK；**外网隔离实测阻断**（egress 000）；真作业 200 出 mp4（ftypisom）；**双跑 md5 一致**（668203cf…）；零外链 400 并指名资源；mac 自测 44/44（env 不泄漏/超时 504 零残留/队列 429）。构建坑：node slim 需 http 源（无 ca 证书）、bin 在 node_modules/.bin。
 
 - [ ] W2.1 `tools/composition.py`：`CompositionSpec` 模型 + 校验（size/duration/fps/tracks/clips）
 - [ ] W2.2 `compile_composition(spec)`：clips → `data-*` composition HTML；品牌令牌注入（theme 单源、kebab 规则）；零外链扫描
