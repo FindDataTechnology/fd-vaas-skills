@@ -43,11 +43,31 @@ def _esc(text: str) -> str:
             .replace(">", "&gt;").replace('"', "&quot;"))
 
 
-def _cover_html(title: str, subtitle: Optional[str], tags: Optional[str],
+def _tag_items(tags) -> list[str]:
+    """tags → 标签列表。
+
+    接受 list/tuple[str]（MCP 面 spec 是自由对象，传数组是最自然的写法）或
+    逗号/顿号分隔的字符串（既有调用方）。此前只认字符串，传数组会直接
+    `AttributeError: 'list' object has no attribute 'replace'`——对外表现为
+    「封面工具崩了」，实为输入形状未归一。
+    """
+    if tags is None:
+        return []
+    if isinstance(tags, (list, tuple)):
+        raw = [str(t) for t in tags]
+    elif isinstance(tags, str):
+        raw = tags.replace("，", ",").split(",")
+    else:
+        raise ValueError(
+            f"cover tags 须为字符串数组或逗号分隔字符串，收到 {type(tags).__name__}")
+    return [t.strip() for t in raw if t and t.strip()]
+
+
+def _cover_html(title: str, subtitle: Optional[str], tags,
                 w: int, h: int) -> str:
     tag_html = ""
-    if tags:
-        items = [t.strip() for t in tags.replace("，", ",").split(",") if t.strip()]
+    items = _tag_items(tags)
+    if items:
         tag_html = ('<div class="tags">'
                     + "".join(f'<span class="tag">{_esc(t)}</span>' for t in items)
                     + "</div>")
