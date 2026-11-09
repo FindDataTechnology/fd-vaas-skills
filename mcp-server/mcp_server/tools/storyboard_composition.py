@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..utils import DOWNLOADS_DIR, VAAS_ROOT  # noqa: F401  (解析器信任面一致)
+from ._scene_guard import find_external_refs
 from .composition import build_composition_html
 from .typed_scenes.theme import load_theme
 
@@ -53,10 +54,13 @@ def _esc(s: str) -> str:
     return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
-def _card_clip(root: str, title: str, sub: str) -> tuple[str, str]:
+def _card_clip(root: str, title: str, sub: str,
+               caller_css: str = "") -> tuple[str, str]:
     body = (f'<div class="sb-clip"><div class="sb-wrap" id="{root}-w">'
             f'<div class="sb-title">{_esc(title)}</div>'
             f'<div class="sb-sub">{_esc(sub)}</div></div></div>')
+    if caller_css:
+        body = f"<style>{caller_css}</style>" + body
     seek = (
         "function (lt) {\n"
         f"    var w = document.getElementById('{root}-w');\n"
@@ -132,6 +136,7 @@ def storyboard_to_composition(storyboard: dict, fps: int = 30,
     theme = theme or load_theme()
     tracks: list[dict] = []
     visual: list[dict] = []
+    violations: list[str] = []
     start = 0.0
     for i, scene in enumerate(scenes):
         kind = scene.get("kind", "html_intro")
@@ -142,19 +147,28 @@ def storyboard_to_composition(storyboard: dict, fps: int = 30,
         if kind in ("html_intro", "html_outro"):
             html, seek = _card_clip(root,
                                     str(scene.get("title") or ""),
-                                    str(scene.get("sub") or ""))
+                                    str(scene.get("sub") or ""),
+                                    str(scene.get("css") or ""))
         elif kind == "kenburns":
             html, seek = _kenburns_clip(root, scene)
         elif kind == "html_full":
             html, seek = _fragment_clip(scene)
         else:
             raise ValueError(f"unknown scene kind: {kind}")
+        violations.extend(
+            f"scene {i} ({kind}): {ref}" for ref in find_external_refs(html))
         clip = {"start": round(start, 6), "duration": round(dur, 6),
                 "html": html}
         if seek:
             clip["seek_js"] = seek
         visual.append(clip)
         start = round(start + dur, 6)
+
+    if violations:
+        raise ValueError(
+            "外置场景含外链资源（渲染面离线，零外链约束）；修法：把资源"
+            "内联为 data: URI 或改用相对路径：\n  - "
+            + "\n  - ".join(violations))
 
     tracks.append({"index": 0, "kind": "visual", "clips": visual})
     spec = {"size": list(size), "duration_s": round(start, 6),

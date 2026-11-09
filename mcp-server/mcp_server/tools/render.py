@@ -406,11 +406,9 @@ def compose_storyboard(
     if replayed is not None:
         return replayed
 
-    # ── W6.1a 外置场景硬校验：先建全部场景 HTML 扫外链，命中即抛——此刻磁盘
-    # 零写入（帧目录不建、账本行不写），违规不产生任何部分产物。重放语义不变：
-    # 已成功渲染过的计划必然合规，上一段前置 return 已短路。
-    scene_htmls = _build_scene_htmls(scenes, size)
-    _assert_scenes_offline(scene_htmls, scenes)
+    # W4.5：外置场景硬校验已下沉到 composition 编译期
+    # （build_composition_html → validate_no_external_refs），此处不再重复建页；
+    # 违规仍在磁盘写入之前抛错，零部分产物语义不变。
 
     # ── W4.1：场景序列编译为 composition → 提交渲染面（自制帧循环已退役）
     from . import render_client, storyboard_composition

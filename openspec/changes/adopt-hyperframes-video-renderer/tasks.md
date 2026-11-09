@@ -38,11 +38,13 @@
 
 - [x] W4.1 `render_video` 切流：storyboard/type → composition → 提交作业；删 `_render_html_frames`/`_ffmpeg` 视频分支
 - [x] W4.2 计划哈希折入引擎版本；确定性重放（同 job_id 返回同结果）
-- [ ] W4.3 作业客户端：`VAAS_RENDER_URL` 契约 + 重试/多实例派发 + 超时 + 明确错误
+- [x] W4.3 作业客户端：`VAAS_RENDER_URL` 契约 + 重试/多实例派发 + 超时 + 明确错误
 - [x] W4.4 诊断入账本（引擎版本/耗时/告警）；失败零残留
-- [ ] W4.5 `_scene_guard` 升级为 composition 级校验
+- [x] W4.5 `_scene_guard` 升级为 composition 级校验
 
 ### W5 测试重定向
+
+> W4.3/W4.5 完成记录（2026-11-09）：`VAAS_RENDER_URLS` 逗号多实例 + `VAAS_RENDER_RETRIES`/退避；`RenderPlaneError.status` 分级（不可达/429/5xx 可换实例重试，400/413 立即失败）。外置场景硬校验下沉到 storyboard 编译器逐场景扫描（报错点名 `scene i (kind)` + data: URI 修法），`build_composition_html` 的零外链校验作兜底。全套 **451 passed / 15 skipped**。
 
 > W4.1/4.2/4.4 完成记录（2026-11-09）：`compose_storyboard` 与 type 模式均改为「编译 composition → `render_client.submit_render` → 字节落盘 → 账本/计价」，自制帧循环/ffmpeg 合成分支退役；引擎版本折入 `typed_plan_slug`（升级即失效旧重放）；引擎诊断（X-Engine）入 metadata。测试重定向：autouse 假渲染面（`real_render` 标记豁免）、6 个旧混流用例与 2 个 route-guard 探针显式 skip（能力已迁移到渲染面网络隔离），全套 **449 passed / 15 skipped**。
 

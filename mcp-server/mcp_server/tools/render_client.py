@@ -24,6 +24,7 @@ compose_storyboard）。
 import hashlib
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from typing import Optional
@@ -36,7 +37,30 @@ DEFAULT_TIMEOUT_S = 600.0
 
 
 class RenderPlaneError(RuntimeError):
+    """渲染面调用失败。status=None 表示不可达/超时（可重试）。"""
+
+    def __init__(self, message: str, status: Optional[int] = None):
+        super().__init__(message)
+        self.status = status
+
+    @property
+    def retryable(self) -> bool:
+        # 不可达/超时（status None）、限流 429、网关类 5xx 可换实例重试；
+        # 400（composition 不合规）/413（过大）重试无意义
+        return self.status is None or self.status in (429, 500, 502, 503, 504)
     """渲染面调用失败（配置/网络/HTTP 错误统一口径）。"""
+
+
+def _base_urls(base_url: Optional[str] = None) -> list[str]:
+    """渲染面基址列表：base_url > VAAS_RENDER_URLS（逗号分隔多实例）> VAAS_RENDER_URL。"""
+    raw = base_url or os.getenv("VAAS_RENDER_URLS") or os.getenv("VAAS_RENDER_URL")
+    raw = (raw or DEFAULT_BASE_URL).strip()
+    urls = [u.strip().rstrip("/") for u in raw.split(",") if u.strip()]
+    for u in urls:
+        if not (u.startswith("http://") or u.startswith("https://")):
+            raise ValueError(
+                f"VAAS_RENDER_URL / base_url 必须是 http(s) URL，收到 {u!r}")
+    return urls or [DEFAULT_BASE_URL]
 
 
 def _base_url(base_url: Optional[str]) -> str:
@@ -142,7 +166,8 @@ def _request(url: str, *, data: bytes, method: str, headers: dict,
     except urllib.error.HTTPError as exc:
         detail = _error_detail(exc.read())
         raise RenderPlaneError(
-            f"render plane {exc.code} {method} {url}: {detail}") from exc
+            f"render plane {exc.code} {method} {url}: {detail}",
+            status=exc.code) from exc
     except urllib.error.URLError as exc:
         raise RenderPlaneError(
             f"render plane unreachable: {url} ({exc.reason}) — "
@@ -182,26 +207,49 @@ def submit_render(html: str, assets=None, fps: int = 30, quality: str = "looks",
     if not isinstance(format, str) or not format.strip():
         raise ValueError("submit_render: format 必须是非空 string")
 
-    base = _base_url(base_url)
+    bases = _base_urls(base_url) if base_url is None else [_base_url(base_url)]
     tmo = _timeout(timeout)
     prepared = _normalize_assets(assets)
+    retries = int(os.getenv("VAAS_RENDER_RETRIES", "2") or 0)
+    backoff = float(os.getenv("VAAS_RENDER_RETRY_BACKOFF_S", "0.5") or 0.0)
 
-    refs: list[dict] = []
-    for rel, blob in prepared:
-        digest = hashlib.sha256(blob).hexdigest()
-        _request(f"{base}/v1/assets/{digest}", data=blob, method="PUT",
-                 headers={"Content-Type": "application/octet-stream"},
-                 timeout=tmo)
-        refs.append({"sha256": digest, "name": rel, "path": rel})
-
+    # 内容寻址：同一资产的 PUT 天然幂等，重试/换实例无需特殊处理
+    digests = [(rel, blob, hashlib.sha256(blob).hexdigest())
+               for rel, blob in prepared]
     body = json.dumps({
         "job_id": job_id.strip(),
         "fps": fps,
         "quality": quality.strip(),
         "format": format.strip(),
-        "composition": {"html": html, "assets": refs},
+        "composition": {"html": html,
+                        "assets": [{"sha256": d, "name": rel, "path": rel}
+                                   for rel, _b, d in digests]},
     }, ensure_ascii=False).encode("utf-8")
 
-    return _request(f"{base}/v1/render", data=body, method="POST",
-                    headers={"Content-Type": "application/json; charset=utf-8"},
+    last_exc: Optional[RenderPlaneError] = None
+    attempts = retries + 1
+    for attempt in range(attempts):
+        for base in bases:
+            try:
+                for rel, blob, digest in digests:
+                    _request(f"{base}/v1/assets/{digest}", data=blob,
+                             method="PUT",
+                             headers={"Content-Type":
+                                      "application/octet-stream"},
+                             timeout=tmo)
+                return _request(
+                    f"{base}/v1/render", data=body, method="POST",
+                    headers={"Content-Type":
+                             "application/json; charset=utf-8"},
                     timeout=tmo)
+            except RenderPlaneError as exc:
+                last_exc = exc
+                if not exc.retryable:
+                    raise
+                continue  # 换下一个实例
+        if attempt + 1 < attempts and backoff > 0:
+            time.sleep(backoff * (attempt + 1))
+    assert last_exc is not None
+    raise RenderPlaneError(
+        f"render plane unavailable after {attempts} attempt(s) across "
+        f"{len(bases)} instance(s): {last_exc}", status=last_exc.status)

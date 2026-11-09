@@ -543,3 +543,64 @@ class TestRenderClient:
                 [{"path": "assets/v.mp3", "bytes": b"a"},
                  {"path": "assets/v.mp3", "bytes": b"b"}],
                 job_id="j")
+
+
+@pytest.mark.real_render  # 自带假 HTTP 服务，不走 autouse 打桩
+class TestRenderPlaneRetry:
+    """W4.3：多实例派发 + 可重试错误。"""
+
+    def _serve(self, status: int, payload: bytes, hits: list):
+        import http.server, threading
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_PUT(self):
+                hits.append(("PUT", status))
+                self.send_response(200)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def do_POST(self):
+                hits.append(("POST", status))
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *a):
+                pass
+
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        return srv, f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def test_fails_over_to_second_instance(self, monkeypatch):
+        from mcp_server.tools import render_client as rc
+
+        hits_bad, hits_good = [], []
+        bad, bad_url = self._serve(503, b'{"error":"busy"}', hits_bad)
+        good, good_url = self._serve(200, b"\x00\x00\x00\x20ftypisom", hits_good)
+        try:
+            monkeypatch.setenv("VAAS_RENDER_URLS", f"{bad_url},{good_url}")
+            monkeypatch.setenv("VAAS_RENDER_RETRIES", "0")
+            blob, headers = rc.submit_render(
+                "<html></html>", assets=[("a.png", b"x")], job_id="j1")
+            assert blob.startswith(b"\x00\x00\x00\x20ftypisom")
+            assert hits_bad and hits_good
+        finally:
+            bad.shutdown(); good.shutdown()
+
+    def test_400_not_retried(self, monkeypatch):
+        from mcp_server.tools import render_client as rc
+
+        hits = []
+        srv, url = self._serve(400, b'{"error":"bad composition"}', hits)
+        try:
+            monkeypatch.setenv("VAAS_RENDER_URLS", url)
+            monkeypatch.setenv("VAAS_RENDER_RETRIES", "3")
+            with pytest.raises(rc.RenderPlaneError) as ei:
+                rc.submit_render("<html></html>", job_id="j2")
+            assert ei.value.status == 400 and not ei.value.retryable
+            assert sum(1 for m, _ in hits if m == "POST") == 1
+        finally:
+            srv.shutdown()
