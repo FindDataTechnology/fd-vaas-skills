@@ -18,15 +18,15 @@ cd $VAAS && ./install.sh
 #    不确定环境是否就绪？随时跑：
 node $VAAS/scripts/doctor.mjs
 
-# 3. 写一句口播稿并渲染
-echo "你好，这是 VAAS 的第一支视频。" > /tmp/demo-script.txt
-node $VAAS/.agents/skills/fd-vaas-video-creator/scripts/new-task.mjs --slug demo --script /tmp/demo-script.txt
-node $VAAS/.agents/skills/fd-vaas-video-creator/scripts/task-render.mjs --slug demo
+# 3. 出片走 MCP 工具面（本地 stdio 或托管端点均可；2026-11-09 起无本地 node 渲染链）
+#    generate_voice(text="你好，这是 VAAS 的第一支视频。", slug="demo")   -> 配音 + captions.json
+#    render_video(type="news-flash", script="…", inputs={...}, slug="demo") -> 成片 mp4
+#    （也可 render_still 出封面/图表、render_document 出 PDF/长图）
 
-# 产物：$VAAS/downloads/fd-videos/demo/demo.mp4（+ .srt 字幕）
+# 产物：$VAAS/downloads/video/demo/demo.mp4（+ review URL / 签名 download_url）
 ```
 
-> 接收一个内容需求，生成**可变类型的资源**（幻灯片、文档、屏幕录制视频、AI 图片/视频，或 Remotion 渲染的口播视频），然后**自动发布到不同的社交媒体账号**——理想情况下为每个平台产出*不同*的变体。
+> 接收一个内容需求，生成**可变类型的资源**（幻灯片、文档、屏幕录制视频、AI 图片/视频，或渲染面渲染的口播视频），然后**自动发布到不同的社交媒体账号**——理想情况下为每个平台产出*不同*的变体。
 
 VAAS 是架在两半之上的一个**编排层**，自身没有应用代码：
 
@@ -102,9 +102,9 @@ VAAS 是架在两半之上的一个**编排层**，自身没有应用代码：
 
 1. **`/fd-vaas-brainstorm`** *（可选）*--给定赛道/主题，按口播 / 图文模式返回选题矩阵（热点/痛点/争议/干货/人设）、脚本框架或图文草稿（Markdown 版 + 纯文本简洁版）、差异化角度，以及可选的完整大纲。内置合规红线：口播稿不出现其他平台名、不引流站外。
 2. **`/fd-vaas-video-creator`**--把文案变成成片。通过**类型注册表**（`new-task --type <id>`）选视频类型，`node scripts/types/list.mjs` 看全部类型。稳定类型：口播 `voiceover`、录屏 `screen-recording`；实验类型：`carousel`（轮播）、`kinetic-quote`（动态金句）、`news-flash`（快讯）、`listicle`（盘点）、`data-viz`（数据可视化）。
-   - **口播视频**：`new-task -> TTS（volcengine 直连=官方逐字时间戳；词元 ciyuan 档=出口层分段合成+合成字幕，captions_source 可审计）-> fix-tts-timings（修正 Latin token 的假 endMs）-> preflight -> Remotion 渲染 -> <slug>.mp4（+ .srt）`。**必须跑 `fix-tts-timings`，否则字幕错位。**（scene-align 只在五类型模板管线里；口播默认管线无此步。）
+   - **口播视频**：`generate_voice（volcengine 直连=官方逐字时间戳；词元 ciyuan 档=出口层分段合成+合成字幕，captions_source 可审计）-> render_video(type=… | storyboard=…) -> <slug>.mp4`。渲染由**独立无状态渲染面**承担（HyperFrames，API 面无 Node）；本地 `new-task.mjs`/`task-render.mjs`/`fix-tts-timings` 已于 2026-11-09 随 Remotion 退役，字幕时间以出口层实测/合成口径为准。
    - **录屏/网页操作视频**：用 ego-browser 打开目标页面操作，过程中用 cap 录屏，产出 mp4（可配麦克风解说）。
-   所有产物落在 `downloads/fd-videos/<slug>/`，由 `task.json` 管理。画面层 = 已有素材 / seedance 视频 / seedream 图片 / ppt 母带。**内置三大生成器**（TTS / Seedream / Seedance）在 `scripts/generators/`。
+   所有产物落在 `downloads/<kind>/<slug>/`。画面层 = 已有素材 / seedance 视频 / seedream 图片 / ppt 母带。**生成能力在托管 MCP 面**（`generate_voice` / `generate_image` / `generate_video_submit` / `render_*`），多模态桥在根 `scripts/litellm-bridge.py`（volcengine / ciyuan 两档）。
 3. **`/fd-vaas-publish-videos`**--一支视频 -> 6 个平台。分发走「**vendor 上游 + 薄适配层**」：上游 `social-auto-upload` vendored 在 `scripts/upstream/`，`sau_adapter.py` 把 CLI 翻译成上游 `<Platform>Video(...).main()` 调用，统一 **py 运行时（patchright）**；bilibili 例外（上游用 biliup 二进制，走本地 `bilibili.py`）。登录态是 cookie 文件（`upstream/cookies/<platform>_uploader/account.json`，快手用 `kuaishou_creator.json`），由 `/fd-vaas-login` 统一扫码。从 `.env` 读取各平台偏好（标签、`BILIBILI_TID`、`TENCENT_SHORT_TITLE`、`YOUTUBE_VISIBILITY`、定时），把结果回写到 `task.json` 的 `distribution[]`。`--dry-run` 可预览命令。
 
 ```bash
@@ -112,27 +112,28 @@ export VAAS=<VAAS 仓库根目录,如 ~/fd-vaas-skills>   # 后续命令都用 $
 SKILL_V=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
 SKILL_P=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts
 
-# 2. 文案 -> 口播视频
-node $SKILL_V/new-task.mjs    --slug <slug> --script /path/to/script.txt
-node $SKILL_V/task-render.mjs --slug <slug>            # -> downloads/fd-videos/<slug>/<slug>.mp4
+# 2. 文案 -> 成片（MCP 工具面）
+#     generate_voice(text|file_path, slug)                    -> downloads/audio/<slug>/<slug>.mp3 + captions.json
+#     render_video(type=<id>, script=…, inputs={…}, slug=…)    -> downloads/video/<slug>/<slug>.mp4
 
 # 3. 多平台发布
 node $SKILL_P/publish.mjs --slug <slug> --title "…" --platforms douyin,xiaohongshu,bilibili --dry-run
 ```
 
-### 双执行器路由（本地 node 链 vs 托管 HTML 链）
+### 渲染执行体（单一：HyperFrames 渲染面）
 
-同一支视频有两条渲染执行体，按部署位置选择（能力差异见下表；类型声明 `renderer` 的语义收敛见 `video-types` spec）：
+2026-11-09 起视频渲染只有一条执行体：类型/storyboard 编译成 composition，提交给**独立、无状态、
+可多实例的渲染面**（HyperFrames 0.9.26），API 面镜像**不含 Node**（ADR-0004 增补）。
+本地 Remotion 管线与 `remotion-app/` 已彻底退役。
 
-| | 本地 node 链（本节管线） | 托管 HTML 链（hosted MCP `render_video`） |
-|---|---|---|
-| 执行体 | Remotion（`remotion-app/`） | HTML 构建器（`templates/` 本地/容器内一致） |
-| 适用类型 | 全部七类型（type 模式经 HTML 构建器，Remotion 族托管指路报错） | 五类型模板 + storyboard 自定义 |
-| BGM | ❌ 暂不支持（v1 不对称披露；接线另账） | ✅ 支持 |
-| 字幕粒度 | 逐字/词级时间戳（fix-tts-timings 后） | 句级（TTS 出口层合成对齐） |
-| 归属 | 本机（创作链 skill） | 云端容器（`deploy/mcp-server.Dockerfile` 底座） |
-
-本地创作时走本节 node 链；壹座/试用用户（无本地环境）走 hosted `render_video`。`fd-vaas-brainstorm` 编排时按用户环境指路。
+| 项 | 口径 |
+|---|---|
+| 提交入口 | `render_video(type=<id> | storyboard=…)`；`render_still` / `render_document` 同底座 |
+| 渲染面 | 独立服务，`VAAS_RENDER_URL(S)` 指向；部署与容量口径见 `deploy/README.md`「渲染面（Render Plane）」 |
+| 隔离 | 渲染面接 internal 网络（无出网）；作业 env 白名单不含平台密钥 |
+| BGM | ✅ 原生多轨（不再成片后混流） |
+| 字幕粒度 | 句/段级——volcengine 直连带官方逐字戳（`captions_source: official`），ciyuan 档由出口层按段实测对齐合成（`synthetic`） |
+| 回滚 | 渲染面镜像 tag 级（`ccr…/yizuo/vaas-render-plane:sha-*`） |
 
 ### 图文主线（「发一篇文章」）
 
@@ -160,7 +161,7 @@ VAAS/
 │   ├── fd-cover-image/                 # Remotion 品牌封面图
 │   ├── fd-coding-{bore,cloudflare,wifi}-tunnel/   # 内网穿透 / 局域网分享
 │   ├── fd-vaas-brainstorm/              # 口播 + 图文选题 / 脚本 / 草稿
-│   ├── fd-vaas-video-creator/          # 文案 -> 口播视频（.mp4 + .srt）；内置 TTS/Seedream/Seedance 生成器
+│   ├── fd-vaas-video-creator/          # 视频类型注册表（type.json 契约；渲染走渲染面）
 │   │   └── scripts/generators/         #   tts-wrapper.js / seedream-wrapper.js / seedance-wrapper.js
 │   ├── fd-vaas-login/                  # 登录管理 Web 页（:8766，扫码/状态总览，cookie 共享）
 │   ├── fd-vaas-publish-videos/         # 视频多平台发布（vendor 上游 + 薄适配层，统一 py/patchright）
@@ -176,15 +177,15 @@ VAAS/
 │   ├── litellm-bridge.py               #   统一生成入口（TTS / 图像 / 视频；volcengine|ciyuan 两档）
 │   ├── _volcengine_{tts,image,video}.py#   火山方舟直连实现
 │   ├── requirements.txt / pyproject.toml
-├── remotion-app/                       # Remotion 视频项目（React -> 视频）     [已 gitignore]
-├── downloads/fd-videos/<slug>/         # fd-vaas-video-creator 每支视频的产出   [已 gitignore]
+├── render-plane/                       # 独立渲染面（HyperFrames composition -> MP4）
+├── downloads/<kind>/<slug>/            # 各能力产物（video/audio/images/graphic/doc）[已 gitignore]
 ├── downloads/fd-docs/<slug>/          # fd-vaas-publish-docs 每篇文章的产出     [已 gitignore]
 ├── .env / .env.example                 # 平台偏好与多模态 Provider 配置
 ├── goal.md                             # 项目目标（why）
 └── AGENTS.md                           # 给 Claude Code 的工程指引
 ```
 
-> **VAAS 根目录是一个 git 仓库**（远程：`github.com/FindDataTechnology/fd-vaas-skills`）。`remotion-app/`、`downloads/`、`demands/`、`demand.md`、`.env`、`.mcp.json` 已 gitignore。`social-auto-upload` 上游被 vendor 进 `fd-vaas-publish-videos/scripts/upstream/`（不是根目录独立目录）；用 `.agents/skills/fd-vaas-publish-videos/scripts/sync-upstream.sh` 同步上游更新（改动只落适配层，vendor 内手改会被下次 rsync --delete 冲掉）。托管镜像单源：canonical 在 `deploy/mcp-server.Dockerfile`，根 `./Dockerfile` 由其生成（`bash scripts/gen-root-dockerfile.sh`）。
+> **VAAS 根目录是一个 git 仓库**（远程：`github.com/FindDataTechnology/fd-vaas-skills`）。`downloads/`、`demands/`、`demand.md`、`.env`、`.mcp.json` 已 gitignore。`social-auto-upload` 上游被 vendor 进 `fd-vaas-publish-videos/scripts/upstream/`（不是根目录独立目录）；用 `.agents/skills/fd-vaas-publish-videos/scripts/sync-upstream.sh` 同步上游更新（改动只落适配层，vendor 内手改会被下次 rsync --delete 冲掉）。托管镜像单源：canonical 在 `deploy/mcp-server.Dockerfile`，根 `./Dockerfile` 由其生成（`bash scripts/gen-root-dockerfile.sh`）。
 
 ---
 
@@ -242,17 +243,13 @@ officecli --version
 
 `ppt-master` 是仓库内的工作流（不是外部二进制），但 VAAS 只签入**薄壳**——首次用 `/ppt-master` 前先拉取上游：`bash scripts/fetch-ppt-master.sh`（~98 MB，落在 gitignore 的 `.agents/skills/ppt-master/upstream/`）。如果用到它的生图步骤，按 `upstream/requirements.txt` 装依赖。
 
-### 3. Remotion 视频项目
+### 3. 渲染面（自建托管时才需要）
 
-```bash
-cd remotion-app
-npm install
-npm run dev        # Remotion Studio 预览  ->  http://localhost:3001
-                   #（3000 端口已被占用；Studio 回落到 3001）
-npx remotion render      # 把视频渲染成文件
-```
+本地只做发布与编排时**无需**任何渲染依赖——出片交给托管实例。自建部署见
+`deploy/README.md`「渲染面（Render Plane）」：镜像走发布通道（`law-ai-official/vaas-mcp-images`
+的 `target=vaas-render-plane`），节点侧以无出网桥接运行，`/healthz` 的 `doctor.checks` 须全 OK。
 
-> `fd-vaas-video-creator` 需要 `@remotion/captions` 和一个 `VoiceoverVideo` composition--一次性设置见 `.agents/skills/fd-vaas-video-creator/references/setup.md`。
+> Remotion 相关的一次性设置（`@remotion/captions`、`VoiceoverVideo`）已随 2026-11-09 退役失效。
 
 ### 4. Claude Code 技能
 
@@ -290,7 +287,7 @@ npx remotion render      # 把视频渲染成文件
 | `fd-coding-cloudflare-tunnel` | Cloudflare Tunnel（HTTPS）内网穿透 | 仓库技能 | `/cf-tunnel` |
 | `fd-coding-wifi-tunnel` | 局域网 / WiFi 分享本地服务 | 仓库技能 | `/wifi-tunnel` |
 | `fd-vaas-brainstorm` | 口播选题矩阵 + 脚本大纲 / 图文草稿（Markdown + 纯文本双版本）+ 差异化角度 | 仓库技能（纯提示词） | `/fd-vaas-brainstorm` |
-| `fd-vaas-video-creator` | 文案 -> 口播视频 `.mp4`+`.srt`；或录屏视频；内置 TTS/Seedream/Seedance | 仓库技能 | `/fd-vaas-video-creator` |
+| `fd-vaas-video-creator` | **视频类型注册表**（`types/*/type.json`，`renderer: hyperframes`）；出片走 `render_video`（独立渲染面）。本地 Remotion 管线已退役 | 仓库技能 | `/fd-vaas-video-creator` |
 | `fd-vaas-login` | 登录管理 Web 页（:8766，扫码/状态总览，cookie 共享） | 仓库技能 | `/fd-vaas-login` |
 | `fd-vaas-publish-videos` | 一支视频 -> 6 个视频平台（vendor 上游 + sau_adapter，统一 py/patchright） | 仓库技能 | `/fd-vaas-publish-videos` |
 | `fd-vaas-publish-docs` | 一篇文章 -> 11 个图文平台（上游优先 note_adapter + 自有逻辑） | 仓库技能 | `/fd-vaas-publish-docs` |
@@ -355,9 +352,9 @@ npx remotion render      # 把视频渲染成文件
 SKILL_V=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
 SKILL_P=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts
 
-# 1. 文案 -> 口播视频
-node $SKILL_V/new-task.mjs    --slug demo --script ./script.txt
-node $SKILL_V/task-render.mjs --slug demo          # -> downloads/fd-videos/demo/demo.mp4
+# 1. 文案 -> 成片（MCP 工具面：generate_voice 出声 -> render_video 出片）
+#    generate_voice(text=…, slug="demo")                        -> downloads/audio/demo/demo.mp3 + captions.json
+#    render_video(type="news-flash", script=…, inputs={…}, slug="demo") -> downloads/video/demo/demo.mp4
 
 # 2. 多平台发布（先预览，确认后再去掉 --dry-run）
 node $SKILL_P/publish.mjs --slug demo --title "标题" \
@@ -488,6 +485,6 @@ pip install -r scripts/requirements.txt   # 只剩 python-dotenv，三车道全�
 - **patchright 全平台一致**：视频发布不再按 OS 派发，macOS 也要装 patchright。ego-browser 只剩录屏 + 图文自有平台两条用途。
 - **独立的 `voice/image/video-generator` 技能已不存在**--生成器合并进了 `fd-vaas-video-creator/scripts/generators/`。后端切换（volcengine|ciyuan）仍由根目录 `scripts/litellm-bridge.py` 提供。
 - **PPTX 幻灯片不能直接当视频上传。** `cap`（屏幕录制）、`fd-vaas-video-creator`、或 `ppt-master` 的导出/渲染步骤，是把幻灯片变成可发布视频的桥。
-- **`fd-vaas-video-creator` 跳过 `fix-tts-timings` 会让字幕错位**--seed-tts-2.0 对 Latin token（英文名、URL）返回假的 `endMs`。流水线会自动跑这步；手工路径必须显式跑。
+- **字幕时间以出口层口径为准**--volcengine 直连带官方逐字戳（可能对 Latin token 给假 `endMs`），ciyuan 档按段实测对齐合成；两者都落 `captions.json` 且 `captions_source` 可审计。`fix-tts-timings` 已随 Remotion 管线退役（2026-11-09）。
 - **平台验证状态见矩阵，别凭记忆**：bilibili 未实机验证、xueqiu/tonghuashun 入口已失效。标 ❌/⚠️ 的平台首次发布前用 `references/probe.md` 的 `snapshotText` 流程核对选择器再驱动。
 - **发布前必须让用户确认**（尤其图文，发出去撤不回来）。

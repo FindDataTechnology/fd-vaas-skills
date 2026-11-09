@@ -20,13 +20,16 @@ node $VAAS/scripts/doctor.mjs
 
 # 3. Write one line of voiceover and render
 echo "Hello, this is my first VAAS video." > /tmp/demo-script.txt
-node $VAAS/.agents/skills/fd-vaas-video-creator/scripts/new-task.mjs --slug demo --script /tmp/demo-script.txt
-node $VAAS/.agents/skills/fd-vaas-video-creator/scripts/task-render.mjs --slug demo
+# Generation runs on the MCP tool surface (local stdio or hosted endpoint; no local
+# node render chain since 2026-11-09):
+#   generate_voice(text="Hello from VAAS.", slug="demo")        -> audio + captions.json
+#   render_video(type="news-flash", script="…", inputs={…}, slug="demo") -> finished mp4
+#   (render_still for covers/charts, render_document for PDF/long-image)
 
 # Output: $VAAS/downloads/fd-videos/demo/demo.mp4 (+ .srt subtitles)
 ```
 
-> Take a content demand, generate a **variable-type resource** (slide deck, document, screen-recording video, AI image/video, or a Remotion-rendered voiceover video), then **publish it automatically to different social-media accounts** - ideally producing a *different* variant per platform.
+> Take a content demand, generate a **variable-type resource** (slide deck, document, screen-recording video, AI image/video, or a voiceover video rendered by the dedicated render plane), then **publish it automatically to different social-media accounts** - ideally producing a *different* variant per platform.
 
 VAAS is an **orchestration layer** over two halves, with no application code of its own:
 
@@ -61,7 +64,7 @@ Article: topic -> /fd-vaas-brainstorm(article mode) -> article -> /fd-vaas-publi
   - [Install & deploy](#install--deploy)
     - [1. Distribution runtime (patchright) and login](#1-distribution-runtime-patchright-and-login)
     - [2. Creation tools](#2-creation-tools)
-    - [3. Remotion video project](#3-remotion-video-project)
+    - [3. Render plane (only when self-hosting)](#3-render-plane-only-when-you-self-host)
     - [4. Claude Code skills](#4-claude-code-skills)
   - [Skill catalog](#skill-catalog)
   - [Platform support matrix](#platform-support-matrix)
@@ -101,10 +104,10 @@ The `fd-vaas-*` skills are the wired demand-to-publish pipeline.
 ### Video mainline ("make a video and post it")
 
 1. **`/fd-vaas-brainstorm`** *(optional)* - given a niche/topic, returns a topic matrix (hot/pain/controversy/dry-good/persona), script framework or article draft (Markdown version + plain-text simplified version), differentiation angle, and optional full outline. Built-in compliance: voiceover scripts must not name other platforms or drive traffic off-platform.
-2. **`/fd-vaas-video-creator`** - turns a script into a finished video. Select video type via **type registry** (`new-task --type <id>`), run `node scripts/types/list.mjs` to see all types. Stable types: voiceover `voiceover`, screen-recording `screen-recording`; experimental types: `carousel` (carousel), `kinetic-quote` (kinetic quote), `news-flash` (news flash), `listicle` (listicle), `data-viz` (data visualization).
-   - **Voiceover video**: `new-task -> TTS (seed-tts-2.0, returns audio + official word-level timestamps) -> fix-tts-timings (corrects fake Latin-token endMs) -> scene-align (rearrange scenes per voiceover timestamps) -> preflight -> Remotion render -> <slug>.mp4 (+ .srt)`. **Must run `fix-tts-timings` or subtitles desync.**
+2. **`/fd-vaas-video-creator`** - turns a script into a finished video. Select video type via the **type registry** (`types/<id>/type.json`, `renderer: "hyperframes"`); list them with `templates_list(domain="video")`. Stable types: voiceover `voiceover`, screen-recording `screen-recording`; experimental types: `carousel` (carousel), `kinetic-quote` (kinetic quote), `news-flash` (news flash), `listicle` (listicle), `data-viz` (data visualization).
+   - **Voiceover video**: `generate_voice (volcengine direct = official word-level timestamps; ciyuan lane = segment-level synthetic captions, auditable via captions_source) -> render_video(type=… | storyboard=…) -> <slug>.mp4`. Rendering is handled by a **separate stateless render plane** (HyperFrames; the API image ships no Node). The local `new-task.mjs` / `task-render.mjs` / `fix-tts-timings` chain was retired on 2026-11-09 with Remotion.
    - **Screen-recording/web operation video**: open target page in ego-browser, operate during recording with cap, produce mp4 (optional mic narration).
-   All artifacts land in `downloads/fd-videos/<slug>/`, managed by `task.json`. Visual layer = existing assets / seedance video / seedream images / ppt master tape. **Built-in generators** (TTS / Seedream / Seedance) live in `scripts/generators/`.
+   All artifacts land in `downloads/<kind>/<slug>/`. Visual layer = existing assets / seedance video / seedream images / ppt master tape. **Generation lives on the hosted MCP plane** (`generate_voice` / `generate_image` / `generate_video_submit` / `render_*`); the multimodal bridge is the root `scripts/litellm-bridge.py` (volcengine / ciyuan calibers).
 3. **`/fd-vaas-publish-videos`** - one video -> 6 platforms. Distribution uses "**vendor upstream + thin adapter layer**": upstream `social-auto-upload` vendored in `scripts/upstream/`, `sau_adapter.py` translates CLI into upstream `<Platform>Video(...).main()` calls, unified **py runtime (patchright)**; bilibili exception (upstream uses biliup binary, handled by local `bilibili.py`). Login state via cookie files (`upstream/cookies/<platform>_uploader/account.json`, kuaishou uses `kuaishou_creator.json`), managed by `/fd-vaas-login` unified QR scan. Reads per-platform preferences from `.env` (tags, `BILIBILI_TID`, `TENCENT_SHORT_TITLE`, `YOUTUBE_VISIBILITY`, schedule), writes results back to `task.json`'s `distribution[]`. `--dry-run` previews the commands.
 
 ```bash
@@ -112,9 +115,9 @@ export VAAS=<path to the cloned VAAS repo, e.g. ~/fd-vaas-skills>   # all comman
 SKILL_V=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
 SKILL_P=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts
 
-# 2. script -> voiceover video
-node $SKILL_V/new-task.mjs    --slug <slug> --script /path/to/script.txt
-node $SKILL_V/task-render.mjs --slug <slug>            # -> downloads/fd-videos/<slug>/<slug>.mp4
+# 2. script -> finished video (MCP tool surface)
+#    generate_voice(text|file_path, slug)                 -> downloads/audio/<slug>/<slug>.mp3 + captions.json
+#    render_video(type=<id>, script=…, inputs={…}, slug=…) -> downloads/video/<slug>/<slug>.mp4
 
 # 3. multi-platform publish
 node $SKILL_P/publish.mjs --slug <slug> --title "…" --platforms douyin,xiaohongshu,bilibili --dry-run
@@ -143,7 +146,7 @@ VAAS/
 │   ├── cap/  officecli/  ppt-master/   # creation tools
 │   ├── ego-browser/                     # browser automation (isolated agent space, reuses Chrome login)
 │   ├── fd-browser-record/              # screen/page recording
-│   ├── fd-cover-image/                 # Remotion brand cover images
+│   ├── fd-cover-image/                 # brand cover images (hosted path = chromium)
 │   ├── fd-coding-{bore,cloudflare,wifi}-tunnel/   # tunnels / LAN sharing
 │   ├── fd-vaas-brainstorm/              # voiceover + article brainstorm
 │   ├── fd-vaas-video-creator/          # script -> voiceover video (.mp4 + .srt); built-in TTS/Seedream/Seedance
@@ -155,14 +158,14 @@ VAAS/
 │   │   └── scripts/{publish.mjs, note_adapter.py, platforms/<platform>.py}
 │   ├── _shared/publish/               # cross-skill shared: platform-registry.json (routing+verification status truth source), browser_utils.py, publish-common.mjs
 │   ├── fd-vaas-dashboard/  fd-vaas-dashboard-sharing/   # content dashboard + sharing
-│   └── remotion-*/                     # 7 Remotion authoring skills (best-practices, captions, create,
+│   └── remotion-*/                     # 7 legacy Remotion authoring skills (VAAS chain no longer uses them;
 │                                       #   interactivity, markup, render, saas)
 ├── .claude/skills/                     # symlinks to a subset of .agents/skills/ (for /<name> invocation)
 ├── scripts/                            # multimodal media bridge
 │   ├── litellm-bridge.py               #   unified multi-provider entry (TTS / image / video)
 │   ├── _volcengine_{tts,image,video}.py#   Volcengine Ark direct implementation
 │   ├── requirements.txt / pyproject.toml
-├── remotion-app/                       # Remotion video project (React -> video)     [gitignored]
+├── render-plane/                       # standalone render plane (HyperFrames composition -> MP4)
 ├── downloads/fd-videos/<slug>/         # fd-vaas-video-creator outputs              [gitignored]
 ├── downloads/fd-docs/<slug>/          # fd-vaas-publish-docs outputs                 [gitignored]
 ├── .env / .env.example                 # platform prefs + multimodal provider config
@@ -170,13 +173,13 @@ VAAS/
 └── AGENTS.md                           # engineering guidance for Claude Code
 ```
 
-> **The VAAS root is a git repository** (remote: `github.com/FindDataTechnology/fd-vaas-skills`). `remotion-app/`, `downloads/`, `demands/`, `demand.md`, `.env` are gitignored. `social-auto-upload` upstream vendored into `fd-vaas-publish-videos/scripts/upstream/` (not standalone root directory); use `.agents/skills/fd-vaas-publish-videos/scripts/sync-upstream.sh` to sync upstream updates (keep edits in the thin adapter layer — hand edits inside the vendor tree are wiped by the next `rsync --delete`). Hosted image single source: canonical `deploy/mcp-server.Dockerfile`; root `./Dockerfile` is generated from it (`bash scripts/gen-root-dockerfile.sh`).
+> **The VAAS root is a git repository** (remote: `github.com/FindDataTechnology/fd-vaas-skills`). `downloads/`, `demands/`, `demand.md`, `.env` are gitignored. `social-auto-upload` upstream vendored into `fd-vaas-publish-videos/scripts/upstream/` (not standalone root directory); use `.agents/skills/fd-vaas-publish-videos/scripts/sync-upstream.sh` to sync upstream updates (keep edits in the thin adapter layer — hand edits inside the vendor tree are wiped by the next `rsync --delete`). Hosted image single source: canonical `deploy/mcp-server.Dockerfile`; root `./Dockerfile` is generated from it (`bash scripts/gen-root-dockerfile.sh`).
 
 ---
 
 ## Prerequisites
 
-- **Node.js 18+** (with Git) - Remotion projects and all `fd-vaas-*` skills.
+- **Node.js 18+** (with Git) - the `fd-vaas-*` skills, publish/install scripts and `scripts/doctor.mjs`.
 - **Python 3.10–3.12** (`<3.13`) and [`uv`](https://docs.astral.sh/uv/) - **required ALL platforms**: video distribution unified py runtime (patchright), LiteLLM bridge in root `scripts/` also uses it.
 - **patchright** (stealth Playwright, ALL-platform distribution runtime) - `uv pip install patchright` + `patchright install chromium`; login state via cookie files, unified QR scan via `/fd-vaas-login`.
 - **ffmpeg/ffprobe** - duration/frame validation for `fd-vaas-video-creator`.
@@ -228,15 +231,12 @@ officecli --version
 
 `ppt-master` is an in-repo workflow (not an external binary), but VAAS ships only a **thin shell** — fetch the upstream before first using `/ppt-master`: `bash scripts/fetch-ppt-master.sh` (~98 MB, lands in the gitignored `.agents/skills/ppt-master/upstream/`). If a route uses its image-generation step, install its Python deps from `upstream/requirements.txt`.
 
-### 3. Remotion video project
+### 3. Render plane (only when you self-host)
 
-```bash
-cd remotion-app
-npm install
-npm run dev        # Remotion Studio preview  ->  http://localhost:3001
-                   # (port 3000 taken; Studio falls back to 3001)
-npx remotion render      # render the video to a file
-```
+If you only publish locally, no render dependencies are needed — generation is served by the
+hosted instance. To run your own, see `deploy/README.md` → "Render Plane": the image is published
+through the standard channel (`law-ai-official/vaas-mcp-images`, `target=vaas-render-plane`) and
+runs on a no-egress bridge with `/healthz` `doctor.checks` all green.
 
 > `fd-vaas-video-creator` needs `@remotion/captions` and a `VoiceoverVideo` composition - one-time setup in `.agents/skills/fd-vaas-video-creator/references/setup.md`.
 
@@ -249,7 +249,7 @@ Skills are **checked into this repo** (source in `.agents/skills/`; `.claude/ski
 - `/ppt-master` - turn a source doc (PDF/DOCX/URL/Markdown) into SVG slides and export `.pptx`.
 - `/ego-browser` - browser automation (open pages, fill forms, click, scrape, log in).
 - `/fd-browser-record` - open a page + record/screenshot.
-- `/fd-cover-image` - generate brand cover images (horizontal/vertical) via Remotion.
+- `/fd-cover-image` - generate brand cover images (horizontal/vertical); the hosted path renders via chromium single-frame.
 - `/fd-vaas-brainstorm` - voiceover + article topic matrix, script outline / article draft (Markdown + plain-text dual versions).
 - `/fd-vaas-video-creator` - script -> voiceover video (`.mp4` + `.srt`), or screen-recording video.
 - `/fd-vaas-publish-videos` - one video -> multi-platform (6 video platforms).
@@ -271,7 +271,7 @@ Skills are **checked into this repo** (source in `.agents/skills/`; `.claude/ski
 | `cap` | screen recording / screenshot -> `.mp4`/`.gif` + share link | external CLI | `/cap` · `~/.local/bin/cap` |
 | `ego-browser` | browser automation (isolated agent space, reuses Chrome login) | repo skill | `ego-browser` CLI |
 | `fd-browser-record` | open page + record/screenshot (ego-browser + cap) | repo skill | `/fd-browser-record` |
-| `fd-cover-image` | Remotion brand cover images (horizontal/vertical) | repo skill | `/fd-cover-image` |
+| `fd-cover-image` | brand cover images (horizontal/vertical); hosted path = chromium single-frame | repo skill | `/fd-cover-image` |
 | `fd-coding-bore-tunnel` | bore.pub tunnel | repo skill | `/bore-tunnel` |
 | `fd-coding-cloudflare-tunnel` | Cloudflare Tunnel (HTTPS) | repo skill | `/cf-tunnel` |
 | `fd-coding-wifi-tunnel` | share a local service over LAN/WiFi | repo skill | `/wifi-tunnel` |
@@ -342,8 +342,8 @@ SKILL_V=$VAAS/.agents/skills/fd-vaas-video-creator/scripts
 SKILL_P=$VAAS/.agents/skills/fd-vaas-publish-videos/scripts
 
 # 1. script -> voiceover video
-node $SKILL_V/new-task.mjs    --slug demo --script ./script.txt
-node $SKILL_V/task-render.mjs --slug demo          # -> downloads/fd-videos/demo/demo.mp4
+#    generate_voice(text=…, slug="demo")                             -> downloads/audio/demo/demo.mp3 + captions.json
+#    render_video(type=…, script=…, inputs={…}, slug="demo")          -> downloads/video/demo/demo.mp4
 
 # 2. multi-platform publish (preview first, drop --dry-run after confirming)
 node $SKILL_P/publish.mjs --slug demo --title "Title" \
@@ -471,6 +471,6 @@ pip install -r scripts/requirements.txt   # only python-dotenv remains; all thre
 - **patchright consistent across ALL platforms**: video distribution no longer dispatches by OS, macOS also needs patchright installed. ego-browser has only two uses: screen recording + article own-platforms.
 - **Standalone `voice/image/video-generator` skills no longer exist** - generators merged into `fd-vaas-video-creator/scripts/generators/`. Multi-provider switching still provided by root `scripts/litellm-bridge.py`.
 - **PPTX slides cannot be uploaded as video directly**. `cap` (screen recording), `fd-vaas-video-creator`, or `ppt-master`'s export/render step is the bridge from deck to publishable video.
-- **Skipping `fix-tts-timings` in `fd-vaas-video-creator` causes subtitle desync** - seed-tts-2.0 returns fake `endMs` for Latin tokens (English names, URLs). Pipeline runs this automatically; manual paths must run it explicitly.
+- **Caption timing comes from the TTS egress layer** - volcengine direct returns official word-level timestamps (which can be fake for Latin tokens), the ciyuan lane synthesizes segment-aligned captions; both land `captions.json` with an auditable `captions_source`. `fix-tts-timings` was retired with the local Remotion chain (2026-11-09).
 - **Platform verification status see matrix, don't rely on memory**: bilibili unverified on real session, xueqiu/tonghuashun entries broken. Platforms marked ❌/⚠️ use `references/probe.md`'s `snapshotText` flow to re-verify selectors before first publish.
 - **Always get user confirmation before publishing** (especially articles - it can't be undone).
