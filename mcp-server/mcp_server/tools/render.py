@@ -44,7 +44,8 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from ..db import (generate_id, insert_content, insert_asset, record_usage,
+from ..db import (generate_id, insert_content, insert_asset,
+                  insert_asset_idempotent, record_usage,
                   scoped_asset_slug, get_asset, get_asset_by_slug, delete_asset)
 from ..utils import (VAAS_ROOT, ensure_directory, ensure_directory_rel,
                      get_relative_path)
@@ -470,10 +471,10 @@ def compose_storyboard(
                            "attribution": bgm.get("attribution")}
     if extra_metadata:
         metadata.update(extra_metadata)
-    insert_content(
-        id=content_id, type="video", slug=scoped, file_path=rel_path,
-        metadata=metadata,
-        status="rendered", owner=owner,
+    # 并发同计划键：败者唯一约束 → 采纳先写入的行（不冒 500）
+    content_id, _created = insert_asset_idempotent(
+        type="video", slug=scoped, file_path=rel_path,
+        metadata=metadata, stage="rendered", owner=owner,
     )
     record_usage(
         owner=owner, tool="render_video", provider="render-plane",
@@ -794,9 +795,9 @@ def _render_typed_video(type: str, script: str, inputs: Optional[dict],
     probed_s = _ffprobe_seconds(out_path)
     duration_ms = int(probed_s * 1000) if probed_s else None
     rel_path = get_relative_path("video", target_slug, out_path.name)
-    content_id = generate_id()
-    insert_content(
-        id=content_id, type="video", slug=scoped_asset_slug(target_slug, owner),
+    # 并发同计划键：败者唯一约束 → 采纳先写入的行（不冒 500）
+    content_id, _created = insert_asset_idempotent(
+        type="video", slug=scoped_asset_slug(target_slug, owner),
         file_path=rel_path,
         metadata={**{"kind": "typed_video", "type": type, "engine": engine,
                      "generator": engine, "duration_ms": duration_ms,
@@ -809,7 +810,7 @@ def _render_typed_video(type: str, script: str, inputs: Optional[dict],
                      if bgm_spec is not None else {}),
                   "typed": {**meta,
                             "generated_images": generated_images or None}},
-        status="rendered", owner=owner)
+        stage="rendered", owner=owner)
     record_usage(
         owner=owner, tool="render_video", provider="render-plane", model=engine,
         units=round(meta.get("scene_seconds") or 0.0, 3),

@@ -92,6 +92,34 @@ def insert_asset(
     return asset_id
 
 
+def insert_asset_idempotent(
+    type: str,
+    slug: str,
+    file_path: Optional[str] = None,
+    metadata: Optional[dict] = None,
+    stage: str = "rendered",
+    owner: str = SERVICE_OWNER,
+    **_ignored,
+) -> tuple[str, bool]:
+    """Insert an asset, treating a slug-unique collision as "already written".
+
+    Concurrent identical requests (same plan key / same caller slug) both pass
+    the replay lookup before either commits; the loser used to surface
+    `UNIQUE constraint failed: assets.slug` as a 500 (2026-11-09 并发实测).
+    Here the loser adopts the winner's row instead. Returns (asset_id, created).
+    """
+    try:
+        return insert_asset(type=type, slug=slug, file_path=file_path,
+                            metadata=metadata, stage=stage, owner=owner), True
+    except Exception as exc:  # sqlite3.IntegrityError without importing sqlite3 here
+        if "UNIQUE" not in str(exc).upper():
+            raise
+        row = get_asset_by_slug(slug, owner=owner)
+        if row is None:
+            raise
+        return row["id"], False
+
+
 # Backward-compat alias: generators/skills call insert_content(..., status=...)
 def insert_content(
     type: str,

@@ -536,3 +536,32 @@ class TestTemplatesFailOpen:
         monkeypatch.setattr(tmod, "VIDEO_TYPES_DIR", tmp_path / "no-such-dir", raising=False)
         with pytest.raises((RuntimeError, ValueError, FileNotFoundError)):
             tmod.templates_list(domain="video")
+
+
+class TestConcurrentInsertRace:
+    """并发同计划键：两边都过 replay 检查后都 INSERT，败者曾冒
+    `UNIQUE constraint failed: assets.slug`（2026-11-09 迁移后并发实测）。
+    insert_asset_idempotent 必须把唯一冲突折成「采纳先写入的行」。"""
+
+    def test_second_insert_adopts_existing_row(self, isolated_db):
+        from mcp_server.db import insert_asset_idempotent, get_asset_by_slug
+
+        first_id, created1 = insert_asset_idempotent(
+            type="audio", slug="svc--race", file_path="audio/race/a.mp3",
+            metadata={"k": 1}, stage="rendered", owner="svc")
+        second_id, created2 = insert_asset_idempotent(
+            type="audio", slug="svc--race", file_path="audio/race/a.mp3",
+            metadata={"k": 2}, stage="rendered", owner="svc")
+
+        assert created1 is True and created2 is False
+        assert second_id == first_id
+        row = get_asset_by_slug("svc--race", owner="svc")
+        assert row and row["id"] == first_id
+        assert (row.get("metadata") or {}).get("k") == 1  # 先写入者不被覆盖
+
+    def test_non_unique_errors_still_raise(self, isolated_db):
+        from mcp_server.db import insert_asset_idempotent
+        import pytest
+        with pytest.raises(Exception):
+            # 缺必填 type/slug 触发的是 sqlite 的 NOT NULL/约束，不该被吞成 replay
+            insert_asset_idempotent(type=None, slug=None)

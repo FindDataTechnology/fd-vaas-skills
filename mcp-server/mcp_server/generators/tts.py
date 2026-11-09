@@ -18,7 +18,8 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from ..db import insert_content, generate_id, get_asset_by_slug, delete_asset, scoped_asset_slug
+from ..db import (insert_content, insert_asset_idempotent, generate_id,
+                  get_asset_by_slug, delete_asset, scoped_asset_slug)
 from ..hosting import download_url, is_hosted
 from ..utils import generate_slug, ensure_directory, get_relative_path, VAAS_ROOT, DOWNLOADS_DIR
 from .runtime import finish, prepare, provider_for, run_bridge
@@ -304,13 +305,14 @@ def synthesize(
     }
 
     scoped = scoped_asset_slug(slug, ctx["owner"])
-    insert_content(
-        id=content_id,
+    # 并发同内容：两边都过 replay 检查后都 INSERT，败者唯一约束 → 采纳先写入的行
+    # （2026-11-09 实测：同 script+inputs 两个并发 typed 渲染撞 assets.slug）
+    content_id, _created = insert_asset_idempotent(
         type="audio",
         slug=scoped,
         file_path=get_relative_path("audio", slug, f"{slug}.{format}"),
         metadata=metadata,
-        status="rendered",
+        stage="rendered",
         owner=ctx["owner"],
     )
 
