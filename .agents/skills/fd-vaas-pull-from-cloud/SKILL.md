@@ -35,12 +35,16 @@ python3 scripts/pull_from_cloud.py --base "$VAAS_BASE" \
 | 资产类型 | 落盘位置 | 产物文件 |
 |---|---|---|
 | article/copy | `downloads/fd-docs/<slug>/` | `article.md` + `meta.json`（title/tags/summary 骨架） |
-| video | `downloads/fd-videos/<slug>/` | `<slug>.mp4` |
+| video | `downloads/fd-videos/<slug>/` | `<slug>.mp4` + `task.json`（render.output / distribution 骨架） |
 | image/cover | `downloads/fd-images/<slug>/` | `<slug>.<ext>` |
 | audio | `downloads/fd-audio/<slug>/` | `<slug>.mp3` |
 
 图文类落成 `article.md + meta.json` 后即可直接 `node publish.mjs --slug <name> --plan`
 走 fd-vaas-publish-docs 的标准流程（dry-run 预览 → 确认 → 发布）。
+
+视频类落成 `<slug>.mp4 + task.json` 后即可直接
+`node .agents/skills/fd-vaas-publish-videos/scripts/publish.mjs --slug <name> --platforms … --dry-run`
+走 fd-vaas-publish-videos 的标准流程（无 task.json 的裸 mp4 也能发，但封面与分发记录无处安放）。
 
 ## 安全边界（读本技能前请知悉）
 

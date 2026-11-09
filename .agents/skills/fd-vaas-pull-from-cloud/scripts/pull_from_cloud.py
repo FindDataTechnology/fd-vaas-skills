@@ -140,6 +140,28 @@ def _write_article_task(dest: Path, slug: str, asset: dict) -> None:
     (dest / "meta.json").write_text(json.dumps(m, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
+def _write_video_task(dest: Path, slug: str, asset: dict) -> None:
+    """Shape video assets into the fd-vaas-publish-videos task contract.
+
+    图文侧落 `article.md + meta.json`；视频侧对称落 `<slug>.mp4 + task.json`。
+    没有它，publish.mjs 只能靠「裸 mp4」兜底（封面与 distribution 记录无处安放）。
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    meta = asset.get("metadata") or {}
+    title = asset.get("title") or slug
+    m = {
+        "slug": slug,
+        "title": title,
+        "description": meta.get("summary") or "",
+        "render": {"output": f"{slug}.mp4"},
+        "tts": {"voice": meta.get("voice"), "duration_ms": meta.get("duration_ms")},
+        "distribution": [],
+        "pulled_from_cloud": {"asset_id": asset.get("id"), "slug": asset.get("slug"),
+                              "pulled_at": datetime.now(timezone.utc).isoformat()},
+    }
+    (dest / "task.json").write_text(json.dumps(m, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
 def _download_signed(url: str, dest_dir: Path, slug_hint: str) -> Path:
     code, blob = _http(url, timeout=120)
     if code != 200:
@@ -181,7 +203,11 @@ def _fetch_via_gateway(base: str, key: str, asset_id: str, dest_root: Path) -> P
     if not url:
         raise SystemExit("实例未返回 download_url（可能不是可下载类型）。")
     out = _download_signed(url, dest, slug)
-    print(f"落盘：{out}")
+    if a_type == "video":
+        _write_video_task(dest, slug, asset)
+        print(f"落盘：{out}（+ task.json）→ 可直接 publish.mjs --slug {slug}")
+    else:
+        print(f"落盘：{out}")
     return out
 
 

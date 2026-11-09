@@ -22,6 +22,7 @@
  *   VAAS_GATE_DIR 可覆盖哨兵基目录（Windows 节点用）。
  *
  * 用法:
+ *   node publish.mjs --slug finddata-intro                  # 标题/描述从 task.json 读（pull-from-cloud 落盘即带）
  *   node publish.mjs --slug finddata-intro --title "..." --desc "..."
  *   node publish.mjs --slug finddata-intro --title "..." --desc "..." \
  *      --platforms douyin,xiaohongshu \
@@ -64,9 +65,9 @@ const coverOnly = hasArg("--cover-only");
 // W1.2:显式旁路参数,存在即生效,但回执必须标注 auto_publish(不做隐式/环境旁路)
 const autoPublish = hasArg("--auto-publish");
 
-if (!slug || !cliTitle) {
+if (!slug) {
   console.error(
-    "Usage: --slug <name> --title \"...\" [--desc \"...\"] [--note \"...\"] \\\n" +
+    "Usage: --slug <name> [--title \"...\"] [--desc \"...\"] [--note \"...\"] \\\n" +
     "        [--platforms douyin,xhs,...] [--tags a,b,c] [--schedule 'YYYY-MM-DD HH:MM']\n" +
     "        [--dry-run] [--no-cover] [--cover-only] [--confirm-file <path>] [--auto-publish]",
   );
@@ -109,6 +110,11 @@ const platforms = (cliPlatforms ?? env.PLATFORMS ?? "douyin")
   .split(",").map((s) => s.trim()).filter(Boolean);
 const globalTags = cliTags ?? env.TAGS ?? "";
 const schedule = cliSchedule ?? env.SCHEDULE ?? "";
+// 标题/描述可从清单回退（pull-from-cloud 落盘会写 task.json.title）——
+// 让「拉回 → 发布」不必再手敲一遍标题。
+const title = cliTitle ?? manifest.title ?? slug;
+const desc = cliDesc ?? manifest.description ?? "";
+
 const mp4 = path.join(TASK_DIR, manifest.render?.output ?? `${slug}.mp4`);
 
 if (!fs.existsSync(mp4)) {
@@ -215,8 +221,8 @@ function buildCommand(p) {
   // bilibili 仍用原 bilibili.py（上游走 biliup 二进制，不在适配层内）；
   // mjs 运行时：走 <platform>.mjs（ego-browser）
   const argv = usesAdapter(p)
-    ? [SAU_ADAPTER, "--platform", p, "--file", mp4, "--title", cliTitle]
-    : [newCliScript(p), "--file", mp4, "--title", cliTitle];
+    ? [SAU_ADAPTER, "--platform", p, "--file", mp4, "--title", title]
+    : [newCliScript(p), "--file", mp4, "--title", title];
   if (body) argv.push("--desc", body);
   if (cfg.tags) argv.push("--tags", cfg.tags);
   
@@ -272,7 +278,7 @@ const hasCovers = !!manifest.render?.covers && Object.keys(manifest.render.cover
 if (coverOnly) {
   // 只生成封面,不发布(渲染后预览确认用)
   console.log("🎨 仅生成封面,不发布 …\n");
-  const r = spawnSync("node", [GENERATE_COVERS, "--slug", slug, "--title", cliTitle], {
+  const r = spawnSync("node", [GENERATE_COVERS, "--slug", slug, "--title", title], {
     cwd: VAAS, stdio: "inherit",
   });
   process.exit(r.status === 0 ? 0 : 1);
@@ -280,7 +286,7 @@ if (coverOnly) {
 
 if (!hasCovers && !noCover) {
   console.log("🖼️  未检测到封面(task.json 无 render.covers),自动生成公司风格统一封面 …\n");
-  const r = spawnSync("node", [GENERATE_COVERS, "--slug", slug, "--title", cliTitle], {
+  const r = spawnSync("node", [GENERATE_COVERS, "--slug", slug, "--title", title], {
     cwd: VAAS, stdio: "inherit",
   });
   if (r.status !== 0) {
@@ -348,7 +354,7 @@ console.log(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🚀 开始多平台发布流程
 📹 视频: ${mp4}
-📝 标题: ${cliTitle}
+📝 标题: ${title}
 🎯 平台: ${platforms.join(', ')}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);
@@ -417,7 +423,7 @@ if (!dryRun) {
       account: r.account,
       uploadedAt: new Date().toISOString(),
       scheduled: schedule || null,
-      title: cliTitle,
+      title: title,
       // W1.2:显式旁路必须在台账标注(仅旁路时存在该字段;哨兵确认=人工已确认,不加标记)
       ...(r.auto_publish ? { auto_publish: true } : {}),
     });
@@ -431,7 +437,7 @@ if (!dryRun) {
         slug,
         r.platform,
         r.account,
-        cliTitle,
+        title,
         schedule || ''
       ], { stdio: 'inherit' });
     }
