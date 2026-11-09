@@ -4,7 +4,7 @@ templates_* namespace: presentation template discovery (video / cover / doc).
 三个域各自的模板真相源:
   video — .agents/skills/fd-vaas-video-creator/types/<id>/type.json
           （render_video(type=...) 的类型清单与输入契约）
-  cover — CoverBrand（remotion 静帧，render_still(kind="cover") 的版式）
+  cover — CoverBrand（chromium 单帧，render_still(kind="cover") 的版式）
   doc   — mcp_server/templates/doc/<id>/（template.json + css，
           render_document 的版式；本波内置 default 占位版式）
 """
@@ -20,7 +20,7 @@ DOC_TEMPLATES_DIR = Path(__file__).parent.parent / "templates" / "doc"
 
 TEMPLATES_DOMAINS = ("video", "cover", "doc")
 
-# cover 域：CoverBrand 静帧版式（skills/cover.py 的 remotion 静帧路径）
+# cover 域：CoverBrand 静帧版式（skills/cover.py 的 chromium 单帧路径，W6.5 起）
 COVER_TEMPLATES = [
     {
         "id": "brand",
@@ -143,7 +143,7 @@ def templates_get(domain: str, id: str) -> dict:
             "domain": "cover",
             **entry,
             "contract": "render_still(kind='cover', spec={title, subtitle?, tags?, "
-                        "orientation?, size?})；底层为 remotion 静帧（generate-cover.mjs）。",
+                        "orientation?, size?})；底层为 chromium 单帧（skills/cover.py，品牌 wrapper 同 still_graphic）。",
         }
     # doc
     entry = next((t for t in _load_doc_templates() if t["id"] == id), None)

@@ -4,7 +4,7 @@ render_* namespace: the presentation render plane.
 Three tools share one asset ledger convention (insert_content + download_url):
   render_video     — storyboard 模式（确定性逐帧出片，原 video_compose 实现）
                      或 type 模式（typed_scenes builder → 同一 storyboard 实现路径）
-  render_still     — cover（Remotion 静帧）/ chart / graphic（占位）
+  render_still     — cover（chromium 单帧，品牌 wrapper 同 still_graphic）/ chart / graphic
   render_document  — pdf / longimage（占位，chromium print 内核后续波次接入）
 
 Storyboard renderer (ported from attic compose_video.py, vaas-media-pipeline W3):
@@ -922,8 +922,9 @@ def render_video(
 def render_still(kind: str, spec: dict, slug: Optional[str] = None) -> dict:
     """Render one still image; kind = cover | chart | graphic.
 
-    cover  — CoverBrand 静帧（走原 generate_cover 的 remotion 静帧路径，
-             spec: {title, subtitle?, tags?, orientation?, size?, template?}）
+    cover  — 品牌封面静帧（2026-11-09 起走 chromium 单帧，见 skills/cover.py；
+             原 Remotion 路径已随 W6.5 退役）
+             spec: {title, subtitle?, tags?, orientation?, size?, template?}
     chart  — 图表静帧（tools/still_chart.py::render_chart，本波占位）
     graphic— 通用图形静帧（tools/still_graphic.py::render_graphic，本波占位）
     """

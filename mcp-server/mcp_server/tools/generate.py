@@ -101,7 +101,7 @@ def generate_cover(
     slug: Optional[str] = None,
     name: str = "brand",
 ) -> dict:
-    """Generate a brand-consistent cover image via Remotion (registry method: brand).
+    """Generate a brand-consistent cover image via chromium single-frame (registry method: brand).
 
     内部入口：由 render_still(kind="cover") 调用，不再注册为独立工具。
     """
