@@ -2,7 +2,7 @@
 /**
  * gen-echarts-theme.mjs — VAAS 品牌主题单一来源生成器。
  *
- * 解析 remotion-app/src/theme.ts 的 COLORS / FONT_SANS / FONT_MONO 导出，
+ * 解析 brand/theme.ts 的 COLORS / FONT_SANS / FONT_MONO 导出，
  * 生成 mcp-server/mcp_server/templates/echarts/echarts-theme.json：
  *   palette — echarts 系列色板（registerTheme 后未显式指定颜色的槽位按序取色）
  *   brand   — still_graphic 品牌 CSS wrapper 的变量（bg/text/muted/字体栈…）
@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const THEME_TS = join(REPO_ROOT, "remotion-app", "src", "theme.ts");
+const THEME_TS = join(REPO_ROOT, "brand", "theme.ts");
 const OUT_JSON = join(REPO_ROOT, "mcp-server", "mcp_server", "templates",
   "echarts", "echarts-theme.json");
 const ECHARTS_VERSION = "5.5.1";
@@ -154,7 +154,7 @@ function buildThemeDoc({ colors, fontSans, fontMono }) {
 
   return {
     meta: {
-      source: "remotion-app/src/theme.ts",
+      source: "brand/theme.ts",
       echarts: ECHARTS_VERSION,
       generator: "scripts/gen-echarts-theme.mjs",
       note: "generated — do not edit by hand; re-run the generator after theme.ts changes",

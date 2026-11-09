@@ -1,6 +1,6 @@
 {
   "meta": {
-    "source": "remotion-app/src/theme.ts",
+    "source": "brand/theme.ts",
     "echarts": "5.5.1",
     "generator": "scripts/gen-echarts-theme.mjs",
     "note": "generated — do not edit by hand; re-run the generator after theme.ts changes"

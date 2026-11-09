@@ -96,7 +96,8 @@ class TestRegistry:
     def test_list_generators(self):
         video = list_generators("video")["items"]
         assert any(g["name"] == "seedance" for g in video)
-        assert any(g["name"] == "voiceover" for g in video)
+        # W6.5：voiceover（Remotion 管线驱动）已退役——视频由渲染面承担
+        assert not any(g["name"] == "voiceover" for g in video)
 
     def test_wave1_chart_doc_registered(self):
         chart = list_generators("chart")["items"]

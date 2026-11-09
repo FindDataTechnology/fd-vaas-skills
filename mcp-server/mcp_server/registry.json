@@ -1,24 +1,68 @@
 {
   "voice": [
-    { "name": "tts", "provider": "volcengine", "model": "${TTS_MODEL}", "driver": "generate_voice" },
-    { "name": "tts-ciyuan", "provider": "ciyuan", "model": "${TTS_MODEL}", "driver": "generate_voice" }
+    {
+      "name": "tts",
+      "provider": "volcengine",
+      "model": "${TTS_MODEL}",
+      "driver": "generate_voice"
+    },
+    {
+      "name": "tts-ciyuan",
+      "provider": "ciyuan",
+      "model": "${TTS_MODEL}",
+      "driver": "generate_voice"
+    }
   ],
   "image": [
-    { "name": "seedream", "provider": "volcengine", "model": "${IMAGE_MODEL}", "driver": "generate_image" },
-    { "name": "seedream-ciyuan", "provider": "ciyuan", "model": "${IMAGE_MODEL}", "driver": "generate_image" }
+    {
+      "name": "seedream",
+      "provider": "volcengine",
+      "model": "${IMAGE_MODEL}",
+      "driver": "generate_image"
+    },
+    {
+      "name": "seedream-ciyuan",
+      "provider": "ciyuan",
+      "model": "${IMAGE_MODEL}",
+      "driver": "generate_image"
+    }
   ],
   "video": [
-    { "name": "seedance", "provider": "volcengine", "model": "${VIDEO_MODEL}", "driver": "generate_video" },
-    { "name": "seedance-ciyuan", "provider": "ciyuan", "model": "${VIDEO_MODEL}", "driver": "generate_video" },
-    { "name": "voiceover", "provider": "local", "model": "remotion", "driver": "create_voiceover" }
+    {
+      "name": "seedance",
+      "provider": "volcengine",
+      "model": "${VIDEO_MODEL}",
+      "driver": "generate_video"
+    },
+    {
+      "name": "seedance-ciyuan",
+      "provider": "ciyuan",
+      "model": "${VIDEO_MODEL}",
+      "driver": "generate_video"
+    }
   ],
   "cover": [
-    { "name": "brand", "provider": "local", "model": "remotion", "driver": "create_cover" }
+    {
+      "name": "brand",
+      "provider": "local",
+      "model": "remotion",
+      "driver": "create_cover"
+    }
   ],
   "chart": [
-    { "name": "echarts", "provider": "local", "model": "chromium", "driver": "render_chart" }
+    {
+      "name": "echarts",
+      "provider": "local",
+      "model": "chromium",
+      "driver": "render_chart"
+    }
   ],
   "doc": [
-    { "name": "chromium", "provider": "local", "model": "print", "driver": "render_document" }
+    {
+      "name": "chromium",
+      "provider": "local",
+      "model": "print",
+      "driver": "render_document"
+    }
   ]
 }

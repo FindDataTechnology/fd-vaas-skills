@@ -11,7 +11,7 @@ registerTheme 品牌主题）→ playwright chromium 截图 → 统一 assets �
     format: "png"(默认) | "svg",
   }
   品牌注入：echarts-theme.json（由 scripts/gen-echarts-theme.mjs 从
-  remotion-app/src/theme.ts 生成）经 echarts.registerTheme + init(theme) 接入——
+  brand/theme.ts 生成）经 echarts.registerTheme + init(theme) 接入——
   option 未显式指定颜色的槽位取主题色板，调用方 option 显式色优先（echarts
   的 option-over-theme 合并语义）。caller 未写 animation 时强制 False，
   静帧确定性（显式传 animation 的调用方意图保留）。

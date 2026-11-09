@@ -51,7 +51,7 @@ def test_echarts_vendor_present_and_version_matches_pin():
 
 def test_theme_json_structure():
     doc = json.loads(THEME_JSON.read_text(encoding="utf-8"))
-    assert doc["meta"]["source"] == "remotion-app/src/theme.ts"
+    assert doc["meta"]["source"] == "brand/theme.ts"
     assert doc["meta"]["echarts"].startswith("5.")
     assert doc["palette"] and all(c.startswith("#") for c in doc["palette"])
     brand = doc["brand"]

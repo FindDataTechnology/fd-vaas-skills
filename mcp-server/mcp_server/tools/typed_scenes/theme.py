@@ -2,7 +2,7 @@
 Typed-scene 品牌 CSS wrapper（add-typed-video-html-renderer W1.3）。
 
 builder 场景 HTML 的品牌底座单一来源：mcp_server/templates/echarts/
-echarts-theme.json（scripts/gen-echarts-theme.mjs 从 remotion-app/src/theme.ts
+echarts-theme.json（scripts/gen-echarts-theme.mjs 从 brand/theme.ts
 生成——palette + brand 变量），经 :root 自定义属性注入（--vaas-*，
 kebab-case），builder 的卡片 CSS 直接消费。与 still_graphic 的 wrapper 同源
 同形；取数边界仍走 still_chart._load_theme_doc（theme.ts 改动重跑生成器后

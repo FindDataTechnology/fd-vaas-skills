@@ -1,30 +1,65 @@
-"""
-Cover image generator using Remotion.
+"""封面图生成（chromium 静态出口，W6.5 起不再依赖 Remotion）。
 
-Wraps generate-cover.mjs via subprocess.
+品牌封面 = 品牌渐变底 + 强调色条 + 标题/副标题/标签，用 chromium 单帧截图
+（与 still_graphic 同底座、同字体栈、同品牌令牌）。返回结构与账本口径
+（type=image / tool=generate_cover）保持与旧实现一致。
 """
 
-import json
 import logging
-import os
-import subprocess
-from pathlib import Path
 from typing import Optional
 
 from ..db import insert_content, generate_id, record_usage, scoped_asset_slug
 from ..hosting import current_owner
-from ..utils import generate_slug, ensure_directory_rel, get_relative_path, VAAS_ROOT
+from ..utils import ensure_directory_rel, get_relative_path
 
 log = logging.getLogger("vaas.cover")
 
-# Finite wall clock for the node render subprocess
-# (fix-hosted-generation-correctness). Remotion cold starts are slow —
-# generous but bounded.
-RENDER_TIMEOUT_S = int(os.getenv("VAAS_COVER_TIMEOUT_S", "300"))
+_ORIENT_SIZES = {
+    "horizontal": (1920, 1080),
+    "vertical": (1080, 1440),
+    "square": (1080, 1080),
+}
 
-# Path to Remotion project and cover generation script
-REMOTION_APP = VAAS_ROOT / "remotion-app"
-COVER_SCRIPT = VAAS_ROOT / ".agents" / "skills" / "fd-cover-image" / "scripts" / "generate-cover.mjs"
+_COVER_CSS = """
+.cover{position:absolute;inset:0;display:flex;flex-direction:column;
+  justify-content:flex-end;padding:8% 7%;
+  background:linear-gradient(155deg,var(--vaas-bg) 0%,var(--vaas-bg1) 52%,
+             var(--vaas-surface) 100%)}
+.accent{position:absolute;left:7%;top:9%;width:12%;height:10px;
+  border-radius:5px;background:var(--vaas-accent)}
+.kicker{font-size:28px;letter-spacing:10px;color:var(--vaas-accent);
+  font-weight:700;margin-bottom:26px}
+.title{font-size:74px;line-height:1.22;font-weight:800;color:var(--vaas-text);
+  letter-spacing:1px;word-break:break-word}
+.sub{margin-top:26px;font-size:34px;line-height:1.5;color:var(--vaas-muted)}
+.tags{margin-top:30px;display:flex;gap:16px;flex-wrap:wrap}
+.tag{font-size:24px;padding:8px 18px;border-radius:999px;
+  border:1px solid var(--vaas-border);color:var(--vaas-muted)}
+"""
+
+
+def _esc(text: str) -> str:
+    return (str(text).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def _cover_html(title: str, subtitle: Optional[str], tags: Optional[str],
+                w: int, h: int) -> str:
+    tag_html = ""
+    if tags:
+        items = [t.strip() for t in tags.replace("，", ",").split(",") if t.strip()]
+        tag_html = ('<div class="tags">'
+                    + "".join(f'<span class="tag">{_esc(t)}</span>' for t in items)
+                    + "</div>")
+    return (
+        f'<style>{_COVER_CSS}</style>'
+        '<div class="cover"><div class="accent"></div>'
+        '<div class="kicker">寻数科技</div>'
+        f'<div class="title">{_esc(title)}</div>'
+        + (f'<div class="sub">{_esc(subtitle)}</div>' if subtitle else "")
+        + tag_html
+        + "</div>"
+    )
 
 
 def create_cover(
@@ -34,134 +69,64 @@ def create_cover(
     orientation: str = "horizontal",
     size: Optional[str] = None,
     template: str = "brand",
-    slug: Optional[str] = None
+    slug: Optional[str] = None,
 ) -> dict:
+    """渲染品牌封面（chromium 单帧），落账并返回账本行。
+
+    orientation: horizontal / vertical / square；size: 自定义 "WxH"（覆盖 orientation）。
     """
-    Generate brand-consistent cover image using Remotion.
-
-    Args:
-        title: Main title (required)
-        subtitle: Optional subtitle
-        tags: Optional tags (comma-separated)
-        orientation: horizontal/vertical/square (default horizontal)
-        size: Custom size WxH (overrides orientation default)
-        template: Template name (brand/title-only/gradient, default brand)
-        slug: Custom slug (auto-generated if not provided)
-
-    Returns:
-        Dict with:
-            - id: Content UUID
-            - slug: Human-readable identifier
-            - file_path: Relative path from downloads/
-            - width: Image width in pixels
-            - height: Image height in pixels
-
-    Raises:
-        ValueError: If title not provided
-        RuntimeError: If cover generation fails
-    """
-    if not title:
-        raise ValueError("title is required")
-
-    # Generate slug if not provided
-    if not slug:
-        prefix = title[:20].lower().replace(" ", "-")
-        prefix = "".join(c for c in prefix if c.isalnum() or c == "-")
-        slug = generate_slug(prefix or "cover")
-
-    # Create output directory
-    output_dir = ensure_directory_rel("images", slug)
-
-    # Determine output filename based on orientation
-    if orientation == "vertical":
-        filename = f"{slug}-vertical.jpg"
-        default_size = "1080x1440"
-    elif orientation == "square":
-        filename = f"{slug}-square.jpg"
-        default_size = "1080x1080"
-    else:  # horizontal
-        filename = f"{slug}-horizontal.jpg"
-        default_size = "1920x1080"
-
-    output_path = output_dir / filename
-
-    # Build command
-    cmd = [
-        "node", str(COVER_SCRIPT),
-        "--title", title,
-        "--orientation", orientation,
-        "--output", str(output_path)
-    ]
-
-    if subtitle:
-        cmd.extend(["--subtitle", subtitle])
-
-    if tags:
-        cmd.extend(["--tags", tags])
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("cover title must be a non-empty string")
+    if template != "brand":
+        raise ValueError(f"unknown cover template: {template!r} (only 'brand')")
 
     if size:
-        cmd.extend(["--size", size])
+        try:
+            width, height = (int(v) for v in size.lower().split("x", 1))
+        except (ValueError, AttributeError):
+            raise ValueError(f"invalid cover size: {size!r} (expect WxH)")
     else:
-        cmd.extend(["--size", default_size])
+        if orientation not in _ORIENT_SIZES:
+            raise ValueError(
+                f"unknown orientation: {orientation!r} "
+                f"(one of {sorted(_ORIENT_SIZES)})")
+        width, height = _ORIENT_SIZES[orientation]
 
-    # Execute subprocess
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=str(REMOTION_APP),
-            timeout=RENDER_TIMEOUT_S,
-        )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(
-            f"timeout: cover render exceeded {RENDER_TIMEOUT_S}s wall clock "
-            f"(raise VAAS_COVER_TIMEOUT_S only after checking the cold start)"
-        )
-    except subprocess.CalledProcessError as e:
-        # Raw node stderr can carry /app layout paths — server log only.
-        log.warning("cover render failed: %s", str(e.stderr or "")[-2000:])
-        raise RuntimeError("render_error: cover generation failed (details in server log)") from e
+    # 复用 still_graphic 的品牌 wrapper + chromium 截图（同一渲染底座）
+    from ..tools.still_graphic import (_capture_graphic, _wrap_graphic_html)
+    from ..tools.typed_scenes.theme import load_theme
 
-    # Parse size to get width/height
-    size_str = size or default_size
-    try:
-        width, height = map(int, size_str.split("x"))
-    except (ValueError, AttributeError):
-        width, height = 1920, 1080
+    html = _wrap_graphic_html(
+        _cover_html(title, subtitle, tags, width, height),
+        load_theme(), (width, height))
 
-    # Insert into database
-    content_id = generate_id()
-    metadata = {
-        "title": title,
-        "subtitle": subtitle,
-        "tags": tags,
-        "orientation": orientation,
-        "template": template,
-        "width": width,
-        "height": height,
-    }
+    out_dir = ensure_directory_rel("images", slug or title[:40])
+    filename = f"{slug or 'cover'}.png"
+    out_path = out_dir / filename
+    _capture_graphic(html, (width, height), out_path)
 
     owner = current_owner()
-    scoped = scoped_asset_slug(slug, owner)
+    scoped = scoped_asset_slug(slug or f"cover-{title[:24]}", owner)
+    content_id = generate_id()
     insert_content(
-        id=content_id,
-        type="image",
-        slug=scoped,
-        file_path=get_relative_path("images", slug, filename),
-        metadata=metadata,
-        status="rendered",
-        owner=owner,
+        id=content_id, type="image", slug=scoped,
+        file_path=get_relative_path("images", slug or title[:40], filename),
+        metadata={"title": title, "subtitle": subtitle, "tags": tags,
+                  "orientation": orientation, "template": template,
+                  "width": width, "height": height,
+                  "generator": "chromium"},
+        status="rendered", owner=owner,
     )
-
-    record_usage(owner, "generate_cover", "remotion", None, 1, "image", "env",
+    record_usage(owner, "generate_cover", "chromium", None,
+                 file_size_bytes(out_path) or 1, "image", "local",
                  asset_id=content_id)
+    return {"id": content_id, "slug": scoped,
+            "file_path": get_relative_path("images", slug or title[:40], filename),
+            "width": width, "height": height, "format": "png"}
 
-    return {
-        "id": content_id,
-        "slug": scoped,
-        "file_path": get_relative_path("images", slug, filename),
-        "width": width,
-        "height": height
-    }
+
+def file_size_bytes(path) -> Optional[int]:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return None

@@ -16,7 +16,7 @@ from ..skills.query import get_asset as _skill_get_asset
 from ..utils import VAAS_ROOT
 
 COMMON_DIR = VAAS_ROOT / "downloads" / "common"
-PUBLIC_DIR = VAAS_ROOT / "remotion-app" / "public"
+PUBLIC_DIR = VAAS_ROOT / "assets" / "public"  # 品牌素材（remotion-app 退役后）
 
 ASSET_KINDS = ("common", "logo")  # assets_get(kind=...) 的资产树查询域
 
