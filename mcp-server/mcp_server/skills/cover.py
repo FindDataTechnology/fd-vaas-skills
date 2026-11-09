@@ -117,8 +117,12 @@ def create_cover(
                   "generator": "chromium"},
         status="rendered", owner=owner,
     )
+    # 计量口径对齐 still_graphic：1 张封面 = 1 render（2026-11-10 修——此前把
+    # 文件字节数当 units 记（≈86 万），unit_type 还错标为 "image"；现网台账里
+    # generate_cover units=861266 即该 bug 的产物）。当前价格表 cover 单价为 0.0，
+    # 未造成金额污染，但作用量口径必须正确。
     record_usage(owner, "generate_cover", "chromium", None,
-                 file_size_bytes(out_path) or 1, "image", "local",
+                 1, "render", "local",
                  asset_id=content_id)
     result = {"id": content_id, "slug": scoped,
               "file_path": get_relative_path("images", slug or title[:40], filename),
@@ -131,8 +135,3 @@ def create_cover(
     return result
 
 
-def file_size_bytes(path) -> Optional[int]:
-    try:
-        return path.stat().st_size
-    except OSError:
-        return None
