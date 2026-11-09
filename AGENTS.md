@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 VAAS - **Variable Asset Authoring & Syndication.** Take a content demand, generate a
 **variable-type resource** (deck, document, screen-recording video, AI image/video, or a
-Remotion-rendered voiceover video), then **publish it automatically to different social-media
+voiceover video rendered by the dedicated render plane), then **publish it automatically to different social-media
 accounts** - ideally producing a *different* variant per platform. It is an orchestration layer
 over two halves:
 
@@ -39,7 +39,7 @@ via its built-in uploaders under `scripts/platforms/` (thin adapter `sau_adapter
 ## Repository shape - read this first
 
 - The VAAS root **is a git repository** (remote: `github.com/FindDataTechnology/fd-vaas-skills`).
-- **Skills source of truth = `.agents/skills/`** (tracked in git, 21 skills). `.claude/skills/`
+- **Skills source of truth = `.agents/skills/`** (tracked in git, 25 skills + `_shared`). `.claude/skills/`
   holds **symlinks** to a subset of them so Claude Code can invoke them as `/<name>`. Skills not
   symlinked there are still usable by pointing Claude at their `.agents/skills/<name>/SKILL.md`.
   **When editing a skill, edit `.agents/skills/<name>/`** (the source of truth) — `.claude/skills/`
@@ -51,8 +51,7 @@ via its built-in uploaders under `scripts/platforms/` (thin adapter `sau_adapter
   Local overrides live in `conf.py` + `sau_adapter.py` — do **not** hand-edit
   `scripts/upstream/uploader|utils` (canonical; `--delete` rsync will clobber). Cookies/logs under
   `scripts/upstream/` are runtime state, gitignored, never committed.
-- **Gitignored**: `remotion-app/` **source is tracked** (only `node_modules/`, `out/`, and
-  per-task generated media under `public/` are ignored); also ignored: `downloads/`, `demands/`,
+- **Gitignored**: `downloads/`, `demands/`,
   `demand*.md`, `.env`, `.env.bak`, `vaas.db`, `data/`, `*.bak*`, `.mcp.json`, `.profiles/` (live
   logins — never commit), `tmp/`.
 - **`scripts/` (root)** holds the multi-provider media bridge: `litellm-bridge.py`,
@@ -73,18 +72,18 @@ via its built-in uploaders under `scripts/platforms/` (thin adapter `sau_adapter
 | `cap` | screen recording / screenshots -> `.mp4`/`.gif` + shareable link | external CLI | `/cap` · `~/.local/bin/cap` |
 | `ego-browser` | browser automation (isolated agent space, reuses Chrome login) | repo skill | `ego-browser` CLI · `.agents/skills/ego-browser/` |
 | `fd-browser-record` | drive a page in ego-browser **and** record it with cap | repo skill | `/fd-browser-record` |
-| `fd-cover-image` | brand cover images (横/竖) via Remotion, aligned to design system | repo skill | `/fd-cover-image` |
+| `fd-cover-image` | brand cover images (横/竖) — **hosted path = chromium single-frame** (`generate_cover`); the local `generate-cover.mjs` still shells to the retired Remotion app (see `docs/debt-ledger.md` DEBT-REMOTION-RESIDUE-01) | repo skill | `/fd-cover-image` |
 | `fd-coding-bore-tunnel` | expose a local port via bore.pub | repo skill | `/bore-tunnel` |
 | `fd-coding-cloudflare-tunnel` | expose a local port via Cloudflare Tunnel (HTTPS) | repo skill | `/cf-tunnel` |
 | `fd-coding-wifi-tunnel` | share a local service over LAN/WiFi | repo skill | `/wifi-tunnel` |
 | `fd-vaas-brainstorm` | 口播选题矩阵 + 脚本大纲 / 图文草稿（Markdown + 纯文本双版本）+ 差异化角度 | repo skill (prompt) | `/fd-vaas-brainstorm` |
-| `fd-vaas-video-creator` | 文案 -> 口播视频 `.mp4`+`.srt` (TTS+字幕+Remotion), **or** 录屏视频; **built-in TTS/Seedream/Seedance generators** | repo skill | `/fd-vaas-video-creator` |
+| `fd-vaas-video-creator` | **视频类型注册表**：`types/<id>/type.json` 声明 inputs/`renderer: hyperframes`；出片走 `render_video(type=...)`（独立渲染面）。本地 Remotion 管线（`new-task.mjs`/`task-render.mjs`）已于 2026-11-09 退役 | repo skill | `/fd-vaas-video-creator` |
 | `fd-vaas-publish-videos` | one video -> 10 video platforms (unified py runtime: vendored upstream + `bilibili.py`) | repo skill | `/fd-vaas-publish-videos` |
 | `fd-vaas-publish-docs` | one article -> 11 图文 platforms (upstream-note + own-logic; ego-browser or `--runtime patchright`) | repo skill | `/fd-vaas-publish-docs` |
 | `fd-vaas-dashboard` | content dashboard: lists generated articles + videos | repo skill | `/dashboard` |
 | `fd-vaas-dashboard-sharing` | share the dashboard (tunnel) | repo skill | `/share-dashboard` |
 | `fd-vaas-login` | QR scan-login portal: 10 video platforms status overview + live QR display | repo skill | `/login` · `.agents/skills/fd-vaas-login/` |
-| `remotion-*` (7) | scaffold / compose / caption / render Remotion videos | repo skills | `/remotion-create` etc. · `.agents/skills/remotion-*` |
+| `remotion-*` (7) | **legacy/离线**：scaffold / compose / caption Remotion 项目（VAAS 出片链已不用；`remotion-app/` 已删，这些技能仅作通用 Remotion 知识参考） | repo skills | `.agents/skills/remotion-*` |
 
 Each skill's `SKILL.md` is the authoritative contract - read it before driving the tool. `officecli`
 and `cap` are external CLIs (run `<cmd> --help` / `cap guide` instead of guessing flags).
@@ -143,10 +142,12 @@ SKILL_P=.agents/skills/fd-vaas-publish-videos/scripts
 # 1. (optional) brainstorm topics + script outline
 #    /fd-vaas-brainstorm <赛道>
 
-# 2. 文案 -> 口播视频 (new-task -> TTS -> fix-tts-timings -> preflight -> Remotion render)
-node $SKILL_V/new-task.mjs    --slug <slug> --script /path/to/script.txt [--width 1920 --height 1080]
-node $SKILL_V/task-render.mjs --slug <slug> [--voice <id>] [--composition VoiceoverVideo]
-# -> downloads/fd-videos/<slug>/<slug>.mp4 (+ .srt)
+# 2. 文案 -> 成片：走托管 MCP 工具面（渲染面独立、无本地 node 依赖）
+#    generate_voice(text, slug)                      -> 配音 + captions.json
+#    render_video(type=<id>, script=..., inputs=...) -> 成片 mp4（+ 签名 download_url）
+#    render_document / render_still                  -> PDF/长图 / 单帧图表或封面
+#    本地不再有 new-task.mjs / task-render.mjs（2026-11-09 Remotion 退役）
+#    渲染面部署与自检见 deploy/README.md「渲染面（Render Plane）」
 
 # 3. one video -> many platforms (reads .env; --dry-run to preview the upload commands)
 node $SKILL_P/publish.mjs --slug <slug> --title "…" \
@@ -158,9 +159,9 @@ python3 $SKILL_P/platforms/sau_adapter.py --platform douyin --file <mp4> --title
 ```
 
 **Adding a new video type** = one directory `.agents/skills/fd-vaas-video-creator/types/<id>/`
-(`type.json` declares inputs/pipeline/composition; optional `steps.mjs` overrides pipeline steps) +
-one Remotion template `remotion-app/src/types/<Composition>.tsx` — no core-script changes. List
-registered types: `node $SKILL_V/types/list.mjs`.
+(`type.json` declares inputs + `renderer: "hyperframes"`) + one builder in
+`mcp-server/mcp_server/tools/typed_scenes/builders/` exporting `BUILDER` (auto-registered) — no
+core-scheduling changes. List types via `templates_list(domain="video")`.
 
 ### Article mainline - run from `VAAS/`
 
@@ -185,9 +186,9 @@ Namespaced tools (MCP tool names forbid dots, so `prefix_` namespaces):
 - `orchestrate_*`: `orchestrate_voiceover`, `orchestrate_brainstorm`
 - `publish_*`: `publish_video/article`, `publish_validate_ready`, `publish_get_config`,
   `publish_simulate`, `publish_record`
-- `assets_*`: `assets_list/get/stats` + Remotion discovery (`assets_list_common`,
-  `assets_find_logo`, `assets_list_compositions`, `assets_validate_paths`,
-  `assets_get_scene_templates`)
+- `assets_*`: `assets_list/get/stats` (owner-scoped store; 26→17 重切时移除了
+  Remotion 时代的 `assets_list_common` / `assets_find_logo` / `assets_list_compositions` /
+  `assets_validate_paths` / `assets_get_scene_templates`)
 - `registry_*`: `registry_list_generators`, `registry_describe_generator`
 
 Legacy names (`create_cover_image`, `list_all_content`, `get_content_details`, …) remain
@@ -227,12 +228,17 @@ See `mcp-server/README.md` for full documentation.
   - **Docs**: `PLATFORMS_DOCS`, `DOC_TAGS`, `<PLATFORM>_DOC_TAGS`, `DOC_SCHEDULE`, `DOC_HEADLESS`.
   - Per-task overrides go in `downloads/fd-videos/<slug>/.publish.env` (video) or
     `downloads/fd-docs/<slug>/.publish.env` (docs). Priority: `CLI --flag > <task>/.publish.env > <VAAS>/.env > built-in default`.
-- **Generators are built into `fd-vaas-video-creator`** at `scripts/generators/`:
-  `tts-wrapper.js`, `seedream-wrapper.js`, `seedance-wrapper.js` (+ `*.js` impls). Multi-provider
-  switching is handled by the root `scripts/litellm-bridge.py` (set `*_PROVIDER` in `.env`; `volcengine`
-  direct keeps advanced features like TTS word-level timestamps).
-- **`fix-tts-timings` is mandatory** - seed-tts-2.0 returns fake `endMs` for Latin tokens (English
-  names, URLs); skip it and subtitles flash/desync.
+- **Generation runs on the hosted MCP plane** (`generate_voice` / `generate_image` /
+  `generate_video_submit` / `render_*`), implemented under `mcp-server/mcp_server/generators/`
+  and `tools/`; the multi-provider bridge is the root `scripts/litellm-bridge.py` with
+  `scripts/_ciyuan_{tts,image,video}.py` (set `*_PROVIDER` in `.env`; `volcengine` direct keeps
+  advanced features like official TTS word-level timestamps; `ciyuan` returns synthetic
+  segment-level captions with `captions_source` recorded for audit).
+  2026-11-09 起 `.agents/skills/fd-vaas-video-creator/scripts/generators/` 与
+  `fix-tts-timings` 随本地 Remotion 管线一并退役——字幕时间以出口层实测/合成口径为准。
+- **Lane health is machine-readable**: `registry_list_generators` / `models_voices` carry a
+  `lane` block and a down lane refuses with `lane_down (<kind>/<provider>): … (reason_class)`
+  — read it before retrying; ledger lives in `mcp-server/mcp_server/lane_health.json`.
 - **Network / proxy** (this environment): local HTTP proxy `127.0.0.1:7892` (fallback `7890`) - set
   `http_proxy` (NOT `https_proxy`) for general use. Some hosts (`officecli.ai`,
   `raw.githubusercontent.com`) fail TLS through the proxy - bypass with `env -u http_proxy -u https_proxy <cmd>`.
