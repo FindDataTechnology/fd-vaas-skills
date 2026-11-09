@@ -9,7 +9,7 @@ import logging
 from typing import Optional
 
 from ..db import insert_content, generate_id, record_usage, scoped_asset_slug
-from ..hosting import current_owner
+from ..hosting import current_owner, is_hosted
 from ..utils import ensure_directory_rel, get_relative_path
 
 log = logging.getLogger("vaas.cover")
@@ -120,9 +120,15 @@ def create_cover(
     record_usage(owner, "generate_cover", "chromium", None,
                  file_size_bytes(out_path) or 1, "image", "local",
                  asset_id=content_id)
-    return {"id": content_id, "slug": scoped,
-            "file_path": get_relative_path("images", slug or title[:40], filename),
-            "width": width, "height": height, "format": "png"}
+    result = {"id": content_id, "slug": scoped,
+              "file_path": get_relative_path("images", slug or title[:40], filename),
+              "width": width, "height": height, "format": "png"}
+    if is_hosted():
+        from ..hosting import download_url
+        url = download_url(content_id, owner)
+        if url:
+            result["download_url"] = url
+    return result
 
 
 def file_size_bytes(path) -> Optional[int]:
