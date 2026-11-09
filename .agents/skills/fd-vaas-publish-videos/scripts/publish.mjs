@@ -78,11 +78,26 @@ const VAAS = process.env.VAAS_ROOT ?? path.resolve(path.dirname(fileURLToPath(im
 const TASK_DIR = path.join(VAAS, "downloads/fd-videos", slug);
 const manifestPath = path.join(TASK_DIR, "task.json");
 
-if (!fs.existsSync(manifestPath)) {
-  console.error(`❌ task.json not found: ${manifestPath}. Run new-task.mjs + task-render.mjs first.`);
+// task.json 是本地创作链（已退役）的清单。托管出片经 pull-from-cloud 落盘时没有它，
+// 但只要有 <slug>.mp4 就能发——用最小清单继续（发布只需要 render.output 与 distribution）。
+const mp4Fallback = path.join(TASK_DIR, `${slug}.mp4`);
+let manifest;
+if (fs.existsSync(manifestPath)) {
+  manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+} else if (fs.existsSync(mp4Fallback)) {
+  console.warn(
+    `⚠️  ${TASK_DIR} 无 task.json（托管出片常态）——以 ${slug}.mp4 为准继续；封面按缺省处理`,
+  );
+  manifest = { slug, render: { output: `${slug}.mp4` }, distribution: [] };
+} else {
+  console.error(
+    `❌ 找不到可发布的产物：${mp4Fallback}\n` +
+      `   托管出片后先拉回本机：python3 .agents/skills/fd-vaas-pull-from-cloud/scripts/pull_from_cloud.py \\\n` +
+      `     --call-key <KEY> --asset <asset-id>     # 或 --url <生成响应里的 download_url>\n` +
+      `   或把已有 mp4 放到 ${TASK_DIR}/${slug}.mp4`,
+  );
   process.exit(1);
 }
-let manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 
 // Config: project-root .env (shared with TTS/seedream/etc.) < task-local .publish.env
 const rootEnv = loadEnv(path.join(VAAS, ".env"));

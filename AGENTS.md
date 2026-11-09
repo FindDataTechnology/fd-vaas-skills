@@ -242,9 +242,10 @@ See `mcp-server/README.md` for full documentation.
 - **Network / proxy** (this environment): local HTTP proxy `127.0.0.1:7892` (fallback `7890`) - set
   `http_proxy` (NOT `https_proxy`) for general use. Some hosts (`officecli.ai`,
   `raw.githubusercontent.com`) fail TLS through the proxy - bypass with `env -u http_proxy -u https_proxy <cmd>`.
-- **Creation -> distribution handoff**: the `fd-vaas-*` mainline wires this end-to-end
-  (`fd-vaas-video-creator` produces `downloads/fd-videos/<slug>/<slug>.mp4`; `fd-vaas-publish-videos`
-  ships it). For ad-hoc uploads, pass the asset path a creation skill produces to
+- **Creation -> distribution handoff**: generation runs on the hosted plane, so the handoff is an
+  explicit pull — `fd-vaas-pull-from-cloud` lands video at `downloads/fd-videos/<slug>/<slug>.mp4`
+  (no `task.json`; `publish.mjs` accepts a bare mp4 and synthesizes a minimal manifest), then
+  `fd-vaas-publish-videos` ships it. For ad-hoc uploads, pass the asset path a creation skill produces to
   `python3 .agents/skills/fd-vaas-publish-videos/scripts/platforms/sau_adapter.py --platform <p> --file <path> …`
   (or let `publish.mjs` route it). PPTX decks are not directly uploadable as video - `cap`,
   `fd-vaas-video-creator`, or `ppt-master`'s export/render step is the bridge when a deck must become a video.
