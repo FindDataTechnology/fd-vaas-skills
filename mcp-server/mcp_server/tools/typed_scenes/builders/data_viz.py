@@ -368,6 +368,13 @@ def _helpers_without_init() -> str:
 _CHART_SEEK_TMPL = """function (lt) {
     var D = window.__DATAKEY__;
     if (!D) { return; }
+    // 块作用域注意：__HELPERS__ 在下面的 if 块内声明（function 声明块内可见、
+    // 块外不可见），因此格式化函数在 seek 顶层自带一份，不跨块引用。
+    var fmt = function (x) {
+      if (typeof x !== 'number' || !isFinite(x)) { return ''; }
+      var r = Math.round(x * 100) / 100;
+      return r.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    };
     var root = document.getElementById('__ROOT__');
     if (!root) { return; }
     var card = root.querySelector('.dv-card');
@@ -401,7 +408,7 @@ _CHART_SEEK_TMPL = """function (lt) {
     }
     var v = D.seekFn(Math.min(lt, D.animS));
     var sv = document.getElementById(D.ids.stat);
-    if (sv) { sv.textContent = fmtNum(v) + (D.unit ? ' ' + D.unit : ''); }
+    if (sv) { sv.textContent = fmt(v) + (D.unit ? ' ' + D.unit : ''); }
   }"""
 
 
