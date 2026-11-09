@@ -130,15 +130,37 @@ API 面只编译 composition 并提交作业；渲染面只做 composition → M
 
 成功响应头：`X-Engine`、`X-Render-Ms`、`X-Warnings`。失败：`4xx`（composition 不合规，不重试）/`429`（队列满）/`5xx`（可换实例重试）。
 
-### 部署（示例：`render-plane/` 目录）
+### 部署（走发布通道，别在节点上手工 build）
+
+渲染面镜像由 `law-ai-official/vaas-mcp-images` 的 `images.yml` 出片（`target=vaas-render-plane`，
+子目录 context 由该仓承接——通用构建池硬编码 `context: .`，建不了本目录）：
 
 ```bash
-cd render-plane
-docker build -t vaas-render-plane:0.1.0 .
-docker network create --internal vaas-render-net     # 无外网出口
-docker run -d --name vaas-renderer --network vaas-render-net \
-  --shm-size=512m --memory=3g vaas-render-plane:0.1.0
+fd-build-channel                       # 先判路（专属仓额度 2000 min/月/账号）
+fd-build-snapshot <VAAS 源码或 git URL> -R law-ai-official/vaas-mcp-images --ref <ref>
+gh workflow run images.yml -R law-ai-official/vaas-mcp-images -f target=vaas-render-plane
+# 等 relay 回灌 ccr，用凭据实证（匿名 inspect 是假阴性）：
+ssh cheap3 'source /etc/tcr-relay/env && skopeo inspect --creds "$TCR_USER:$TCR_PASS" \
+  docker://ccr.ccs.tencentyun.com/yizuo/vaas-render-plane:sha-<7>'
 ```
+
+节点侧（推荐：与 API 面**分机**部署——渲染吃 CPU/内存，别和 API 抢）：
+
+```bash
+docker pull ccr.ccs.tencentyun.com/yizuo/vaas-render-plane:sha-<7>
+# 无出网但允许 tailnet 入站：关 masquerade（发布端口 DNAT 仍生效，出站 NAT 被断）
+docker network create --driver bridge \
+  -o com.docker.network.bridge.enable_ip_masquerade=false vaas-render-ext
+docker run -d --name vaas-renderer --restart unless-stopped --network vaas-render-ext \
+  -p <NODE_TAILNET_IP>:8099:8099 --shm-size=2g --memory=4g \
+  -e VAAS_RENDER_MAX_CONCURRENCY=3 \
+  ccr.ccs.tencentyun.com/yizuo/vaas-render-plane:sha-<7>
+# 落地自检：/healthz 的 doctor.checks 必须全 OK（尤其 Memory），并确认容器内无出网
+```
+
+> 2026-11-09 实测：渲染面与 API 同宿在 3.9G 机上时 doctor `Memory FAIL`（0.5G 可用）、
+> API 宿主机 load 4.67；迁到 8 核 7.9G 空载节点后 doctor 全 OK、无出网验证通过。
+> 渲染耗时主要取决于帧数×引擎（≈100s/8s 片），迁机收益在「卸载超载节点 + 可并发 3 档」。
 
 API 面接入（`/opt/vaas-deploy/docker-compose.vaas.yml`）：
 
@@ -146,7 +168,7 @@ API 面接入（`/opt/vaas-deploy/docker-compose.vaas.yml`）：
 services:
   vaas-wanxing:
     environment:
-      VAAS_RENDER_URL: "http://vaas-renderer:8099"     # 多实例：VAAS_RENDER_URLS="http://a:8099,http://b:8099"
+      VAAS_RENDER_URL: "http://<RENDER_NODE_TAILNET_IP>:8099"   # 同宿可用容器名；多实例：VAAS_RENDER_URLS="http://a:8099,http://b:8099"
     networks: [default, vaas-render-net]
 
 networks:
