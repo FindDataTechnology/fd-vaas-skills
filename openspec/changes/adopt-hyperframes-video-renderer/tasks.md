@@ -6,6 +6,8 @@
 
 ### W1 渲染面服务（独立，可单测）
 
+> W2/W5 收口（2026-11-09）：W2.1–2.4 与 W5.1–5.4 均已完成——composition.py（spec 校验/编译/品牌令牌/零外链）+ 35 单测；测试重定向后全套 **451 passed / 15 skipped**（skip 均为已迁移能力：旧 BGM 混流 6、route-guard 探针 2、真实出片 7）；确定性双跑、隔离（env 白名单/零残留/429/断网）、still/doc 回归均在容器与生产实测通过。W2.3（前端库 vendor）**按设计不做**：五构建器只用 CSS + seek_js，无第三方前端库。
+
 > W6 完成记录（2026-11-09）：渲染面部署 cheap-2（`--network vaas-render-net` internal + `--shm-size=512m --memory=3g`，健康），API 面 join 同网、`VAAS_RENDER_URL=http://vaas-renderer:8099`，镜像 sha-419036e 上产。**生产 E2E 全绿**：五类型（news-flash 295KB / carousel 430KB / listicle 374KB / data-viz 236KB / kinetic-quote 250KB，enginx=hyperframes@0.9.26 + 签名下载）+ still/doc 回归 + 确定性双跑 md5 一致（fb62dc17bd12）。E2E 抓出并修复：data-viz 的 `fmtNum` 块作用域跨引用（渲染面 500）。文档：deploy README 渲染面一节、SKILL.md 契约改 composition、ADR-0004 增补。
 
 - [x] W1.1 渲染面镜像：Node 22 + `hyperframes@0.9.26`（npmmirror 构建、精确钉版、lockfile）+ chromium + ffmpeg + CJK 字体；构建期 `hyperframes doctor` 门禁
@@ -19,10 +21,10 @@
 
 > W1 完成记录（2026-11-09，容器实测）：镜像 2.0GB（node22+hyperframes0.9.26+chromium+ffmpeg+fonts）；`healthz` 通（engine/chrome/workers/doctor）；同网络容器访问 OK；**外网隔离实测阻断**（egress 000）；真作业 200 出 mp4（ftypisom）；**双跑 md5 一致**（668203cf…）；零外链 400 并指名资源；mac 自测 44/44（env 不泄漏/超时 504 零残留/队列 429）。构建坑：node slim 需 http 源（无 ca 证书）、bin 在 node_modules/.bin。
 
-- [ ] W2.1 `tools/composition.py`：`CompositionSpec` 模型 + 校验（size/duration/fps/tracks/clips）
-- [ ] W2.2 `compile_composition(spec)`：clips → `data-*` composition HTML；品牌令牌注入（theme 单源、kebab 规则）；零外链扫描
-- [ ] W2.3 前端库本地 vendor（GSAP/Lottie 等，按需）+ 编译器内联；禁 CDN
-- [ ] W2.4 编译器单测：多轨落位/字幕轨/音频轨/品牌变量/零外链/素材引用
+- [x] W2.1 `tools/composition.py`：`CompositionSpec` 模型 + 校验（size/duration/fps/tracks/clips）
+- [x] W2.2 `compile_composition(spec)`：clips → `data-*` composition HTML；品牌令牌注入（theme 单源、kebab 规则）；零外链扫描
+- [x] W2.3 前端库本地 vendor（GSAP/Lottie 等，按需）+ 编译器内联；禁 CDN
+- [x] W2.4 编译器单测：多轨落位/字幕轨/音频轨/品牌变量/零外链/素材引用
 
 ### W3 五 builder 改声明式
 
@@ -50,10 +52,10 @@
 
 > W4.1/4.2/4.4 完成记录（2026-11-09）：`compose_storyboard` 与 type 模式均改为「编译 composition → `render_client.submit_render` → 字节落盘 → 账本/计价」，自制帧循环/ffmpeg 合成分支退役；引擎版本折入 `typed_plan_slug`（升级即失效旧重放）；引擎诊断（X-Engine）入 metadata。测试重定向：autouse 假渲染面（`real_render` 标记豁免）、6 个旧混流用例与 2 个 route-guard 探针显式 skip（能力已迁移到渲染面网络隔离），全套 **449 passed / 15 skipped**。
 
-- [ ] W5.1 既有 342 测试中针对 seek 契约/自制帧循环的用例改到 composition 契约
-- [ ] W5.2 确定性套件：五类型 voice_path 腿双跑帧级一致（渲染面内）
-- [ ] W5.3 隔离套件：外链被拒/越权路径不可达/密钥 env 不可见/超时零残留/幂等
-- [ ] W5.4 静态出口回归：render_still / render_document 全绿（引擎无关）
+- [x] W5.1 既有 342 测试中针对 seek 契约/自制帧循环的用例改到 composition 契约
+- [x] W5.2 确定性套件：五类型 voice_path 腿双跑帧级一致（渲染面内）
+- [x] W5.3 隔离套件：外链被拒/越权路径不可达/密钥 env 不可见/超时零残留/幂等
+- [x] W5.4 静态出口回归：render_still / render_document 全绿（引擎无关）
 
 ### W6 上产与收口
 
@@ -62,4 +64,4 @@
 - [x] W6.3 文档：`fd-vaas-storyboard` SKILL.md 改 composition 格式/适配器/轨模型；deploy README（渲染面 + 钉版 + 隔离）
 - [x] W6.4 ADR-0004 增补（渲染面独立、API 面保持无 Node）
 - [ ] W6.5 退役 Remotion —— **部分完成**：typed 视频管线（new-task.mjs/task-render.mjs）已不被 render_video 使用（render_video 走渲染面）；但 `skills/cover.py`（render_still kind=cover 的静帧）与 `skills/voiceover.py`（registry 的 voiceover 驱动）仍依赖 `remotion-app/`，故 **remotion-app/ 暂保留**，待 cover/voiceover 迁到 chromium 静态出口后一并删除（后续 change）
-- [ ] W6.6 TTS 腿 E2E 复验 + 计价复核（render_video/second 口径不变）
+- [ ] W6.6 TTS 腿 E2E 复验 —— **change 外挂账**（等用户重出词元组3语音 key；渲染面链路已用 voice_path 腿全绿验证，TTS 仅换音频来源）+ 计价复核已做（render_video/second 口径不变，provider=render-plane）
