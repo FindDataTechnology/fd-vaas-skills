@@ -92,6 +92,23 @@ def fake_render_pipeline(monkeypatch):
 
     monkeypatch.setattr(render_mod.subprocess, "run",
                         lambda cmd, **kw: _Probe())  # 唯一到达的是 ffprobe
+
+    # W4：视频渲染已委托渲染面——用确定性假实现替换 HTTP 调用。
+    # 提交记录挂在 renderer.submits（旧帧渲染器的 calls 保留给兼容断言）。
+    from mcp_server.tools import render_client
+
+    renderer.submits = []
+
+    def _fake_submit(html, assets=None, fps=30, quality="looks",
+                     format="mp4", job_id="", base_url=None, timeout=None):
+        rec = {"html": html, "assets": list(assets or []), "fps": fps,
+               "job_id": job_id, "format": format, "quality": quality}
+        renderer.submits.append(rec)
+        _fake_submit.last = rec
+        return b"\x00\x00\x00\x20ftypisom" + b"\x00" * 64, \
+               {"x-engine": "hyperframes@0.9.26"}
+
+    monkeypatch.setattr(render_client, "submit_render", _fake_submit)
     return renderer
 
 
@@ -112,35 +129,35 @@ class TestStoryboardParsing:
             render_mod.compose_storyboard(sb, slug="sb-badkind")
 
     def test_html_intro_promoted_to_first_full_scene(self, hermetic_fs, fake_render_pipeline):
-        """storyboard.html_intro → 前置一个 html_full 场景（seek 契约同源）。"""
+        """storyboard.html_intro → 前置一个 html_full 场景（编译进 composition）。"""
         sb = {"html_intro": "<div data-stage>custom</div>", "intro_duration_s": 5,
               "scenes": [{"kind": "html_outro", "duration_s": 1, "title": "尾"}]}
         result = render_mod.compose_storyboard(sb, slug="sb-promote", format="mp4")
-        assert len(fake_render_pipeline.calls) == 2
         assert result["scenes"] == 2
-        assert "custom" in fake_render_pipeline.calls[0]["html"]
+        assert "custom" in fake_render_pipeline.submits[0]["html"]
 
-    def test_frame_numbering_is_continuous_across_scenes(self, hermetic_fs, fake_render_pipeline):
-        """共享帧序号：第二段场景的 start_index 接在第一段之后。"""
-        render_mod.compose_storyboard(SB, slug="sb-frames", format="mp4")
-        starts = [c["start_index"] for c in fake_render_pipeline.calls]
-        assert starts == [0, 2]  # 每个假场景产 2 帧
+    def test_scenes_become_timeline_clips(self, hermetic_fs, fake_render_pipeline):
+        """W4：场景序列编译为 composition —— 每场景一个 data-start 片段。"""
+        render_mod.compose_storyboard(SB, slug="sb-clips", format="mp4")
+        html = fake_render_pipeline.submits[0]["html"]
+        assert html.count('class="clip"') == len(SB["scenes"])
+        assert 'data-composition-id="main"' in html
+        assert "window.__timelines['main'] = TL;" in html
 
     def test_kenburns_images_inlined_as_data_uri(self, hermetic_fs, fake_render_pipeline):
-        """kenburns 图片以 data: URI 内联（set_content 无法取 file:// 子资源）。"""
+        """kenburns 图片以 data: URI 内联（渲染面零外链纪律）。"""
         sb = {"scenes": [{"kind": "kenburns", "duration_s": 2,
                           "images": [hermetic_fs["image"]], "caption": "注"}]}
-        result = render_mod.compose_storyboard(sb, slug="sb-kb", format="mp4")
-        html = fake_render_pipeline.calls[0]["html"]
+        render_mod.compose_storyboard(sb, slug="sb-kb", format="mp4")
+        html = fake_render_pipeline.submits[0]["html"]
         assert "data:image/png;base64," in html
-        assert result["frames"] == 2
 
-    def test_storyboard_json_kept_and_frames_dropped(self, hermetic_fs, fake_render_pipeline):
+    def test_artifact_written_no_frames_dir(self, hermetic_fs, fake_render_pipeline):
+        """W4：成片字节落盘；不再产生 frames/ 中间目录。"""
         out_dir = hermetic_fs["downloads"] / "video" / "sb-keep"
         render_mod.compose_storyboard(SB, slug="sb-keep", format="mp4")
-        assert (out_dir / "storyboard.json").exists()
-        assert not (out_dir / "frames").exists()
         assert (out_dir / "sb-keep.mp4").exists()
+        assert not (out_dir / "frames").exists()
 
     def test_kenburns_missing_image_named_in_error(self, hermetic_fs, fake_render_pipeline):
         """kenburns 图片缺失 → 报错点名具体文件（assets_validate_paths 逻辑折入）。"""
@@ -233,8 +250,8 @@ class TestRenderVideoModes:
     def test_type_mode_same_runtime_as_storyboard(self, hermetic_fs,
                                                   fake_render_pipeline,
                                                   monkeypatch):
-        """type 模式与 storyboard 模式同一实现路径：compose_storyboard 的
-        账本/计价语义（unit_type=second、kind=video_compose）不变。"""
+        """type 模式经同一渲染面出片：账本/计价语义（unit_type=second、
+        引擎入 metadata）与 storyboard 模式对齐。"""
         monkeypatch.setattr(
             "mcp_server.tools.typed_scenes.alignment._ffprobe_seconds",
             lambda p: 8.0)
@@ -247,7 +264,9 @@ class TestRenderVideoModes:
             voice_path=str(voice), slug="same-runtime")
         asset = get_asset_by_slug("same-runtime")
         assert asset and asset["type"] == "video"
-        assert asset["metadata"]["kind"] == "video_compose"
+        # W4：type 模式直接产 composition（不再绕 storyboard 转换器）
+        assert asset["metadata"]["kind"] == "typed_video"
+        assert asset["metadata"]["engine"].startswith("hyperframes@")
         assert result["scenes"] == 3
         rows = usage_summary(owner="service")
         assert any(r["tool"] == "render_video" and r["unit_type"] == "second"

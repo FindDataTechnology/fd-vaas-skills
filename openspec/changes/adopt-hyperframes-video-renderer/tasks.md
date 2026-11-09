@@ -36,13 +36,15 @@
 
 > W3 完成记录（2026-11-09）：五类型 build_composition 全部落地（news-flash/listicle/carousel/kinetic-quote/data-viz），type.json ×5 renderer=hyperframes。**关键修复**：HyperFrames 逐帧驱动靠 `window.__timelines[main].seek(t)`，仅 `window.__hf.seek` 时动画静止（0.9.26 实测：像素 0→71→142→212→255）——`composition._seek_runtime` 现同时注册两者。data-viz 惰性初始化 echarts（脚本早于挂载，顶层 DOM 必 null）。测试 342→464 全绿；编译产物真渲染 4.5s/301.8KB，抽帧 md5 全不同。
 
-- [ ] W4.1 `render_video` 切流：storyboard/type → composition → 提交作业；删 `_render_html_frames`/`_ffmpeg` 视频分支
-- [ ] W4.2 计划哈希折入引擎版本；确定性重放（同 job_id 返回同结果）
+- [x] W4.1 `render_video` 切流：storyboard/type → composition → 提交作业；删 `_render_html_frames`/`_ffmpeg` 视频分支
+- [x] W4.2 计划哈希折入引擎版本；确定性重放（同 job_id 返回同结果）
 - [ ] W4.3 作业客户端：`VAAS_RENDER_URL` 契约 + 重试/多实例派发 + 超时 + 明确错误
-- [ ] W4.4 诊断入账本（引擎版本/耗时/告警）；失败零残留
+- [x] W4.4 诊断入账本（引擎版本/耗时/告警）；失败零残留
 - [ ] W4.5 `_scene_guard` 升级为 composition 级校验
 
 ### W5 测试重定向
+
+> W4.1/4.2/4.4 完成记录（2026-11-09）：`compose_storyboard` 与 type 模式均改为「编译 composition → `render_client.submit_render` → 字节落盘 → 账本/计价」，自制帧循环/ffmpeg 合成分支退役；引擎版本折入 `typed_plan_slug`（升级即失效旧重放）；引擎诊断（X-Engine）入 metadata。测试重定向：autouse 假渲染面（`real_render` 标记豁免）、6 个旧混流用例与 2 个 route-guard 探针显式 skip（能力已迁移到渲染面网络隔离），全套 **449 passed / 15 skipped**。
 
 - [ ] W5.1 既有 342 测试中针对 seek 契约/自制帧循环的用例改到 composition 契约
 - [ ] W5.2 确定性套件：五类型 voice_path 腿双跑帧级一致（渲染面内）

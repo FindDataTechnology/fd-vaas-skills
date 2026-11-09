@@ -214,6 +214,7 @@ class TestBgmParamParsing:
 # ─── W4.2 render_video storyboard bgm 混流 ─────────────────────────────────
 
 class TestVideoBgmMix:
+    @pytest.mark.skip(reason="W4：视频 BGM 改为 composition 音频轨（随作业上传），不再走成片后 ffmpeg 混流；_mix_bgm_onto_video 保留实现但不再被 render_video 调用")
     def test_mix_command_shape_with_voice(self, hermetic_fs, fake_video_pipeline,
                                           tmp_path):
         voice = tmp_path / "voice.mp3"
@@ -245,6 +246,9 @@ class TestVideoBgmMix:
         out_dir = hermetic_fs["downloads"] / "video" / "sb-bgm1"
         assert not list(out_dir.glob("*.prebgm.*"))
 
+    @pytest.mark.skip(reason="W4：BGM 改为 composition 音频轨（submit 时随作业上传），"
+                             "不再走成片后 ffmpeg 混流；音频轨断言见 "
+                             "test_typed_scenes.py::test_bgm_wired_for_type_mode")
     def test_mix_command_without_voice_maps_bgm_only(self, hermetic_fs,
                                                      fake_video_pipeline,
                                                      tmp_path):
@@ -258,6 +262,7 @@ class TestVideoBgmMix:
         assert "amix" not in fc and fc.endswith("[bgm]")
         assert "[bgm]" in cmd and "[aout]" not in cmd
 
+    @pytest.mark.skip(reason="W4：视频 BGM 改为 composition 音频轨（随作业上传），不再走成片后 ffmpeg 混流；_mix_bgm_onto_video 保留实现但不再被 render_video 调用")
     def test_fade_out_disabled_drops_afade(self, hermetic_fs,
                                            fake_video_pipeline, tmp_path):
         bgm = tmp_path / "loop.mp3"
@@ -269,6 +274,7 @@ class TestVideoBgmMix:
             fake_video_pipeline["mix_cmds"][0].index("-filter_complex") + 1]
         assert "afade" not in fc and "volume=0.2" in fc
 
+    @pytest.mark.skip(reason="W4：视频 BGM 改为 composition 音频轨（随作业上传），不再走成片后 ffmpeg 混流；_mix_bgm_onto_video 保留实现但不再被 render_video 调用")
     def test_fade_clamped_on_short_video(self, hermetic_fs,
                                          fake_video_pipeline, tmp_path):
         fake_video_pipeline["duration"] = "1.0"
@@ -280,6 +286,7 @@ class TestVideoBgmMix:
             fake_video_pipeline["mix_cmds"][0].index("-filter_complex") + 1]
         assert "afade=t=out:st=0.000:d=1.000" in fc
 
+    @pytest.mark.skip(reason="W4：视频 BGM 改为 composition 音频轨（随作业上传），不再走成片后 ffmpeg 混流；_mix_bgm_onto_video 保留实现但不再被 render_video 调用")
     def test_bgm_folded_into_replay_key(self, hermetic_fs, fake_video_pipeline,
                                         tmp_path):
         """同 storyboard 不同 BGM = 不同重放键；同 BGM 重跑命中重放不重混。"""
@@ -310,6 +317,7 @@ class TestVideoBgmMix:
             render_mod.render_video(type="screen-recording", script="口播稿",
                                     bgm={"path": "/x.mp3"})
 
+    @pytest.mark.skip(reason="W4：视频 BGM 改为 composition 音频轨（随作业上传），不再走成片后 ffmpeg 混流；_mix_bgm_onto_video 保留实现但不再被 render_video 调用")
     def test_seed_asset_id_resolution_propagates_license(
             self, hermetic_fs, bgm_seed_dir, fake_video_pipeline):
         """asset_id 引用种子曲库：混流输入是 downloads/bgm 拷贝，授权字段入账本。"""

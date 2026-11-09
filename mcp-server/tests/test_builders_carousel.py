@@ -1,6 +1,7 @@
 """
 add-typed-video-html-renderer W2.2 carousel builder 测试。
 
+
 覆盖:
   - validate_inputs：图片清单形状（string / {"path"} / {"prompt"}）一次列全
   - build：每段一图 html_full 场景（Ken Burns motion 轮换 pan_down/zoom_in/
@@ -28,6 +29,18 @@ import zlib
 from pathlib import Path
 
 import pytest
+def _render_plane_available() -> bool:
+    """渲染面可达性（W4 起真实出片必须经渲染面）。"""
+    import os, socket
+    from urllib.parse import urlparse
+    url = os.getenv("VAAS_RENDER_URL", "http://127.0.0.1:8099")
+    u = urlparse(url)
+    try:
+        with socket.create_connection((u.hostname or "127.0.0.1", u.port or 80), 1):
+            return True
+    except OSError:
+        return False
+
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -382,7 +395,8 @@ class TestCarouselPendingProtocol:
         assert confirmed["scenes"] == 3
         asset = get_asset_by_slug(confirmed["slug"])
         typed = asset["metadata"]["typed"]
-        assert typed["type"] == "carousel" and typed["renderer"] == "html"
+        assert typed["type"] == "carousel"
+        assert typed["renderer"] in ("html", "hyperframes")
         assert typed["generated_images"][0]["file_path"] == "images/gen/a.jpeg"
         assert typed["generated_images"][0]["asset_id"] == "img-1"
 
@@ -484,6 +498,8 @@ def _framemd5_hashes(path: Path) -> list:
             if line and not line.startswith("#")]
 
 
+@pytest.mark.real_render
+@pytest.mark.skipif(not _render_plane_available(), reason="渲染面不可达（VAAS_RENDER_URL），真实出片冒烟跳过")
 @pytest.mark.skipif(not _chromium_available(), reason="chromium unavailable "
                     "(carousel real-render smoke needs real playwright+chromium)")
 class TestCarouselRealRenderSmoke:

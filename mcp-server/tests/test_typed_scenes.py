@@ -107,6 +107,22 @@ def fake_render_pipeline(monkeypatch):
 
     monkeypatch.setattr(render_mod.subprocess, "run",
                         lambda cmd, **kw: _Probe())  # 唯一到达的是 ffprobe
+
+    # W4：视频渲染已委托渲染面——用确定性假实现替换 HTTP 调用
+    from mcp_server.tools import render_client
+
+    renderer.submits = []
+
+    def _fake_submit(html, assets=None, fps=30, quality="looks",
+                     format="mp4", job_id="", base_url=None, timeout=None):
+        rec = {"html": html, "assets": list(assets or []), "fps": fps,
+               "job_id": job_id, "format": format, "quality": quality}
+        renderer.submits.append(rec)
+        _fake_submit.last = rec
+        return b"\x00\x00\x00\x20ftypisom" + b"\x00" * 64, \
+               {"x-engine": "hyperframes@0.9.26"}
+
+    monkeypatch.setattr(render_client, "submit_render", _fake_submit)
     return renderer
 
 
@@ -496,13 +512,18 @@ class TestRenderVideoTypedMode:
         assert result["type"] == "news-flash"
         assert result["slug"] == "nf-full"
         assert result["format"] == "mp4"
-        # 4 场景逐帧渲染（共享帧序）
-        assert [c["start_index"] for c in fake_render_pipeline.calls] == [0, 2, 4, 6]
+        # W4：提交一次 composition 到渲染面（不再是逐帧本地渲染）
+        assert len(fake_render_pipeline.submits) == 1
+        comp = fake_render_pipeline.submits[0]["html"]
+        assert comp.count('class="clip"') == 4
+        assert "window.__timelines['main'] = TL;" in comp
         # 账本：metadata.typed 带 segments 对齐表与计费口径
         asset = get_asset_by_slug("nf-full")
         assert asset and asset["type"] == "video"
         typed = asset["metadata"]["typed"]
-        assert typed["type"] == "news-flash" and typed["renderer"] == "html"
+        assert typed["type"] == "news-flash"
+        assert typed["renderer"] in ("html", "hyperframes")
+        assert asset["metadata"]["engine"].startswith("hyperframes@")
         assert [s["name"] for s in typed["segments"]] == ["开场", "要点一", "要点二", "结尾"]
         assert typed["billing"]["mode"] == "voice_path"
         assert typed["tail_pad_frames"] == 15
@@ -540,21 +561,17 @@ class TestRenderVideoTypedMode:
         assert result["slug"] == "my-nf"
 
     def test_bgm_wired_for_type_mode(self, hermetic_fs, fake_render_pipeline,
-                                     voice_wav, monkeypatch):
-        mixed = {}
-
-        def spy_mix(video, spec, out):
-            mixed["spec"] = spec
-            out.write_bytes(b"fake-mp4-with-bgm")
-
-        monkeypatch.setattr(render_mod, "_mix_bgm_onto_video", spy_mix)
+                                     voice_wav):
+        """W4：BGM 作为 composition 音频轨随作业上传（不再成片后混流）。"""
         bgm_file = hermetic_fs["downloads"] / "bgm.mp3"
         bgm_file.write_bytes(b"fake-bgm")
         result = render_mod.render_video(
             type="news-flash", script=SCRIPT, inputs={"meta": META},
             voice_path=voice_wav, bgm={"path": str(bgm_file), "volume": 0.3})
         assert result["type"] == "news-flash"
-        assert mixed["spec"]["volume"] == 0.3
+        sub = fake_render_pipeline.submits[0]
+        paths = [p for p, _ in sub["assets"]]
+        assert any(p.startswith("assets/bgm") for p in paths), paths
         asset = get_asset_by_slug(result["slug"])
         assert asset["metadata"]["bgm"]["volume"] == 0.3
 

@@ -52,6 +52,12 @@ from ..hosting import current_owner, download_url, is_hosted, SERVICE_OWNER
 from ._scene_guard import find_external_refs, install_route_guard
 
 FPS_DEFAULT = 30
+
+FPS_DEFAULT = 30
+
+# 渲染面引擎（计划哈希折入；升级即失效旧重放）
+RENDER_ENGINE = os.getenv("VAAS_RENDER_ENGINE", "hyperframes@0.9.26")
+RENDER_QUALITY = os.getenv("VAAS_RENDER_QUALITY", "looks")
 FONT_STACK = ("'PingFang SC','Hiragino Sans GB','Noto Sans CJK SC','Noto Sans SC',"
               "'Microsoft YaHei',sans-serif")
 VAT_CSS_FALLBACK = (
@@ -406,42 +412,49 @@ def compose_storyboard(
     scene_htmls = _build_scene_htmls(scenes, size)
     _assert_scenes_offline(scene_htmls, scenes)
 
-    out_dir = ensure_directory("video", slug)
-    frames_dir = out_dir / "frames"
-    frames_dir.mkdir(parents=True, exist_ok=True)
+    # ── W4.1：场景序列编译为 composition → 提交渲染面（自制帧循环已退役）
+    from . import render_client, storyboard_composition
 
-    total_frames = 0
-    for i, html in enumerate(scene_htmls):
-        produced = _render_html_frames(html, float(scenes[i]["duration_s"]),
-                                       size, frames_dir, fps,
-                                       start_index=total_frames)
-        if not produced:
-            raise RuntimeError(f"scene {i} produced no frames")
-        total_frames += len(produced)
-
-    if not total_frames:
-        raise RuntimeError("no frames rendered")
+    comp_html, comp_meta = storyboard_composition.storyboard_to_composition(
+        {"size": size, "scenes": scenes}, fps=fps)
 
     audio_p = _resolve_input_file(voice_path) if voice_path else None
     if audio_p and not audio_p.is_file():
         raise ValueError(f"voice file missing: {voice_path}")
 
-    out_path = out_dir / f"{slug}.{format}"
+    assets: list[tuple[str, bytes]] = []
+    if audio_p:
+        assets.append(("assets/voice" + audio_p.suffix, audio_p.read_bytes()))
     if bgm is not None:
-        # 先出无 BGM 的成片中间体，再混流到正式产物（文件名保持稳定）
-        pre_path = out_dir / f"{slug}.prebgm.{format}"
-        _ffmpeg(frames_dir, audio_p, pre_path, fps)
-        try:
-            _mix_bgm_onto_video(pre_path, bgm, out_path)
-        finally:
-            pre_path.unlink(missing_ok=True)
-    else:
-        _ffmpeg(frames_dir, audio_p, out_path, fps)
+        bgm_file = Path(bgm["file"])
+        assets.append(("assets/bgm" + bgm_file.suffix, bgm_file.read_bytes()))
+        # BGM 作为 composition 音频轨（原生多轨，不再成片后混流）
+        comp_html = comp_html.replace(
+            "</body>",
+            '<audio data-start="0" data-duration="%s" data-track-index="2" '
+            'src="assets/bgm%s"></audio></body>'
+            % (comp_meta["duration_s"], bgm_file.suffix),
+            1)
+    elif audio_p:
+        comp_html = comp_html.replace(
+            "</body>",
+            '<audio data-start="0" data-duration="%s" data-track-index="2" '
+            'src="assets/voice%s"></audio></body>'
+            % (comp_meta["duration_s"], audio_p.suffix),
+            1)
 
-    # the storyboard is the source of truth: keep it, drop the PNG frames
-    (out_dir / "storyboard.json").write_text(
-        json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8")
-    shutil.rmtree(frames_dir, ignore_errors=True)
+    out_dir = ensure_directory("video", slug)
+    out_path = out_dir / f"{slug}.{format}"
+    try:
+        blob, headers = render_client.submit_render(
+            comp_html, assets=assets, fps=fps, quality=RENDER_QUALITY,
+            format=format, job_id=scoped)
+    except render_client.RenderPlaneError as exc:
+        raise RuntimeError(f"render plane unavailable: {exc}") from exc
+    out_path.write_bytes(blob)
+
+    total_frames = int(round(comp_meta["duration_s"] * fps))
+    engine = headers.get("x-engine") or RENDER_ENGINE
 
     probed_s = _ffprobe_seconds(out_path)
     duration_ms = int(probed_s * 1000) if probed_s else None
@@ -451,7 +464,7 @@ def compose_storyboard(
     metadata = {"kind": "video_compose", "duration_ms": duration_ms,
                 "scenes": len(scenes), "fps": fps, "size": size,
                 "frames": total_frames, "voice": bool(audio_p),
-                "generator": "playwright+ffmpeg", "deterministic": True}
+                "generator": engine, "engine": engine, "deterministic": True}
     if bgm is not None:
         metadata["bgm"] = {**_bgm_signature(bgm),
                            "title": bgm.get("title"),
@@ -465,8 +478,8 @@ def compose_storyboard(
         status="rendered", owner=owner,
     )
     record_usage(
-        owner=owner, tool="render_video", provider="local",
-        model="playwright+ffmpeg", units=round(total_frames / fps, 3),
+        owner=owner, tool="render_video", provider="render-plane",
+        model=engine, units=round(total_frames / fps, 3),
         unit_type="second", credential_source="local", asset_id=content_id,
     )
 
@@ -716,7 +729,8 @@ def _render_typed_video(type: str, script: str, inputs: Optional[dict],
 
     # ── 计划键（W1.4）：type+script+inputs+voice_path+bgm 全折入；同输入
     # 直接命中既有资产（跳过补图/TTS/渲染——重放全链免费）
-    target_slug = slug or typed_plan_slug(type, script, inputs, voice_path, bgm)
+    target_slug = slug or typed_plan_slug(
+        type, script, inputs, voice_path, bgm, engine=RENDER_ENGINE)
     replayed = _replay_existing(scoped_asset_slug(target_slug, owner), owner,
                                 format or "mp4")
     if replayed is not None:
@@ -738,24 +752,79 @@ def _render_typed_video(type: str, script: str, inputs: Optional[dict],
     if pending:
         inputs, generated_images = resolve_pending_images(inputs, owner)
 
-    storyboard, meta = build_typed_storyboard(
+    # ── W4.1：type 模式直接产 composition（不再绕 storyboard 转换器）
+    from . import render_client
+    from .typed_scenes import build_typed_composition
+
+    comp_html, meta = build_typed_composition(
         type_id=type, script=script, inputs=inputs,
         voice_path=voice_path, bgm=bgm, owner=owner)
 
-    # TTS 路径：storyboard.voice_path 是 downloads 相对引用（产物可移植）；
-    # compose 的音频存在性检查按 CWD 直读，这里显式给绝对路径
-    voice_for_compose = voice_path
-    if voice_path is None and meta.get("voice_mode") == "tts":
-        voice_for_compose = str(VAAS_ROOT / "downloads" / meta["voice_path"])
+    # 音频：voice_path（外部配音）或 TTS 全轨（downloads 相对 → 绝对）
+    assets: list[tuple[str, bytes]] = []
+    audio_ref = None
+    if meta.get("voice_mode") == "tts" and meta.get("voice_path"):
+        audio_p = VAAS_ROOT / "downloads" / meta["voice_path"]
+        if not audio_p.is_file():
+            raise ValueError(f"tts voice track missing: {audio_p}")
+        audio_ref = "assets/voice" + audio_p.suffix
+        assets.append((audio_ref, audio_p.read_bytes()))
+    elif voice_path:
+        audio_p = _resolve_input_file(voice_path)
+        if not audio_p.is_file():
+            raise ValueError(f"voice file missing: {voice_path}")
+        audio_ref = "assets/voice" + audio_p.suffix
+        assets.append((audio_ref, audio_p.read_bytes()))
 
     bgm_spec = resolve_bgm(bgm, owner)
-    result = compose_storyboard(
-        storyboard=storyboard, slug=target_slug, format=format or "mp4",
-        voice_path=voice_for_compose, fps=fps or FPS_DEFAULT, bgm=bgm_spec,
-        extra_metadata={"typed": {**meta,
-                                  "generated_images": generated_images or None}},
-    )
-    result["type"] = type
+    if bgm_spec is not None:
+        bgm_file = Path(bgm_spec["file"])
+        bgm_ref = "assets/bgm" + bgm_file.suffix
+        assets.append((bgm_ref, bgm_file.read_bytes()))
+
+    out_dir = ensure_directory("video", target_slug)
+    out_path = out_dir / f"{target_slug}.{(format or 'mp4')}"
+    try:
+        blob, headers = render_client.submit_render(
+            comp_html, assets=assets, fps=fps or FPS_DEFAULT,
+            quality=RENDER_QUALITY, format=format or "mp4", job_id=target_slug)
+    except render_client.RenderPlaneError as exc:
+        raise RuntimeError(f"render plane unavailable: {exc}") from exc
+    out_path.write_bytes(blob)
+
+    engine = headers.get("x-engine") or RENDER_ENGINE
+    probed_s = _ffprobe_seconds(out_path)
+    duration_ms = int(probed_s * 1000) if probed_s else None
+    rel_path = get_relative_path("video", target_slug, out_path.name)
+    content_id = generate_id()
+    insert_content(
+        id=content_id, type="video", slug=scoped_asset_slug(target_slug, owner),
+        file_path=rel_path,
+        metadata={**{"kind": "typed_video", "type": type, "engine": engine,
+                     "generator": engine, "duration_ms": duration_ms,
+                     "size": meta.get("size"), "fps": fps or FPS_DEFAULT,
+                     "deterministic": True},
+                  **({"bgm": {**_bgm_signature(bgm_spec),
+                              "title": bgm_spec.get("title"),
+                              "license": bgm_spec.get("license"),
+                              "attribution": bgm_spec.get("attribution")}}
+                     if bgm_spec is not None else {}),
+                  "typed": {**meta,
+                            "generated_images": generated_images or None}},
+        status="rendered", owner=owner)
+    record_usage(
+        owner=owner, tool="render_video", provider="render-plane", model=engine,
+        units=round(meta.get("scene_seconds") or 0.0, 3),
+        unit_type="second", credential_source="local", asset_id=content_id)
+
+    result = {"id": content_id, "slug": scoped_asset_slug(target_slug, owner),
+              "file_path": rel_path, "duration_ms": duration_ms,
+              "scenes": len(meta.get("segments") or []),
+              "format": format or "mp4", "type": type, "engine": engine}
+    if is_hosted():
+        url = download_url(content_id, owner)
+        if url:
+            result["download_url"] = url
     return result
 
 

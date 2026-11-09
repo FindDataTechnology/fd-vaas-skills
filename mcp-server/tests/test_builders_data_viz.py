@@ -1,6 +1,7 @@
 """
 data-viz builder 测试（add-typed-video-html-renderer W2.3）。
 
+
 覆盖:
   - validate_inputs 结构数对照（1 hook + N 图表段 + 1 cta == data.charts 数，
     一次列全）与 data 形状校验（type/values/series/labels 长度、pie 非负非全零）
@@ -28,6 +29,18 @@ import sys
 from pathlib import Path
 
 import pytest
+def _render_plane_available() -> bool:
+    """渲染面可达性（W4 起真实出片必须经渲染面）。"""
+    import os, socket
+    from urllib.parse import urlparse
+    url = os.getenv("VAAS_RENDER_URL", "http://127.0.0.1:8099")
+    u = urlparse(url)
+    try:
+        with socket.create_connection((u.hostname or "127.0.0.1", u.port or 80), 1):
+            return True
+    except OSError:
+        return False
+
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -513,6 +526,8 @@ def _framemd5_hashes(path: Path) -> list:
             if line.startswith("0,") and not line.startswith("#")]
 
 
+@pytest.mark.real_render
+@pytest.mark.skipif(not _render_plane_available(), reason="渲染面不可达（VAAS_RENDER_URL），真实出片冒烟跳过")
 @pytest.mark.skipif(not _chromium_available(), reason="chromium unavailable "
                     "(data-viz real-render smoke needs real playwright+chromium)")
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg unavailable "

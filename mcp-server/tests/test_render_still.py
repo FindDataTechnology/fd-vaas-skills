@@ -341,10 +341,12 @@ class TestChartFeedsKenburns:
         }
         video = render_mod.compose_storyboard(storyboard, slug="vid-kb")
 
-        assert video["scenes"] == 1 and video["frames"] == 2
-        # kenburns 场景把 chart 产物按 data URI 内联（路径 + 字节对齐）
+        assert video["scenes"] == 1
+        # W4：kenburns 把 chart 产物 data: URI 内联进**提交给渲染面的 composition**
+        from mcp_server.tools import render_client as rc_mod
+        submitted = rc_mod.submit_render.last["html"]
         inlined = base64.b64encode(chart_png).decode("ascii")
-        assert inlined in frame_calls[0]["html"]
+        assert inlined in submitted
         assert chart_abs.read_bytes() == chart_png
 
 

@@ -31,6 +31,18 @@ import zlib
 from pathlib import Path
 
 import pytest
+def _render_plane_available() -> bool:
+    """渲染面可达性（W4 起真实出片必须经渲染面）。"""
+    import os, socket
+    from urllib.parse import urlparse
+    url = os.getenv("VAAS_RENDER_URL", "http://127.0.0.1:8099")
+    u = urlparse(url)
+    try:
+        with socket.create_connection((u.hostname or "127.0.0.1", u.port or 80), 1):
+            return True
+    except OSError:
+        return False
+
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -148,6 +160,8 @@ def _double_run(fn, slug_a, slug_b):
 
 @pytest.mark.skipif(not _chromium_available(), reason="chromium unavailable "
                     "(W6.2 determinism regression needs real playwright+chromium)")
+@pytest.mark.real_render
+@pytest.mark.skipif(not _render_plane_available(), reason="渲染面不可达（VAAS_RENDER_URL），确定性双跑跳过")
 class TestDeterministicDoubleRun:
     """同输入、不同 slug 双跑 → 产物字节一致（重渲染确定性）。"""
 

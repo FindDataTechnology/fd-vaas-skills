@@ -1,6 +1,7 @@
 """
 listicle builder 测试（add-typed-video-html-renderer W2.1 card 族）。
 
+
 覆盖:
   - validate_inputs：结构数对照（1 hook + N 条目 + 1 cta == items 数，一次
     列全对照面）、items 形状（rank 整数/整数字符串、title/desc 非空、image
@@ -28,6 +29,18 @@ import sys
 from pathlib import Path
 
 import pytest
+def _render_plane_available() -> bool:
+    """渲染面可达性（W4 起真实出片必须经渲染面）。"""
+    import os, socket
+    from urllib.parse import urlparse
+    url = os.getenv("VAAS_RENDER_URL", "http://127.0.0.1:8099")
+    u = urlparse(url)
+    try:
+        with socket.create_connection((u.hostname or "127.0.0.1", u.port or 80), 1):
+            return True
+    except OSError:
+        return False
+
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -345,6 +358,8 @@ def _chromium_available() -> bool:
         return False
 
 
+@pytest.mark.real_render
+@pytest.mark.skipif(not _render_plane_available(), reason="渲染面不可达（VAAS_RENDER_URL），真实出片冒烟跳过")
 @pytest.mark.skipif(not _chromium_available(), reason="chromium unavailable "
                     "(listicle smoke probe: needs playwright + chromium)")
 class TestListicleRenderSmoke:

@@ -467,6 +467,7 @@ class _Plane:
         self.server.server_close()
 
 
+@pytest.mark.real_render  # 自带假 HTTP 服务，不走 autouse 打桩
 class TestRenderClient:
     def test_uploads_assets_then_renders(self):
         with _Plane() as plane:

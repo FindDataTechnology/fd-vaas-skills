@@ -135,7 +135,8 @@ def _gate_type(type_id: str) -> dict:
 # ─── 计划键（W1.4） ────────────────────────────────────────────────────────
 
 def typed_plan_slug(type_id: str, script: str, inputs: Optional[dict],
-                    voice_path: Optional[str], bgm: Optional[dict]) -> str:
+                    voice_path: Optional[str], bgm: Optional[dict],
+                    engine: Optional[str] = None) -> str:
     """type 模式计划哈希：type+script+inputs+voice_path+bgm 全折入。
 
     同输入 → 同 slug → compose 的计划级重放键命中（scoped slug 纪律），
@@ -144,7 +145,9 @@ def typed_plan_slug(type_id: str, script: str, inputs: Optional[dict],
     """
     plan = json.dumps(
         {"mode": "typed", "type": type_id, "script": script,
-         "inputs": inputs, "voice_path": voice_path, "bgm": bgm},
+         "inputs": inputs, "voice_path": voice_path, "bgm": bgm,
+         # W4.2：引擎版本折入计划键——升级即失效旧重放，避免旧帧冒充新引擎产物
+         "engine": engine},
         ensure_ascii=False, sort_keys=True, default=str)
     return f"typed-{hashlib.sha256(plan.encode()).hexdigest()[:12]}"
 
