@@ -23,25 +23,35 @@ from ..utils import DOWNLOADS_DIR, VAAS_ROOT  # noqa: F401  (解析器信任面�
 from ._scene_guard import find_external_refs
 from .composition import build_composition_html
 from .typed_scenes.theme import load_theme
+from .typed_scenes.builders._stage import BASE_BG as _BASE_BG, FURNITURE_HTML
 
 _FONT_STACK = ("'PingFang SC','Noto Sans CJK SC','Source Han Sans SC',"
                "'Microsoft YaHei',sans-serif")
 
-_CARD_CSS = """
-.sb-clip{position:absolute;inset:0;background:linear-gradient(160deg,
-  var(--vaas-bg) 0%,var(--vaas-bg1) 55%,var(--vaas-surface) 130%)}
-.sb-wrap{position:absolute;inset:0;display:flex;flex-direction:column;
-  justify-content:center;padding:0 12%;opacity:0}
-.sb-title{font-size:76px;line-height:1.28;font-weight:800;color:var(--vaas-text);
-  letter-spacing:2px}
-.sb-sub{margin-top:34px;font-size:38px;line-height:1.5;color:var(--vaas-muted)}
-.sb-frame{position:absolute;top:-4%;left:-4%;width:108%;height:108%;
-  object-fit:cover}
-.sb-cap{position:absolute;left:6%;bottom:6%;color:var(--vaas-text);
-  font-size:42px;line-height:1.4;font-weight:700;opacity:0;
-  text-shadow:0 2px 14px rgba(0,0,0,.65)}
-.sb-frag{position:absolute;inset:0}
-"""
+_CARD_CSS = (
+    "/* 底(0) < 品牌家具(1) < 内容(2)：家具先于不透明底座进 DOM，必须显式抬层，" "\n"
+    "   否则被整块盖住（四族 type 模式已踩过，storyboard 同步） */" "\n"
+    ".sb-clip{position:absolute;inset:0;z-index:0;background:" + _BASE_BG + "}"
+    ".sb-wrap{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;" "\n"
+    "  justify-content:center;padding:0 9vmin;opacity:0}" "\n"
+    ".sb-title{font-size:7.6vmin;line-height:1.28;font-weight:800;" "\n"
+    "  color:var(--vaas-text);letter-spacing:0.2vmin}" "\n"
+    ".sb-sub{margin-top:3vmin;font-size:3.8vmin;line-height:1.5;color:var(--vaas-muted)}" "\n"
+    ".furn-side{position:absolute;z-index:1;left:0;top:0;bottom:0;width:1.4vmin;" "\n"
+    "  background:linear-gradient(180deg,var(--vaas-accent) 0%," "\n"
+    "  color-mix(in srgb,var(--vaas-accent) 35%,transparent) 60%,transparent 100%)}" "\n"
+    ".furn-band{position:absolute;z-index:1;left:0;right:0;bottom:0;height:11vmin;" "\n"
+    "  background:linear-gradient(0deg," "\n"
+    "  color-mix(in srgb,var(--vaas-accent) 20%,transparent) 0%,transparent 100%)}" "\n"
+    ".furn-mark{position:absolute;z-index:1;left:9vmin;bottom:3.4vmin;" "\n"
+    "  font-size:2.6vmin;letter-spacing:0.8vmin;color:var(--vaas-muted)}" "\n"
+    ".sb-frame{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}" "\n"
+    ".sb-cap{position:absolute;z-index:2;left:6vmin;right:6vmin;bottom:8vmin;" "\n"
+    "  color:var(--vaas-text);font-size:4.2vmin;line-height:1.4;font-weight:700;" "\n"
+    "  opacity:0;text-shadow:0 0.2vmin 1.4vmin rgba(0,0,0,.65)}" "\n"
+    ".sb-frag{position:absolute;inset:0;z-index:2}" "\n"
+)
+
 
 _MOTION = {
     "pan_down": ("translate(0,'+(-rel*6)+'%) scale('+(1+rel*0.04)+')'"),
@@ -56,7 +66,8 @@ def _esc(s: str) -> str:
 
 def _card_clip(root: str, title: str, sub: str,
                caller_css: str = "") -> tuple[str, str]:
-    body = (f'<div class="sb-clip"><div class="sb-wrap" id="{root}-w">'
+    body = (FURNITURE_HTML +
+            f'<div class="sb-clip"><div class="sb-wrap" id="{root}-w">'
             f'<div class="sb-title">{_esc(title)}</div>'
             f'<div class="sb-sub">{_esc(sub)}</div></div></div>')
     if caller_css:
@@ -90,7 +101,8 @@ def _kenburns_clip(root: str, scene: dict) -> tuple[str, str]:
         + ("" if i == 0 else ' style="display:none"') + ">"
         for i, s in enumerate(srcs))
     cap = scene.get("caption") or ""
-    body = (f'<div class="sb-clip">{tags}'
+    body = (FURNITURE_HTML +
+            f'<div class="sb-clip">{tags}'
             f'<div class="sb-cap" id="{root}-cap">{_esc(cap)}</div></div>')
     motion = scene.get("motion", "pan_down")
     transform = _MOTION.get(motion, _MOTION["pan_down"])
@@ -118,7 +130,8 @@ def _fragment_clip(scene: dict) -> tuple[str, Optional[str]]:
     html = scene.get("html") or ""
     if not html.strip():
         raise ValueError("html_full scene needs scene.html inline content")
-    return f"<style>{_CARD_CSS}</style><div class=\"sb-frag\">{html}</div>", None
+    return (f"<style>{_CARD_CSS}</style>" + FURNITURE_HTML
+            + f'<div class="sb-frag">{html}</div>'), None
 
 
 def storyboard_to_composition(storyboard: dict, fps: int = 30,
