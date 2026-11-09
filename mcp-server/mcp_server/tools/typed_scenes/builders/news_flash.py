@@ -172,7 +172,7 @@ window.seek(0);
 
 # 片段根定位（同页多卡共存，seek_js 按唯一 id 找本卡，互不串台）
 _CLIP_V2_CSS = (
-    ".nf-clip{position:absolute;inset:0}"
+    ".nf-clip{position:absolute;inset:0;isolation:isolate}"
     # 句级字幕：同段多句绝对叠放（只切 opacity/可见性，无回流抖动）。
     # 注意不要在这里给 .subband 加 position —— 各卡的 _POINT_CSS 已把它
     # 绝对定位到画面底部；此处再写 relative 会覆盖成文档流，导致字幕与

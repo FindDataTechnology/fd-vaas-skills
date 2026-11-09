@@ -126,6 +126,7 @@ _CLIP_CSS = (
     "word-break:keep-all}"
     ".kq-progress{position:absolute;z-index:3;left:0;right:0;bottom:0;"
     "height:0.8vmin;background:var(--vaas-surface2)}"
+    ".kq-clip{position:absolute;inset:0;isolation:isolate}"
     ".kq-bar{height:100%;width:0;background:var(--vaas-accent)}"
 )
 
@@ -277,6 +278,7 @@ class KineticQuoteBuilder(AbstractBuilder):
         """
         return (
             "<style>" + _CLIP_CSS + "</style>"
+            '<div class="kq-clip">'
             '<div class="kq-bg"></div>'
             '<div class="kq-kicker">金句</div>'
             + FURNITURE_HTML + quote_html() + "\n"
@@ -286,6 +288,7 @@ class KineticQuoteBuilder(AbstractBuilder):
             + "</div></div>"
             '<div class="kq-progress"><div class="kq-bar" '
             f'id="hf-kq-bar{index}"></div></div>'
+            "</div>"
         )
 
     def _sentence_seek_js(self, index: int, clip_start: float,

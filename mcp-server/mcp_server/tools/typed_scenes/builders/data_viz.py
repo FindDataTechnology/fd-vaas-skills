@@ -321,7 +321,7 @@ class DataVizBuilder(AbstractBuilder):
 # ══════════════════════════════════════════════════════════════════════════
 
 _DV_V2_CSS = """
-.dv-clip{position:absolute;inset:0}
+.dv-clip{position:absolute;inset:0;isolation:isolate}
 /* 底(0) < 品牌家具(1) < 内容(2)：家具在 DOM 里先于不透明底座，须显式抬层
    （与 news-flash / listicle / kinetic 同一条，实测不抬层家具被整块盖住） */
 .dv-bg{position:absolute;inset:0;z-index:0;
