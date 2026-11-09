@@ -37,7 +37,8 @@
 ## pipeline
 
 ```
-tts → fix-tts-timings → scene-align → validate-items → preflight → render
+generate_voice（配音+captions）→ render_video(type="listicle", script, inputs)
+         （结构校验前置：items 数 == 条目段数，不符即红、零部分产物）
 ```
 
 `validate-items` 校验条目数 = 口播条目段数，不符才渲染；把条目配图拷进 public/，注入 `props.itemImages`。
@@ -46,12 +47,12 @@ tts → fix-tts-timings → scene-align → validate-items → preflight → ren
 
 ```bash
 cd <VAAS 根目录>
-node .agents/skills/fd-vaas-video-creator/scripts/new-task.mjs \
-  --slug listicle-demo --type listicle \
-  --script .agents/skills/fd-vaas-video-creator/types/listicle/example/script.txt \
-  --items .agents/skills/fd-vaas-video-creator/types/listicle/example/items.json
-
-node .agents/skills/fd-vaas-video-creator/scripts/task-render.mjs --slug listicle-demo
+# MCP 工具面调用（托管端点或本地 stdio）
+#   render_video(
+#     type="listicle",
+#     script=<types/listicle/example/script.txt 内容>,
+#     inputs={"items": <types/listicle/example/items.json 内容>},
+#     slug="listicle-demo")
 ```
 
 ## 设计要点

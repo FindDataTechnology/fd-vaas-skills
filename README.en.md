@@ -238,7 +238,6 @@ hosted instance. To run your own, see `deploy/README.md` → "Render Plane": the
 through the standard channel (`law-ai-official/vaas-mcp-images`, `target=vaas-render-plane`) and
 runs on a no-egress bridge with `/healthz` `doctor.checks` all green.
 
-> `fd-vaas-video-creator` needs `@remotion/captions` and a `VoiceoverVideo` composition - one-time setup in `.agents/skills/fd-vaas-video-creator/references/setup.md`.
 
 ### 4. Claude Code skills
 

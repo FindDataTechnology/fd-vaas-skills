@@ -33,7 +33,8 @@
 ## pipeline
 
 ```
-tts -> fix-tts-timings -> scene-align -> validate-structure -> preflight -> render
+generate_voice（配音+captions）-> render_video(type="news-flash", script, inputs)
+           （结构校验前置：要点段数 == inputs.meta.points 数，不符即红、零部分产物）
 ```
 
 `validate-structure` 读 meta.json + scenes.json，校验 `pointsScenes.length === meta.points.length`；不一致时打印对照表并退出，避免渲染出错位卡片。
@@ -42,12 +43,12 @@ tts -> fix-tts-timings -> scene-align -> validate-structure -> preflight -> rend
 
 ```bash
 cd <VAAS 根目录>
-node .agents/skills/fd-vaas-video-creator/scripts/new-task.mjs \
-  --slug news-flash-demo --type news-flash \
-  --script .agents/skills/fd-vaas-video-creator/types/news-flash/example/script.txt \
-  --meta .agents/skills/fd-vaas-video-creator/types/news-flash/example/meta.json
-
-node .agents/skills/fd-vaas-video-creator/scripts/task-render.mjs --slug news-flash-demo
+# MCP 工具面调用（托管端点或本地 stdio）
+#   render_video(
+#     type="news-flash",
+#     script=<types/news-flash/example/script.txt 内容>,
+#     inputs={"meta": <types/news-flash/example/meta.json 内容>},
+#     slug="news-flash-demo")
 ```
 
 ## 设计要点

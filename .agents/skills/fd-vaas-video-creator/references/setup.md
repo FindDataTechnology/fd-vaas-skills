@@ -1,5 +1,10 @@
 # 首次设置(一次性)
 
+> ⚠️ **已随 Remotion 退役（2026-11-09）**：`remotion-app/` 已删除，本文的一次性设置
+> （`@remotion/captions` 安装、`VoiceoverVideo` 注册）不再需要。当前出片走托管
+> `render_video`（独立渲染面），无需任何本地渲染依赖；自建渲染面见 `deploy/README.md`。
+
+
 本 Skill 需要装一个 Remotion 包(`@remotion/captions`),并把一个参数化合成组件装进 `remotion-app`。完成一次即可。
 
 ## 判断是否已设置

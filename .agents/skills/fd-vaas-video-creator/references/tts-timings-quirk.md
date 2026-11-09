@@ -1,5 +1,13 @@
 # TTS 时间戳注意事项 · seed-tts-2.0
 
+> ⚠️ **已随 Remotion 退役（2026-11-09）**：本文描述的本地 node 管线
+> （`new-task.mjs` / `task-render.mjs` / `fix-tts-timings`）已删除。当前口径：
+> 生成走托管 MCP 面（`generate_voice` / `render_video` / `render_still` / `render_document`），
+> 产物落 `downloads/<kind>/<slug>/`；字幕随 `captions.json` 返回，`captions_source`
+> = `official`（volcengine 直连官方戳）| `synthetic`（ciyuan 档出口层段级合成）。
+> 本文仅作历史参考。
+
+
 ## 结论先给
 
 **豆包 seed-tts-2.0 返回的 `sentence.words[]` 里,英文/字母/域名 token 的 `endTime` 是假的**,只标 30–45ms,但实际读音要 2–3 秒。中文汉字的 per-char 时间戳准。

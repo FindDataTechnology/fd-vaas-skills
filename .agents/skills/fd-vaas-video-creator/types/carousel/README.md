@@ -30,7 +30,8 @@
 ## pipeline
 
 ```
-generate-images -> tts -> fix-tts-timings -> scene-align -> preflight -> render
+generate_voice（配音+captions）-> render_video(type="carousel", script, inputs)
+         （图片由 path 相对 downloads/ 解析；结构校验前置：轮播张数 == 图片段数）
 ```
 
 `generate-images` 解析清单 → 本地图拷到 `public/`，seedream 项落盘后拷入 → 注入 `props.images`（public 文件名数组）；并打印补图清单（本地/生成）供确认。
@@ -39,13 +40,13 @@ generate-images -> tts -> fix-tts-timings -> scene-align -> preflight -> render
 
 ```bash
 cd <VAAS 根目录>
-node .agents/skills/fd-vaas-video-creator/scripts/new-task.mjs \
-  --slug carousel-demo --type carousel \
-  --script .agents/skills/fd-vaas-video-creator/types/carousel/example/script.txt \
-  --images .agents/skills/fd-vaas-video-creator/types/carousel/example/images.json
-
-node .agents/skills/fd-vaas-video-creator/scripts/task-render.mjs --slug carousel-demo
-# -> downloads/fd-videos/carousel-demo/carousel-demo.mp4
+# MCP 工具面调用（托管端点或本地 stdio）
+#   render_video(
+#     type="carousel",
+#     script=<types/carousel/example/script.txt 内容>,
+#     inputs={"images": <types/carousel/example/images.json 内容>},
+#     slug="carousel-demo")
+# -> downloads/video/carousel-demo/carousel-demo.mp4
 ```
 
 `example/` 含 3 张示例图（img-1/2/3.png，ffmpeg 生成的纯色卡）+ script.txt（3 段 `##`）+ images.json。短音频用例：`script-short.txt` + `images-short.json`。

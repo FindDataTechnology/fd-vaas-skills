@@ -105,23 +105,8 @@ echo ""
 # ---------- 2. 项目初始化 ----------
 echo "── 2/5 项目初始化 ─────────────────────────"
 
-if [ -d "remotion-app/node_modules" ]; then
-    ok "remotion-app 依赖已安装（跳过 npm install）"
-else
-    echo "📦 安装 remotion-app 依赖（首次约 1-2 分钟）..."
-    if npm install --prefix remotion-app; then
-        ok "remotion-app 依赖安装完成"
-    else
-        warn "npm install 失败，请手动执行: cd $ROOT/remotion-app && npm install"
-    fi
-fi
-
-# VoiceoverVideo 合成注册检查
-if grep -q 'id="VoiceoverVideo"' remotion-app/src/Composition.tsx 2>/dev/null; then
-    ok "VoiceoverVideo 合成已注册"
-else
-    warn "VoiceoverVideo 合成未注册，请按 .agents/skills/fd-vaas-video-creator/references/setup.md 完成一次性设置"
-fi
+# 本地渲染依赖：Remotion 已退役（2026-11-09），出片走托管渲染面，此处无需安装任何渲染依赖。
+# 自建渲染面见 deploy/README.md「渲染面（Render Plane）」。
 
 # .env 初始化
 if [ ! -f ".env" ]; then

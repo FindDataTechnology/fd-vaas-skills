@@ -3,6 +3,10 @@ import path from "path";
 import { spawnSync } from "child_process";
 
 /**
+ * ⚠️ 已随 Remotion 退役（2026-11-09）：类型管线已迁 Python
+ * （mcp-server/mcp_server/tools/typed_scenes/builders/carousel.py），本文件不再被任何
+ * 调用方加载，保留仅作历史参考。图片解析现由 builder 侧按 downloads/ 相对路径完成。
+ *
  * carousel 自定义 pipeline 步骤：generate-images
  *
  * 读 task.inputs.images（images.json 清单），把每一项解析为本地文件或 seedream 生成图，

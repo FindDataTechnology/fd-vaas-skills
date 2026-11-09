@@ -24,7 +24,8 @@
 ## pipeline
 
 ```
-tts -> fix-tts-timings -> scene-align -> extract-keywords -> preflight -> render
+generate_voice（配音+captions）-> render_video(type="kinetic-quote", script, inputs)
+           （关键词提取在 builder 内完成；结构校验前置）
 ```
 
 `extract-keywords` 读 script.txt 的 `**词**` 标记 + scenes.json，写 `<slug>-keywords.json`，注入 `props.keywordsSrc`。
@@ -33,11 +34,11 @@ tts -> fix-tts-timings -> scene-align -> extract-keywords -> preflight -> render
 
 ```bash
 cd <VAAS 根目录>
-node .agents/skills/fd-vaas-video-creator/scripts/new-task.mjs \
-  --slug kinetic-demo --type kinetic-quote \
-  --script .agents/skills/fd-vaas-video-creator/types/kinetic-quote/example/script.txt
-
-node .agents/skills/fd-vaas-video-creator/scripts/task-render.mjs --slug kinetic-demo
+# MCP 工具面调用（托管端点或本地 stdio）
+#   render_video(
+#     type="kinetic-quote",
+#     script=<types/kinetic-quote/example/script.txt 内容>,
+#     slug="kinetic-demo")
 ```
 
 ## 设计要点

@@ -1,5 +1,13 @@
 # Task 目录约定
 
+> ⚠️ **已随 Remotion 退役（2026-11-09）**：本文描述的本地 node 管线
+> （`new-task.mjs` / `task-render.mjs` / `fix-tts-timings`）已删除。当前口径：
+> 生成走托管 MCP 面（`generate_voice` / `render_video` / `render_still` / `render_document`），
+> 产物落 `downloads/<kind>/<slug>/`；字幕随 `captions.json` 返回，`captions_source`
+> = `official`（volcengine 直连官方戳）| `synthetic`（ciyuan 档出口层段级合成）。
+> 本文仅作历史参考。
+
+
 **每支视频 = 一个 `downloads/fd-videos/<slug>/` 目录。** 素材、字幕、成片、manifest 都在同一处,后续任何 agent / 人类都能凭 slug 找到全部信息。禁止把 mp4 散落在 `downloads/fd-videos/` 根目录里。
 
 ## 目录结构

@@ -10,7 +10,7 @@ description: >
   voiceover_assemble 配音链与 bgm 混流。
   触发场景:用户要做视频 / 出片 / 写分镜 / storyboard、问"用什么视频形态"、要把数据做成视频、
   要自制开场片尾画面、要给视频配配音 / 加 BGM,或问 render_video / render_still 怎么传参。
-compatibility: VAAS MCP 工具面(render_video / render_still / generate_voice / voiceover_assemble / models_voices / templates_list / templates_get);chromium+ffmpeg 渲染(本地与托管同一 HTML 场景底座);ECharts 品牌主题(echarts-theme,源自 remotion-app theme.ts)。
+compatibility: VAAS MCP 工具面(render_video / render_still / generate_voice / voiceover_assemble / models_voices / templates_list / templates_get);chromium+ffmpeg 渲染(本地与托管同一 HTML 场景底座);ECharts 品牌主题(echarts-theme.json,由 `scripts/gen-echarts-theme.mjs` 从 `brand/theme.ts` 生成——Remotion 退役后品牌令牌已迁 `brand/`)。
 ---
 
 # FD VAAS Storyboard——展示层创作手册
@@ -125,7 +125,7 @@ render_still(kind="chart", spec={
 要点:
 
 - `file_path` 相对 `downloads/`,**绝对路径 = `<VAAS_ROOT>/downloads/<file_path>`**——喂给 kenburns `images` 时用绝对路径。
-- **品牌主题自动注入**(echarts-theme 注册,源自 remotion-app theme.ts):option 里显式指定的颜色优先,未指定的槽位取品牌色板——所以通常**不用**自己配色。
+- **品牌主题自动注入**(echarts-theme 注册,真源 `brand/theme.ts` → `scripts/gen-echarts-theme.mjs` → `mcp-server/mcp_server/templates/echarts/echarts-theme.json`):option 里显式指定的颜色优先,未指定的槽位取品牌色板——所以通常**不用**自己配色。改品牌色后重跑生成器即可,无需重启进程。
 - 静帧强制 `animation:false`(确定性);`size` 默认 1280x720 横版,**竖屏视频记得传 `{width:1080,height:1920}`**,否则图在竖屏画幅里留黑边。
 - slug 缺省按 spec 规范化哈希派生,同一 spec 幂等重放。
 
