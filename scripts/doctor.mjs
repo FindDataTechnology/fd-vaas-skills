@@ -58,7 +58,18 @@ const SKILL_LINKS = [
 ];
 
 // 平台感知的 Python 启动器（Windows 惯例 py/python，POSIX python3）
-const pyCmd = IS_WIN ? (which("py") ? "py" : "python") : "python3";
+// 解释器解析顺序：VAAS_PYTHON 显式指定 > 仓内 .venv > 系统 python3。
+// 背景：系统 python 被 homebrew 升到新 major 后依赖全空（doctor 与 ci-local
+// 同时误判「核心管线不可用」），项目 venv 才是稳定口径。
+function resolvePy() {
+  if (process.env.VAAS_PYTHON) return process.env.VAAS_PYTHON;
+  const venv = process.platform === "win32"
+    ? path.join(VAAS, ".venv", "Scripts", "python.exe")
+    : path.join(VAAS, ".venv", "bin", "python");
+  if (fs.existsSync(venv)) return venv;
+  return IS_WIN ? (which("py") ? "py" : "python") : "python3";
+}
+const pyCmd = resolvePy();
 
 const CHECKS = [
   {
@@ -129,10 +140,21 @@ const CHECKS = [
     fix: "编辑 .env 填入 vol_agent_api_key（https://console.volcengine.com/ark）；TTS/图像/视频生成都需要",
   },
   {
-    name: "remotion-app 依赖（node_modules）",
-    level: "error",
-    check: () => fs.existsSync(path.join(VAAS, "remotion-app/node_modules")),
-    fix: "npm install --prefix remotion-app",
+    // Remotion 已彻底退役（2026-11-09 adopt-hyperframes W6.5）：本地渲染改走
+    // hyperframes 渲染面/chromium，不再要求 remotion-app 依赖。
+    name: "渲染底座（chromium）",
+    level: "warn",
+    check: () => {
+      const candidates = [
+        "/usr/bin/chromium", "/usr/bin/chromium-browser",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      ];
+      if (candidates.some((p) => fs.existsSync(p))) return true;
+      try { execSync("chromium --version || chromium-browser --version", { stdio: "pipe" }); return true; } catch {}
+      return which("chromium") || which("google-chrome") || which("chrome");
+    },
+    fix: "装 chromium/Chrome（托管镜像内已自带 /usr/bin/chromium；本机出片 render_video/render_still 需要）",
   },
   {
     name: "mcp-server 平面（stdio 工具面）",
@@ -172,13 +194,17 @@ const CHECKS = [
     fix: "重跑 ./install.sh（自动生成模板）或手写指向 python3 -m mcp_server.main",
   },
   {
-    name: "VoiceoverVideo 合成已注册",
-    level: "error",
+    // 原「VoiceoverVideo 合成已注册」检查随 Remotion 退役失效：本地 node 渲染
+    // 管线已下线，成片统一走 render_video（hyperframes 渲染面/托管 HTML）。
+    name: "视频类型契约完整（types/*/type.json）",
+    level: "warn",
     check: () => {
-      const p = path.join(VAAS, "remotion-app/src/Composition.tsx");
-      return fs.existsSync(p) && fs.readFileSync(p, "utf8").includes('id="VoiceoverVideo"');
+      const dir = path.join(VAAS, ".agents/skills/fd-vaas-video-creator/types");
+      if (!fs.existsSync(dir)) return false;
+      const types = fs.readdirSync(dir).filter((d) => fs.existsSync(path.join(dir, d, "type.json")));
+      return types.length >= 5 ? `${types.length} 个类型` : false;
     },
-    fix: "按 .agents/skills/fd-vaas-video-creator/references/setup.md 完成一次性设置",
+    fix: "确认 .agents/skills/fd-vaas-video-creator/types/ 下五类型 type.json 齐全（renderer=hyperframes）",
   },
   {
     name: ".claude/skills 技能链接完整",

@@ -80,3 +80,6 @@ tmp-*.txt
 # 注：该文件当前被 git 追踪（内容=上游占位符），ignore 对已追踪文件不生效，
 # 如需彻底生效须 git rm --cached（本次任务不触碰 git 状态，留给运维批次）。
 .agents/skills/fd-vaas-publish-videos/scripts/upstream/uploader/xhs_uploader/accounts.ini
+
+# editable install 产物（pip install -e mcp-server）
+*.egg-info/
