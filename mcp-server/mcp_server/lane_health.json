@@ -24,8 +24,8 @@
     "image.ciyuan": {
       "health": "down",
       "reason_class": "upstream_blocked",
-      "reason": "组9 唯一上游 acct 40 (openai-next) 被 403 site owner blocked → router 503；解封/换号后实调销账（DEBT-LANE-9-01）",
-      "last_verified": "2026-11-05"
+      "reason": "组9 唯一上游 acct 40 (openai-next) 被 403 site owner blocked → router 503。2026-11-10 直连复验（绕开执行闸、用 vault 池 key 实打 gpt-image-2）：仍 HTTP 200 + 站点 HTML（3648B，非 JSON）→ 软封锁未解除；同期 sub2api usage_logs 显示 acct 40 最近 32 次调用 image_output_size 全为 NULL（11-06 起无成功记录）。解封/换号后实调销账（DEBT-LANE-9-01）",
+      "last_verified": "2026-11-10"
     },
     "image.volcengine": {
       "health": "down",
@@ -36,8 +36,8 @@
     "video.ciyuan": {
       "health": "down",
       "reason_class": "upstream_blocked",
-      "reason": "同 image.ciyuan：组9 acct 40 封禁 → No eligible Seedance accounts（DEBT-LANE-9-01）",
-      "last_verified": "2026-11-05"
+      "reason": "同 image.ciyuan：组9 acct 40 封禁 → No eligible Seedance accounts（DEBT-LANE-9-01）。2026-11-10 直连复验（绕开执行闸、用 vault 池 key 实打 gpt-image-2）：仍 HTTP 200 + 站点 HTML（3648B，非 JSON）→ 软封锁未解除；同期 sub2api usage_logs 显示 acct 40 最近 32 次调用 image_output_size 全为 NULL（11-06 起无成功记录）。解封/换号后实调销账（DEBT-LANE-9-01）",
+      "last_verified": "2026-11-10"
     },
     "video.volcengine": {
       "health": "down",
