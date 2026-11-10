@@ -11,6 +11,7 @@ from typing import Optional
 from ..db import insert_content, generate_id, record_usage, scoped_asset_slug
 from ..hosting import current_owner, is_hosted
 from ..utils import ensure_directory_rel, get_relative_path
+from ..tools.typed_scenes.builders._stage import BASE_BG
 
 log = logging.getLogger("vaas.cover")
 
@@ -25,22 +26,15 @@ _ORIENT_SIZES = {
 # 仍是品牌深色系、不引入新色值。
 
 _COVER_CSS = (
-    # 底色只用品牌变量（linear-gradient 三停），品牌的「亮」由下面两层柔光叠出来：
-    # color-mix 在 still_graphic 的 chromium 里不一定可用，一旦不支持整条声明失效、
-    # 画面反而更黑（实测 YAVG 20.7 → 16.6）。柔光层用 radial-gradient + opacity，
-    # 只依赖 --vaas-accent / --vaas-palette-N（后者带 accent 回退）。
+    # 底色与视频卡片同一份 BASE_BG（builders/_stage.py 单一来源）：双柔光 + 竖向
+    # surface 提亮。此前封面自调一版（先 color-mix 缺变量变透明、后 44% 面积柔光
+    # 只抬 1.4 点），都不如直接复用视频那版——六条视觉路径同底才不会再漂。
     ".cover{position:absolute;inset:0;display:flex;flex-direction:column;"
-    "justify-content:flex-end;padding:8% 7%;overflow:hidden;"
-    "background:linear-gradient(155deg,var(--vaas-bg) 0%,var(--vaas-bg1) 52%,"
-    "var(--vaas-surface) 100%)}"
-    ".glow-a{position:absolute;left:-12%;top:-18%;width:85%;height:62%;"
-    "background:radial-gradient(closest-side,"
-    "var(--vaas-accent),transparent 72%);opacity:.22}"
-    ".glow-b{position:absolute;right:-15%;bottom:-20%;width:75%;height:55%;"
-    "background:radial-gradient(closest-side,"
-    "var(--vaas-palette-2,var(--vaas-accent)),transparent 72%);opacity:.13}"
+    "justify-content:flex-end;padding:8% 7%;overflow:hidden;background:"
+    + BASE_BG + "}"
     ".accent{position:absolute;left:7%;top:9%;width:12%;height:10px;"
-    "border-radius:5px;background:var(--vaas-accent)}"
+    "border-radius:5px;background:linear-gradient(90deg,var(--vaas-accent),"
+    "var(--vaas-palette-2,var(--vaas-accent)))}"
     ".kicker{font-size:28px;letter-spacing:10px;color:var(--vaas-accent);"
     "font-weight:700;margin-bottom:26px}"
     ".title{font-size:74px;line-height:1.22;font-weight:800;color:var(--vaas-text);"
@@ -87,7 +81,7 @@ def _cover_html(title: str, subtitle: Optional[str], tags,
                     + "</div>")
     return (
         f'<style>{_COVER_CSS}</style>'
-        '<div class="cover"><div class="glow-a"></div><div class="glow-b"></div>'
+        '<div class="cover">'
         '<div class="accent"></div>'
         '<div class="kicker">寻数科技</div>'
         f'<div class="title">{_esc(title)}</div>'

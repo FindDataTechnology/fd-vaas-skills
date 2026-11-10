@@ -54,10 +54,16 @@ def test_brand_style_injects_palette_slots():
     assert "--vaas-palette-1:#3fb950" in css
 
 
-def test_cover_css_avoids_color_mix():
-    """封面 CSS 不依赖 color-mix（渲染器不一定支持，失效即整条声明作废）。"""
-    from mcp_server.skills.cover import _COVER_CSS
+def test_cover_css_uses_shared_base_bg():
+    """封面底色必须复用视频卡片的同一份 BASE_BG（单一来源）。
 
-    assert "color-mix" not in _COVER_CSS
-    assert _COVER_CSS.count("glow-") == 2
+    历史两坑：①封面自调 color-mix 底座，而 _brand_style 当时不注入 palette 变量
+    → 整条 background 失效、比原来更黑（YAVG 20.7→16.6）；②改用自造柔光层，
+    44% 面积只抬 1.4 点（23.1→24.5）。复用 BASE_BG 后 23.1→30.5。
+    """
+    from mcp_server.skills.cover import _COVER_CSS
+    from mcp_server.tools.typed_scenes.builders._stage import BASE_BG
+
+    assert BASE_BG in _COVER_CSS, "封面底色须与视频卡片同源"
+    # palette 缺变量会让整条声明失效 → 用色处必须带回退
     assert "var(--vaas-palette-2,var(--vaas-accent))" in _COVER_CSS
