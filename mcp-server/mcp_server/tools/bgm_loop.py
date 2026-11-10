@@ -19,6 +19,10 @@ from typing import Optional
 # 判定「够长」的容差：片长 0.15s 内的差距不值得重编码
 _TOLERANCE_S = 0.15
 
+# MPEG-1 Layer III 的合法最低码率是 32kbps；反推出的码率低于它，说明
+# duration 元数据不可信（见 _probe_seconds 注释里的实测反例）。
+_MP3_MIN_KBPS = 32
+
 
 def _probe_seconds(path: Path) -> Optional[float]:
     r = subprocess.run(
@@ -26,11 +30,52 @@ def _probe_seconds(path: Path) -> Optional[float]:
          "-of", "csv=p=0", str(path)],
         capture_output=True, text=True)
     if r.returncode != 0 or not r.stdout.strip():
-        return None
+        return _duration_from_frames(path)
     try:
-        return float(r.stdout.strip())
+        dur = float(r.stdout.strip())
     except ValueError:
+        return _duration_from_frames(path)
+
+    # 元数据自洽性校验：同一首种子曲（511751B / 15.92s），本地 ffmpeg 的
+    # format=duration 读 15.92s，而 CI 的静态 ffmpeg 构建读成 205.08s
+    # （反推码率 ≈20kbps，44.1kHz 立体声不可能）→ 补长被误判为「曲已够长」
+    # 而跳过，成片尾段静音。duration 一高估，BGM 就会悄悄不补长，所以这里
+    # 不能只信一个字段：反推码率不合理时改数解码帧。
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return dur
+    if dur > 0 and size > 0 and (size * 8 / 1000.0 / dur) < _MP3_MIN_KBPS:
+        alt = _duration_from_frames(path)
+        if alt is not None:
+            return alt
+    return dur
+
+
+def _duration_from_frames(path: Path) -> Optional[float]:
+    """按解码帧数算时长（mp3 每帧 1152/576 采样），比容器元数据可靠。"""
+    r = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a:0", "-count_frames",
+         "-show_entries", "stream=nb_read_frames,sample_rate",
+         "-of", "default=nw=1", str(path)],
+        capture_output=True, text=True)
+    if r.returncode != 0 or not r.stdout.strip():
         return None
+    vals: dict[str, str] = {}
+    for line in r.stdout.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            vals[k.strip()] = v.strip()
+    try:
+        frames = int(vals["nb_read_frames"])
+        rate = int(vals["sample_rate"])
+    except (KeyError, ValueError):
+        return None
+    if frames <= 0 or rate <= 0:
+        return None
+    # MPEG-1（32kHz 及以上）每帧 1152 采样，MPEG-2/2.5 每帧 576
+    spf = 1152 if rate >= 32000 else 576
+    return frames * spf / rate
 
 
 def loop_bgm_to(bgm_path: Path, duration_s: float,
