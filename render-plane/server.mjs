@@ -564,26 +564,25 @@ function runEngine(args, { cwd, env, timeoutMs }) {
 
 function killGroup(pid, sig) {
   if (!pid) return;
-  // ── 诊断日志（只观测，不改语义）────────────────────────────────────────
-  // 背景：DEBT-RENDER-FLAKY-01 —— 20s storyboard 走 API 间歇 500，job 目录里留下
-  // `.hyperframes/running/<pid>` 却没有 `video-state.json`，形态上像子进程被本函数的
-  // 进程组信号误伤（detached:true 时子进程即组长，pgid == pid，故这里打 -pid）。
-  // 目的：拿到「发信号前该进程组是否还在 / 发信号是否报错 / 发完是否已消失」三态，
-  // 用来判定是「正常收尾顺带清组」还是「误杀同类子进程」。
-  // 该日志只写 stdout，不参与任何判定逻辑；确认结论后应删除或降级为 debug 开关。
+  // DEBT-RENDER-FLAKY-01 结论：三次重试的 groupBefore 全为 ESRCH（子进程组在 finish()
+  // 前已消失），本函数未误杀任何存活进程 → 观测日志按承诺降级为默认关闭的开关
+  // （VAAS_RENDER_DEBUG=1 时仍可开启），不再默认写 stdout。
+  const trace = cfg.debug;
   const tgt = -pid;
   const probe = () => {
     try {
-      process.kill(tgt, 0); // 信号 0 = 仅探测存在性
+      process.kill(tgt, 0);
       return "alive";
     } catch (err) {
       return err && err.code ? err.code : "probe-error";
     }
   };
-  const before = probe();
-  console.log(
-    `[killGroup] send sig=${sig} pid=${pid} pgid=${tgt} selfPid=${process.pid} groupBefore=${before}`,
-  );
+  const before = trace ? probe() : null;
+  if (trace) {
+    console.log(
+      `[killGroup] send sig=${sig} pid=${pid} pgid=${tgt} selfPid=${process.pid} groupBefore=${before}`,
+    );
+  }
   let sendErr = "none";
   try {
     process.kill(tgt, sig);
@@ -591,10 +590,11 @@ function killGroup(pid, sig) {
     sendErr = err && err.code ? err.code : "send-error";
     /* ESRCH：进程组已消失（正常收尾的常见情形） */
   }
-  const after = probe();
-  console.log(
-    `[killGroup] done sig=${sig} pid=${pid} pgid=${tgt} groupAfter=${after} sendErr=${sendErr}`,
-  );
+  if (trace) {
+    console.log(
+      `[killGroup] done sig=${sig} pid=${pid} pgid=${tgt} groupAfter=${probe()} sendErr=${sendErr}`,
+    );
+  }
 }
 
 async function placeAssets(jobDir, assetEntries) {
