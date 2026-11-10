@@ -239,8 +239,13 @@ def list_assets(
         conditions.append("stage = ?")
         params.append(stage)
     if owner is not None:
-        conditions.append("owner = ?")
-        params.append(owner)
+        # 可见性必须与 _owner_visible 同口径：本租户的行 + 平台种子曲库
+        # （owner=SERVICE_OWNER 且 type=bgm，全局可用）。此前这里只做严格
+        # `owner = ?`，导致 get_asset 认得的种子曲在 list 里永远查不到——
+        # 技能文档教调用方 `bgm={"asset_id": "<种子曲库 asset_id>"}`，却没有任何
+        # 工具能列出这些 id（对外表现为「种子曲库不可发现」）。
+        conditions.append("(owner = ? OR (owner = ? AND type = 'bgm'))")
+        params.extend([owner, SERVICE_OWNER])
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY created_at DESC LIMIT ?"

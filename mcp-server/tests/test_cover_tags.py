@@ -67,3 +67,43 @@ def test_cover_css_uses_shared_base_bg():
     assert BASE_BG in _COVER_CSS, "封面底色须与视频卡片同源"
     # palette 缺变量会让整条声明失效 → 用色处必须带回退
     assert "var(--vaas-palette-2,var(--vaas-accent))" in _COVER_CSS
+
+
+@pytest.fixture()
+def isolated_db(tmp_path, monkeypatch):
+    """把 DB 指到临时库（与 tests/test_builders_data_viz.py 同款做法）。"""
+    from mcp_server.db import database
+    from mcp_server.db.database import init_schema
+
+    db = tmp_path / "test.db"
+    monkeypatch.setattr(database, "DB_PATH", db)
+    init_schema(db)
+    return db
+
+
+def test_list_assets_sees_seed_bgm_but_not_other_tenants(isolated_db):
+    """list_assets 的可见性必须与 _owner_visible 同口径。
+
+    种子曲库（owner=service, type=bgm）对每个租户可见——技能文档教调用方用
+    `bgm={"asset_id": "<种子曲库 asset_id>"}`，若 list 查不到这些 id，
+    种子曲库就是「不可发现」；其他租户与 service 的其他行仍必须隔离。
+    """
+    from mcp_server.db import models
+
+    models.insert_asset(type="bgm", slug="bgm-seed-a", file_path="a.dat",
+                        owner="service", stage="rendered")
+    models.insert_asset(type="video", slug="svc-video", file_path="v.dat",
+                        owner="service", stage="rendered")
+    models.insert_asset(type="video", slug="alice-video", file_path="x.dat",
+                        owner="alice", stage="rendered")
+    models.insert_asset(type="video", slug="bob-video", file_path="y.dat",
+                        owner="bob", stage="rendered")
+
+    alice = {i["slug"] for i in models.list_assets(owner="alice")}
+    assert "bgm-seed-a" in alice, "平台种子曲库应对租户可见"
+    assert "alice-video" in alice
+    assert "bob-video" not in alice, "他人资产必须隔离"
+    assert "svc-video" not in alice, "service 的非 bgm 行仍不可见"
+
+    bgm = {i["slug"] for i in models.list_assets(type="bgm", owner="alice")}
+    assert bgm == {"bgm-seed-a"}
