@@ -82,7 +82,10 @@ PLATFORM_REGISTRY = {
         "type": "video",
     },
     "kuaishou": {
-        "account_file": _ROOT / ".agents" / "skills" / "fd-vaas-publish-videos" / "scripts" / "upstream" / "cookies" / "kuaishou_creator.json",
+        # 与其它平台同构：cookies/<x>/account.json（2026-11 由 cookies/kuaishou_creator.json 迁入）
+        "account_file": _ROOT / ".agents" / "skills" / "fd-vaas-publish-videos" / "scripts" / "upstream" / "cookies" / "kuaishou_creator" / "account.json",
+        # 显式声明：快手 cookie 目录与其它平台不同构的历史来源，迁移后保持显式
+        "cookie_dir": _ROOT / ".agents" / "skills" / "fd-vaas-publish-videos" / "scripts" / "upstream" / "cookies" / "kuaishou_creator",
         "name": "快手",
         "type": "video",
     },
@@ -221,9 +224,9 @@ def _find_latest_qr(platform: str) -> Path | None:
     没反应，还以为是扫码坏了。这里加上新鲜度闸门，过期的一律不展示。
     """
     cfg = PLATFORM_REGISTRY[platform]
-    if not cfg["account_file"]:
+    cookies_dir = _cookie_dir(cfg)
+    if not cookies_dir:
         return None
-    cookies_dir = cfg["account_file"].parent
     if not cookies_dir.exists():
         return None
     try:
@@ -232,7 +235,7 @@ def _find_latest_qr(platform: str) -> Path | None:
             return None
         latest = max(files, key=lambda p: p.stat().st_mtime)
         age = datetime.now() - datetime.fromtimestamp(latest.stat().st_mtime)
-        if age.total_seconds() > QR_MAX_AGE_SECONDS:
+        if age.total_seconds() > _qr_ttl(platform):
             return None
         return latest
     except Exception:
@@ -242,9 +245,9 @@ def _find_latest_qr(platform: str) -> Path | None:
 def _has_stale_qr(platform: str) -> bool:
     """磁盘上有二维码文件、但已超过有效期 → True。用于告诉用户「旧码已失效，请重新生成」。"""
     cfg = PLATFORM_REGISTRY[platform]
-    if not cfg["account_file"]:
+    cookies_dir = _cookie_dir(cfg)
+    if not cookies_dir:
         return False
-    cookies_dir = cfg["account_file"].parent
     if not cookies_dir.exists():
         return False
     try:
@@ -253,7 +256,7 @@ def _has_stale_qr(platform: str) -> bool:
             return False
         latest = max(files, key=lambda p: p.stat().st_mtime)
         age = (datetime.now() - datetime.fromtimestamp(latest.stat().st_mtime)).total_seconds()
-        return age > QR_MAX_AGE_SECONDS
+        return age > _qr_ttl(platform)
     except Exception:
         return False
 
@@ -528,7 +531,33 @@ def _run_docs_action(platform: str, mode: str) -> int:
 COOKIE_MAX_AGE_DAYS = 30
 # 二维码不是永久有效的：平台侧通常几十秒到几分钟就失效。过期码必须停止展示，
 # 否则用户会一直扫一张死码。
-QR_MAX_AGE_SECONDS = 300
+QR_MAX_AGE_SECONDS = 300  # 默认值；分平台见 QR_TTL_SECONDS
+
+# 各平台二维码真实有效期差异很大（快手/微博是分钟级甚至几十秒）。用单一 300s 会让
+# 页面展示一张已经死掉的码并提示「请扫描」——用户扫了没反应，还以为扫码功能坏了。
+QR_TTL_SECONDS = {"kuaishou": 90, "weibo": 90, "douyin": 120}
+
+
+def _qr_ttl(platform: str) -> int:
+    return QR_TTL_SECONDS.get(platform, QR_MAX_AGE_SECONDS)
+
+
+def _cookie_dir(cfg: dict) -> Path | None:
+    """cookie 目录：优先显式 cookie_dir，其次退回 account_file.parent。
+
+    历史实现完全靠 account_file.parent 隐式推导，快手因此出过问题——它的 cookie 在
+    cookies/kuaishou_creator.json（直接躺在 cookies/ 下），与其它平台的
+    cookies/<p>_uploader/account.json 不同构，二维码落盘层级也跟着不同。
+    显式字段是权威；仍走推导时打一行提示，便于逐个补齐（而不是悄悄依赖推断）。
+    """
+    explicit = cfg.get("cookie_dir")
+    if explicit:
+        return explicit
+    account = cfg.get("account_file")
+    if not account:
+        return None
+    print(f"ℹ️ {cfg.get('name', '?')}: 未配 cookie_dir，退回 account_file.parent 推导")
+    return Path(account).parent
 # 图文侧同理：patchright profile 里的会话也会过期，静态检测结果超过这个天数就不认
 CHECK_MAX_AGE_DAYS = 30
 

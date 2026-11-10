@@ -63,7 +63,7 @@ REGISTRY = {
         "module": "uploader.ks_uploader.main",
         "video_class": "KSVideo",
         "login_setup": "ks_setup",
-        "account_file": "cookies/kuaishou_creator.json",
+        "account_file": "cookies/kuaishou_creator/account.json",
         "thumb_mode": "single",
     },
     "weixin": {
@@ -121,7 +121,15 @@ REGISTRY = {
 
 def _account_path(platform: str) -> Path:
     rel = REGISTRY[platform]["account_file"]
-    return _UPSTREAM / rel
+    path = _UPSTREAM / rel
+    if not path.exists():
+        # 迁移兼容：快手旧路径 cookies/kuaishou_creator.json（2026-11 改为
+        # cookies/kuaishou_creator/account.json 与其它平台同构）。旧文件还在就先读它，
+        # 免得用户「莫名其妙掉登录」；重登一次后自然落到新路径，旧文件可删。
+        legacy = _UPSTREAM / "cookies" / "kuaishou_creator.json"
+        if platform == "kuaishou" and legacy.exists():
+            return legacy
+    return path
 
 
 def _parse_schedule(s: str | None) -> tuple[_dt.datetime | int, str, str]:

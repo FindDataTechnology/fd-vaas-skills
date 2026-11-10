@@ -79,6 +79,20 @@ def _profile_dir(platform: str) -> Path:
     return Path(vaas) / ".profiles" / name
 
 
+# check 模式是否允许 headless：只对「判据纯 URL」的平台开放。
+#
+# 实证（2026-11-10，同一 profile / 同一 URL / 同一 _detect，只差 headless 开关）：
+#   xueqiu  headless → logged_in=True
+#   xueqiu  有头     → logged_in=False
+# 原因是 xueqiu 的未登录信号是页内弹层的 body 文案（「发送验证码」），headless
+# 渲染不出该弹层 → 判成已登录。这是**假阳性**，比假阴性更危险：面板绿、发布时才炸。
+# 故凡 _detect 里用 page.evaluate 读 innerText 的平台，一律强制有头。
+# 新增平台时：判据只读 URL 才可加进本集合（有守卫测试钉住这条）。
+HEADLESS_SAFE_CHECK = {
+    "zhihu", "weixin_mp", "eastmoney", "tonghuashun", "toutiao", "baijiahao", "weibo",
+}
+
+
 def _detect(platform: str, page) -> tuple[bool, str]:
     """按平台标记判断登录态。返回 (logged_in, url)。语义与 publish-docs 各平台 logged_in() 一致。"""
     try:
@@ -134,7 +148,9 @@ def run(platform: str, mode: str) -> int:
         with sync_playwright() as p:
             ctx = p.chromium.launch_persistent_context(
                 user_data_dir=str(profile),
-                headless=False,
+                # check 走 headless（不开窗），login 必须有头（要人操作）；
+                # 判据依赖 body 文案的平台不进 HEADLESS_SAFE_CHECK，见其定义处注释。
+                headless=(mode == "check" and platform in HEADLESS_SAFE_CHECK),
                 channel=None,
                 args=["--disable-blink-features=AutomationControlled"],
                 viewport={"width": 1280, "height": 820},

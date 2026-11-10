@@ -21,6 +21,7 @@ registry 陈旧而本检查报绿 = 假绿（比没有检查更糟），故 regi
 from __future__ import annotations
 
 import ast
+import datetime as _dt
 import json
 import re
 import sys
@@ -34,6 +35,9 @@ VIDEOS_PUBLISH_MJS = SKILLS / "fd-vaas-publish-videos" / "scripts" / "publish.mj
 DOCS_PUBLISH_MJS = SKILLS / "fd-vaas-publish-docs" / "scripts" / "publish.mjs"
 PLATFORM_REGISTRY_JSON = SKILLS / "_shared" / "publish" / "platform-registry.json"
 ENV_EXAMPLE = SKILLS.parent.parent / ".env.example"
+LOGIN_STATE = HERE / ".login_state.json"
+# 登录态验真的最长容忍期：超过就视为「没人复验」，闸门报红（不是靠人记得）
+COOKIE_CHECK_MAX_AGE_DAYS = 14
 
 # 不经 sau_adapter 的平台（走自有 profile / 独立脚本）
 ADAPTER_EXEMPT = {"bilibili"}
@@ -116,6 +120,52 @@ def expected_schedule(platform: str, adapter: dict[str, dict]) -> bool:
     return True
 
 
+def check_cookie_freshness(registry: dict) -> list[str]:
+    """登录态验真的新鲜度交叉校验（harden-login-session-truth 优化项 1）。
+
+    为什么需要：registry 的 cookieCheck 与 lastVerified 语义不同——后者是选择器
+    探测戳（probe.py 写），前者才是「这个 cookie 平台还认不认」。两者混用一个字段
+    就会出现「面板绿、机读空」的分裂；而 cookie 文件存在 ≠ 有效（同一天实测：
+    同样 27 天的 douyin/xiaohongshu 有效，kuaishou/weixin 已死）。
+
+    只做两条，都可机读判定：
+      1. .login_state.json 有记录、registry 却是 null → 漂移
+      2. checkedAt 早于 MAX_AGE → 陈旧，等于没人复验
+    """
+    errors: list[str] = []
+    state: dict = {}
+    try:
+        if LOGIN_STATE.exists():
+            state = json.loads(LOGIN_STATE.read_text(encoding="utf-8"))
+    except Exception as e:
+        return [f"{LOGIN_STATE.name} 解析失败（{type(e).__name__}: {e}）—— 登录态真值源不可读即视为不一致。"]
+
+    today = _dt.date.today()
+    for platform, rec in sorted(state.items()):
+        entry = registry.get(platform) or {}
+        cc = entry.get("cookieCheck")
+        if not isinstance(cc, dict):
+            errors.append(
+                f"platform-registry.json '{platform}' 缺 cookieCheck，但 .login_state.json 已有验真记录"
+                f"（{rec.get('checked_at')}）—— 把验真结果写入 registry.cookieCheck 后重跑。"
+            )
+            continue
+        checked = str(cc.get("checkedAt") or "")
+        try:
+            age = (today - _dt.date.fromisoformat(checked)).days
+        except ValueError:
+            errors.append(
+                f"platform-registry.json '{platform}'.cookieCheck.checkedAt='{checked}' 不是 YYYY-MM-DD。"
+            )
+            continue
+        if age > COOKIE_CHECK_MAX_AGE_DAYS:
+            errors.append(
+                f"platform-registry.json '{platform}' 登录态验真已 {age} 天（阈值 {COOKIE_CHECK_MAX_AGE_DAYS}）"
+                f"—— 跑 sau_adapter --login-check 后刷新 cookieCheck。"
+            )
+    return errors
+
+
 def main() -> int:
     errors: list[str] = []
 
@@ -193,6 +243,9 @@ def main() -> int:
         errors.append(
             f"'.env.example' 默认 PLATFORMS_DOCS 含 broken 平台 '{k}'（registry selectorStatus=broken）—— 必须重验通过后才可回归默认集。"
         )
+
+    # 7) 登录态验真新鲜度（cookieCheck 与 .login_state.json 不得分裂）
+    errors.extend(check_cookie_freshness(registry))
 
     # 提示级（不算错——可能是只给 login 用）
     only_adapter = sorted(adapter_keys - mjs_video_keys)

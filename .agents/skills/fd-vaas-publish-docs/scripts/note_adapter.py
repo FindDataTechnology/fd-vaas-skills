@@ -84,7 +84,7 @@ REGISTRY = {
         "note_class": "KSNote",
         "login_setup": "ks_setup",
         # 与视频发布(sau_adapter)同一文件:快手视频/图文共享登录态
-        "account_file": "cookies/kuaishou_creator.json",
+        "account_file": "cookies/kuaishou_creator/account.json",
         "title_max": 20,
         "note_max": 0,  # 上游无硬限
         "max_images": 0,  # 上游无硬限
@@ -93,7 +93,13 @@ REGISTRY = {
 
 
 def _account_path(platform: str) -> Path:
-    return _UPSTREAM / REGISTRY[platform]["account_file"]
+    path = _UPSTREAM / REGISTRY[platform]["account_file"]
+    if not path.exists() and platform == "kuaishou":
+        # 迁移兼容：旧路径 cookies/kuaishou_creator.json（与视频侧同一文件，语义一致）
+        legacy = _UPSTREAM / "cookies" / "kuaishou_creator.json"
+        if legacy.exists():
+            return legacy
+    return path
 
 
 # ── 发布确认闸（W1.3）：与自有 patchright 平台同一实现源（browser_utils.confirm_gate）──
