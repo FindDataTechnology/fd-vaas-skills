@@ -33,15 +33,34 @@ from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs, urlparse
 
 # W5.2 平台感知 Python 启动器:Windows 无 python3 字面量(只有 py/python),
-# 六处 spawn 统一走 PY,不再硬编码。与 _shared/publish/publish-common.mjs
-# resolvePython 同优先级(python3 → py → python)。
-PY = shutil.which("python3") or shutil.which("py") or shutil.which("python") or "python3"
+# 六处 spawn 统一走 PY,不再硬编码。
+#
+# 解析优先级：VAAS_PYTHON > 仓内 .venv > PATH 上的 python3/py/python
+# （与 scripts/ci-local.sh 的 resolve_python 同口径）。
+#
+# 为什么不能只信 PATH：Homebrew 换 major 后系统 python 的第三方依赖会整片消失，
+# 「扫码登录」spawn 出来的子进程立刻死于 ModuleNotFoundError: No module named
+# 'playwright'——浏览器不弹、二维码永远不出现；而服务端 stdout 被 block-buffering
+# 吞成空文件，现场看起来就是「点了没反应」（2026-11-10 实证：服务跑在
+# /opt/homebrew/.../python@3.14，只有仓内 .venv 装了 patchright/cv2/segno）。
+def _resolve_python() -> str:
+    env_py = os.environ.get("VAAS_PYTHON")
+    if env_py and Path(env_py).exists():
+        return env_py
+    for cand in (
+        _ROOT / ".venv" / "bin" / "python",
+        _ROOT / ".venv" / "Scripts" / "python.exe",
+    ):
+        if cand.exists():
+            return str(cand)
+    return shutil.which("python3") or shutil.which("py") or shutil.which("python") or "python3"
 
 
 # ─── 配置 ────────────────────────────────────────────────────────
 PORT = 8766
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent.parent.parent.parent  # scripts/ -> fd-vaas-login/ -> skills/ -> .agents/ -> VAAS/
+PY = _resolve_python()  # 必须在 _ROOT 之后：解析要拿 <reporoot>/.venv
 _SAU_ADAPTER = _HERE.parent.parent / "fd-vaas-publish-videos" / "scripts" / "platforms" / "sau_adapter.py"
 _BILIBILI_LOGIN = _HERE / "bilibili_login.py"
 _YOUTUBE_LOGIN = _HERE / "youtube_login.py"
@@ -1112,7 +1131,10 @@ function render(statuses) {{
                 actions = `<button class="btn btn-primary" onclick="startLogin('${{s.platform}}')">打开浏览器登录</button><button class="btn" onclick="checkCookie('${{s.platform}}')">检查登录态</button>`;
             }}
         }} else if (isLoggedIn) {{
-            actions = `<button class="btn btn-success" onclick="checkCookie('${{s.platform}}')">验证 Cookie</button>`;
+            // 已登录也要能主动重登：cookie 临近 30 天门限时用户需要提前换码，
+            // 缺这个入口时页面只给「验证 Cookie」，用户会以为无法重新登录。
+            actions = `<button class="btn btn-success" onclick="checkCookie('${{s.platform}}')">验证 Cookie</button>`
+                    + `<button class="btn" onclick="startLogin('${{s.platform}}')">${{s.login_state === 'running' ? '等待完成...' : '重新登录'}}</button>`;
         }} else {{
             actions = `<button class="btn btn-primary" onclick="startLogin('${{s.platform}}')">${{s.login_state === 'running' ? '等待完成...' : (s.platform === 'youtube' ? '用 Chrome 登录' : '扫码登录')}}</button>`;
         }}
@@ -1147,6 +1169,11 @@ function render(statuses) {{
         }}
         if (s.login_state === 'running') {{
             hint = '<div class="hint">⏳ 登录进行中，请等待弹窗或继续操作...</div>';
+        }}
+        // 临近门限（>=21 天）：还没过期但该准备重登了，提前提醒而不是等到失效才发现
+        if (isLoggedIn && s.cookie_age_days != null && s.cookie_age_days >= 21) {{
+            hint = `<div class="hint">⏳ 当前登录态已 ${{s.cookie_age_days}} 天，临近 30 天门限。
+                建议现在点「重新登录」提前换码，避免发布当天才发现失效。</div>`;
         }}
         // 登录态过期：这是「重新获取二维码」的主场景，要明确指到重扫动作上
         if (!isLoggedIn && s.has_cookie && s.cookie_expired && s.login_state !== 'running') {{
@@ -1188,9 +1215,32 @@ setInterval(refreshStatus, 3000);
         self.send_html(html)
 
 
+def _preflight() -> None:
+    """启动即自检：解析出的子进程解释器必须能导入登录链路的依赖。
+
+    不这么做的话，缺依赖只会在用户点「扫码登录」时表现为子进程秒死，
+    页面上只留一段 traceback、二维码永远不会出现——排查成本极高。
+    """
+    print(f"   Python（登录子进程）: {PY}")
+    missing = []
+    for mod in ("playwright", "patchright", "cv2", "segno", "loguru", "numpy"):
+        r = subprocess.run([PY, "-c", f"import {mod}"], capture_output=True, text=True)
+        if r.returncode != 0:
+            missing.append(mod)
+    if missing:
+        print(f"   ⚠️ 该解释器缺依赖：{', '.join(missing)}")
+        print(f"      修复：{PY} -m pip install -r "
+              f"{_ROOT / '.agents/skills/fd-vaas-publish-videos/scripts/platforms/requirements.txt'}")
+        print(f"            {PY} -m patchright install chromium")
+        print("      或设 VAAS_PYTHON 指向已装好依赖的解释器后重启本页。\n")
+    else:
+        print("   依赖自检：playwright/patchright/cv2/segno/loguru/numpy 全部就绪\n")
+
+
 def main():
     _load_docs_state()
     print(f"🚀 VAAS 登录管理页已启动：http://localhost:{PORT}")
+    _preflight()
     print(f"   Ctrl+C 停止\n")
 
     try:

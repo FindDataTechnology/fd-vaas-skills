@@ -1,4 +1,22 @@
-# Windows 上传链路依赖（macOS 走 ego-browser，不需要这些）
-# 安装：pip install -r scripts/platforms/requirements.txt
-#       patchright install chromium   # 下载 stealth chromium
+# 上传 / 扫码登录链路依赖。
+#
+# 谁需要：任何要跑 uploader 或 `sau_adapter.py --login / --login-check` 的机器
+# （Windows 上传机、以及本机扫码登录管理页 login-manager.py 拉起的子进程）。
+# macOS 上的「发布」走 ego-browser，不需要这些；但**扫码/验cookie**要。
+#
+# 安装：
+#   pip install -r scripts/platforms/requirements.txt
+#   python -m patchright install chromium    # stealth chromium（图文/patchright 平台）
+#   python -m playwright install chromium    # 部分 uploader 直接用 playwright
+#
+# 2026-11-10 补全：此前只列 patchright，实际 import 的 cv2/segno/loguru/numpy/
+# playwright 全缺 → 「扫码登录」子进程秒死于 ModuleNotFoundError，页面上永远
+# 没有二维码（现场只表现为「点了没反应」，因为服务端 stdout 被块缓冲吞掉）。
+
 patchright>=1.40
+playwright>=1.40      # douyin/ks/xhs/tencent/weibo/alipay/hupu/youtube uploader 直接 import
+opencv-python-headless # upstream/utils/login_qrcode.py 解二维码
+numpy                  # login_qrcode / 图像判定
+segno                  # login_qrcode 生成二维码
+loguru                 # upstream/utils/log.py
+requests               # xhs / bilibili uploader
