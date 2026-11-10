@@ -155,7 +155,8 @@ def _error_detail(raw: bytes) -> str:
     # 进程结局三字段必须透出：只有 log_tail 时无法区分「引擎非零退出」与「被信号杀」，
     # DEBT-RENDER-FLAKY-01 的调查就卡在这一步（渲染面早已返回 exit_code/signal，
     # 是本函数把它们丢了）。
-    for key in ("exit_code", "signal", "spawn_error", "timed_out", "rss_peak_mb"):
+    for key in ("exit_code", "signal", "spawn_error", "timed_out", "rss_peak_mb",
+                "engine_log"):
         if payload.get(key) is not None:
             parts.append(f"{key}={payload[key]}")
     if payload.get("log_tail"):

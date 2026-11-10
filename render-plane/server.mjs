@@ -47,6 +47,11 @@ const cfg = {
 };
 const ASSET_DIR = path.join(cfg.workdir, 'assets');
 const JOB_DIR = path.join(cfg.workdir, 'jobs');
+// 引擎日志落盘目录：必须在 jobDir 之外——作业失败会 cleanupDir(jobDir)，
+// 而 DEBT-RENDER-FLAKY-01 的取证正需要「失败那一单的引擎输出」。
+const LOG_DIR = path.join(cfg.workdir, 'logs');
+const LOG_KEEP = intEnv('VAAS_RENDER_LOG_KEEP', 50);
+const LOG_MAX_BYTES = intEnv('VAAS_RENDER_LOG_MAX_BYTES', 4 * 1024 * 1024);
 
 // ── 常量 ────────────────────────────────────────────────────────────────────
 const ENGINE_PKG = 'hyperframes'; // 版本在启动时从 CLI 读，钉版见 package.json
@@ -500,9 +505,35 @@ class LogTail {
   }
 }
 
-function runEngine(args, { cwd, env, timeoutMs }) {
+function runEngine(args, { cwd, env, timeoutMs, logPath }) {
   return new Promise((resolve) => {
     const tail = new LogTail(cfg.logTailBytes);
+    // ── 引擎输出落盘（DEBT-RENDER-FLAKY-01 取证要求）────────────────────
+    // 只在内存 LogTail 里留尾巴时，失败作业被 cleanupDir 清掉后现场就没了；
+    // 这里把 stdout/stderr 原样旁路到 workdir/logs/<job>-<ts>.log，并在首行写
+    // argv/env 键名、尾行写 exit/signal/timedOut，便于事后判「自崩 vs 信号」。
+    let logFd = null;
+    if (logPath) {
+      try {
+        fs.mkdirSync(path.dirname(logPath), { recursive: true });
+        logFd = fs.openSync(logPath, 'a');
+        fs.writeSync(
+          logFd,
+          `=== ${new Date().toISOString()} cwd=${cwd} argv=${JSON.stringify(args)} ` +
+            `env_keys=${JSON.stringify(Object.keys(env).sort())} ===\n`,
+        );
+      } catch {
+        logFd = null;
+      }
+    }
+    const writeLog = (b) => {
+      if (logFd === null) return;
+      try {
+        if (fs.fstatSync(logFd).size < LOG_MAX_BYTES) fs.writeSync(logFd, b);
+      } catch {
+        /* 写盘失败不影响渲染 */
+      }
+    };
     let child;
     try {
       child = spawn(BIN, args, {
@@ -538,13 +569,32 @@ function runEngine(args, { cwd, env, timeoutMs }) {
           }, timeoutMs)
         : null;
 
-    child.stdout.on('data', (b) => tail.push(b));
-    child.stderr.on('data', (b) => tail.push(b));
+    child.stdout.on('data', (b) => {
+      tail.push(b);
+      writeLog(b);
+    });
+    child.stderr.on('data', (b) => {
+      tail.push(b);
+      writeLog(b);
+    });
 
     const finish = (code, signal, spawnError) => {
       if (timer) clearTimeout(timer);
       clearInterval(rssTimer);
       // 主进程已退出也要兜一次进程组，确保 Chrome 子进程不残留。
+      if (logFd !== null) {
+        try {
+          fs.writeSync(
+            logFd,
+            `=== exit code=${code} signal=${signal} timedOut=${timedOut} ` +
+              `spawnError=${spawnError || 'none'} ===\n`,
+          );
+          fs.closeSync(logFd);
+        } catch {
+          /* 忽略 */
+        }
+        logFd = null;
+      }
       killGroup(child.pid, 'SIGKILL');
       resolve({
         ok: !timedOut && code === 0,
@@ -850,10 +900,31 @@ async function handleRender(req, res) {
     }
     args.push(jobDir);
 
+    // 引擎日志：workdir/logs 下按 job+时间戳保留，便于失败取证（jobDir 会被清）
+    const engineLogPath = path.join(
+      LOG_DIR,
+      `${safeJobLabel(jobId)}-${Date.now()}.log`,
+    );
+    try {
+      const olds = fs
+        .readdirSync(LOG_DIR)
+        .map((n) => path.join(LOG_DIR, n))
+        .sort();
+      for (const f of olds.slice(0, Math.max(0, olds.length - LOG_KEEP))) {
+        try {
+          fs.unlinkSync(f);
+        } catch {
+          /* 忽略 */
+        }
+      }
+    } catch {
+      /* 目录还不存在 */
+    }
     const result = await runEngine(args, {
       cwd: jobDir,
       env,
       timeoutMs: cfg.timeoutS * 1000,
+      logPath: engineLogPath,
     });
     const renderMs = nowMs() - startedAt;
 
@@ -873,6 +944,7 @@ async function handleRender(req, res) {
           signal: result.signal,
           timed_out: true,
           rss_peak_mb: result.rssPeakMb ?? null,
+          engine_log: engineLogPath,
           log_tail: result.log,
         });
       } else {
