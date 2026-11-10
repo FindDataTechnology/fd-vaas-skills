@@ -409,7 +409,10 @@ def build_typed_composition(type_id: str, script: str, inputs: Optional[dict],
                "source": voice_ref}]
     bgm_spec = _resolve_composition_bgm(bgm, owner)
     if bgm_spec is not None:
-        bgm_file = Path(bgm_spec["file"])
+        # 曲短于片长 → 预循环补长（composition 的 <audio> 没有 loop 属性，
+        # 不补就是一段数字静音尾巴；实测尾段 -91dB）
+        from ..bgm_loop import loop_bgm_to
+        bgm_file, _looped = loop_bgm_to(Path(bgm_spec["file"]), duration_s)
         bgm_asset = _asset_name("bgm", bgm_file)
         bgm_volume = float(bgm_spec.get("volume", 0.2))
         bgm_fade = bool(bgm_spec.get("fade_out", True))

@@ -452,7 +452,9 @@ def compose_storyboard(
     if audio_p:
         assets.append(("assets/voice" + audio_p.suffix, audio_p.read_bytes()))
     if bgm is not None:
-        bgm_file = Path(bgm["file"])
+        # 曲短于片长 → 预循环补长（<audio> 无 loop，不补就是数字静音尾巴）
+        from .bgm_loop import loop_bgm_to
+        bgm_file, _looped = loop_bgm_to(Path(bgm["file"]), comp_meta["duration_s"])
         assets.append(("assets/bgm" + bgm_file.suffix, bgm_file.read_bytes()))
         # BGM 作为 composition 音频轨（原生多轨，不再成片后混流）
         comp_html = comp_html.replace(
@@ -804,7 +806,10 @@ def _render_typed_video(type: str, script: str, inputs: Optional[dict],
 
     bgm_spec = resolve_bgm(bgm, owner)
     if bgm_spec is not None:
-        bgm_file = Path(bgm_spec["file"])
+        # 同上：composition 路径没有 loop 语义，曲短于片长时预循环补长
+        from .bgm_loop import loop_bgm_to
+        bgm_file, _looped = loop_bgm_to(Path(bgm_spec["file"]),
+                                        meta["duration_s"])
         bgm_ref = "assets/bgm" + bgm_file.suffix
         assets.append((bgm_ref, bgm_file.read_bytes()))
 
