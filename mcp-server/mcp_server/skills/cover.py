@@ -23,22 +23,24 @@ _ORIENT_SIZES = {
 # 底座与出片同源：品牌色双柔光 + 竖向 surface 提亮（与 builders/_stage.BASE_BG 同口径）。
 # 单色 #0a0e14 铺满时整张封面 YAVG≈19，就是「一片黑」那一档；柔光把底子抬起来，
 # 仍是品牌深色系、不引入新色值。
-_COVER_BG = (
-    "radial-gradient(120% 80% at 12% 0%,"
-    "color-mix(in srgb,var(--vaas-accent) 34%,transparent) 0%,transparent 58%),"
-    "radial-gradient(90% 60% at 100% 100%,"
-    "color-mix(in srgb,var(--vaas-palette-2) 16%,transparent) 0%,transparent 62%),"
-    "linear-gradient(160deg,var(--vaas-bg1) 0%,"
-    "color-mix(in srgb,var(--vaas-surface) 55%,var(--vaas-bg1)) 52%,"
-    "var(--vaas-surface) 100%)"
-)
 
 _COVER_CSS = (
+    # 底色只用品牌变量（linear-gradient 三停），品牌的「亮」由下面两层柔光叠出来：
+    # color-mix 在 still_graphic 的 chromium 里不一定可用，一旦不支持整条声明失效、
+    # 画面反而更黑（实测 YAVG 20.7 → 16.6）。柔光层用 radial-gradient + opacity，
+    # 只依赖 --vaas-accent / --vaas-palette-N（后者带 accent 回退）。
     ".cover{position:absolute;inset:0;display:flex;flex-direction:column;"
-    "justify-content:flex-end;padding:8% 7%;background:" + _COVER_BG + "}"
+    "justify-content:flex-end;padding:8% 7%;overflow:hidden;"
+    "background:linear-gradient(155deg,var(--vaas-bg) 0%,var(--vaas-bg1) 52%,"
+    "var(--vaas-surface) 100%)}"
+    ".glow-a{position:absolute;left:-12%;top:-18%;width:85%;height:62%;"
+    "background:radial-gradient(closest-side,"
+    "var(--vaas-accent),transparent 72%);opacity:.22}"
+    ".glow-b{position:absolute;right:-15%;bottom:-20%;width:75%;height:55%;"
+    "background:radial-gradient(closest-side,"
+    "var(--vaas-palette-2,var(--vaas-accent)),transparent 72%);opacity:.13}"
     ".accent{position:absolute;left:7%;top:9%;width:12%;height:10px;"
-    "border-radius:5px;background:linear-gradient(90deg,var(--vaas-accent),"
-    "var(--vaas-palette-2))}"
+    "border-radius:5px;background:var(--vaas-accent)}"
     ".kicker{font-size:28px;letter-spacing:10px;color:var(--vaas-accent);"
     "font-weight:700;margin-bottom:26px}"
     ".title{font-size:74px;line-height:1.22;font-weight:800;color:var(--vaas-text);"
@@ -46,8 +48,7 @@ _COVER_CSS = (
     ".sub{margin-top:26px;font-size:34px;line-height:1.5;color:var(--vaas-muted)}"
     ".tags{margin-top:30px;display:flex;gap:16px;flex-wrap:wrap}"
     ".tag{font-size:24px;padding:8px 18px;border-radius:999px;"
-    "border:1px solid var(--vaas-border);color:var(--vaas-muted);"
-    "background:color-mix(in srgb,var(--vaas-surface) 55%,transparent)}"
+    "border:1px solid var(--vaas-border);color:var(--vaas-muted)}"
 )
 
 
@@ -86,7 +87,8 @@ def _cover_html(title: str, subtitle: Optional[str], tags,
                     + "</div>")
     return (
         f'<style>{_COVER_CSS}</style>'
-        '<div class="cover"><div class="accent"></div>'
+        '<div class="cover"><div class="glow-a"></div><div class="glow-b"></div>'
+        '<div class="accent"></div>'
         '<div class="kicker">寻数科技</div>'
         f'<div class="title">{_esc(title)}</div>'
         + (f'<div class="sub">{_esc(subtitle)}</div>' if subtitle else "")

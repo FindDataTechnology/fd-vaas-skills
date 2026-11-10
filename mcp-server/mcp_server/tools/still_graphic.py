@@ -46,10 +46,16 @@ from .still_chart import (_chromium, _js_json, _load_theme_doc, _parse_size,
 DEFAULT_SIZE = (1080, 1920)
 
 
-def _brand_style(brand: dict) -> str:
-    """theme.json brand 块 → :root 品牌变量（still_graphic 的取数边界）。"""
-    return ":root{" + ";".join(
-        f"--vaas-{key}:{value}" for key, value in brand.items()) + "}"
+def _brand_style(brand: dict, palette=None) -> str:
+    """theme.json brand 块 + palette → :root 品牌变量（still_graphic 的取数边界）。
+
+    palette 槽位必须一起注入：封面/图形仍会用到 --vaas-palette-N，缺变量会让整条
+    background / gradient 声明失效（实测：封面底色直接变透明 → 整张图更黑）。
+    与 typed_scenes.theme.brand_root_style 同口径。
+    """
+    decls = [f"--vaas-{key}:{value}" for key, value in brand.items()]
+    decls += [f"--vaas-palette-{i}:{c}" for i, c in enumerate(palette or [])]
+    return ":root{" + ";".join(decls) + "}"
 
 
 def _base_rules(w: int, h: int) -> str:
@@ -66,7 +72,9 @@ def _wrap_graphic_html(html: str, theme_doc: dict, size: tuple) -> str:
     """调用方 HTML + 品牌 CSS wrapper（见模块 docstring 的两种形态）。"""
     w, h = size
     brand = theme_doc.get("brand") or {}
-    style = f'<style id="vaas-brand">{_brand_style(brand)}{_base_rules(w, h)}</style>'
+    style = (f'<style id="vaas-brand">'
+             f'{_brand_style(brand, theme_doc.get("palette"))}'
+             f'{_base_rules(w, h)}</style>')
     if re.search(r"<html[\s>]", html, re.IGNORECASE):
         # 整页：只注入品牌 <style>，不动调用方结构
         if "</head>" in html.lower():

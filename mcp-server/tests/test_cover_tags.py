@@ -37,3 +37,27 @@ def test_cover_html_accepts_list_tags():
 def test_cover_html_escapes_tag_text():
     html = _cover_html("t", None, ["<script>"], 1080, 1920)
     assert "<script>" not in html
+
+
+def test_brand_style_injects_palette_slots():
+    """graphic/cover 的品牌变量必须带 palette 槽位。
+
+    缺 --vaas-palette-N 时，引用它的 background/gradient 会整条失效（实测封面
+    底色直接透明 → 整张图更黑，YAVG 20.7→16.6）。
+    """
+    from mcp_server.tools.still_graphic import _brand_style
+
+    css = _brand_style({"bg": "#0a0e14", "accent": "#58a6ff"},
+                       ["#58a6ff", "#3fb950"])
+    assert "--vaas-bg:#0a0e14" in css
+    assert "--vaas-palette-0:#58a6ff" in css
+    assert "--vaas-palette-1:#3fb950" in css
+
+
+def test_cover_css_avoids_color_mix():
+    """封面 CSS 不依赖 color-mix（渲染器不一定支持，失效即整条声明作废）。"""
+    from mcp_server.skills.cover import _COVER_CSS
+
+    assert "color-mix" not in _COVER_CSS
+    assert _COVER_CSS.count("glow-") == 2
+    assert "var(--vaas-palette-2,var(--vaas-accent))" in _COVER_CSS
