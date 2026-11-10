@@ -58,7 +58,15 @@ def loop_bgm_to(bgm_path: Path, duration_s: float,
              "-c:a", "libmp3lame", "-b:a", "192k", str(target)],
             capture_output=True, text=True)
         if r.returncode != 0 or not target.is_file():
-            # 补长失败不该让整片失败：退回原文件（尾段静音，行为与修复前一致）
+            # 补长失败不该让整片失败：退回原文件（尾段静音，行为与修复前一致）。
+            # 但**必须留痕**：早先这里静默 return False，CI 上两条用例只报
+            # 「assert False is True」，日志里没有任何可归因信息——环境差异
+            #（编码器缺失/参数不支持）无从判断。失败原因写 stderr 供 CI 归因。
+            print(
+                f"⚠️ BGM 预循环失败（退回原文件，尾段会是静音）: ffmpeg rc={r.returncode} "
+                f"target_exists={target.is_file()} stderr={(r.stderr or '').strip()[:500]}",
+                flush=True,
+            )
             return bgm_path, False
     # 硬保险：对外只返回确实存在的文件
     return (target, True) if target.is_file() else (bgm_path, False)
