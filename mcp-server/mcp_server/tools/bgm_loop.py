@@ -46,6 +46,13 @@ def loop_bgm_to(bgm_path: Path, duration_s: float,
         return bgm_path, False
     actual = _probe_seconds(bgm_path)
     if actual is None or actual + _TOLERANCE_S >= duration_s:
+        # 诊断留痕：这条静默返回与下面的编码失败，在 CI 上是同一个 False，
+        # 只报「assert False is True」时无法区分「探测失败」和「曲已够长」。
+        print(
+            f"ℹ️ BGM 预循环跳过: probe_seconds={actual} duration_s={duration_s} "
+            f"tolerance={_TOLERANCE_S}",
+            flush=True,
+        )
         return bgm_path, False
 
     out_dir = Path(out_dir) if out_dir is not None else bgm_path.parent
