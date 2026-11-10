@@ -66,6 +66,7 @@ _BILIBILI_LOGIN = _HERE / "bilibili_login.py"
 _YOUTUBE_LOGIN = _HERE / "youtube_login.py"
 _DOCS_LOGIN = _HERE / "docs_login.py"
 _DOCS_STATE_FILE = _HERE / ".docs_state.json"  # 图文平台检测结果落盘（gitignored）
+_LOGIN_STATE_FILE = _HERE / ".login_state.json"  # 视频平台验真结果落盘（gitignored）
 
 
 # ─── 平台注册表（对齐 sau_adapter.py REGISTRY）────────────────────────────────
@@ -174,6 +175,42 @@ def _save_docs_state():
         )
     except Exception as e:
         print(f"⚠️ docs state 保存失败: {e}")
+
+
+# 视频平台「验真」结果（落盘，重启不丢）：platform → {"valid": bool|None, "message": str, "checked_at": str}
+# 为什么必须落盘：cookie 文件在 ≠ cookie 有效。2026-11-10 实测同样 23.8 天的四份
+# cookie，douyin/xiaohongshu 有效、kuaishou/weixin 已死；只按文件存在渲染「已登录」
+# 会让用户直到发布当天才发现掉线。验真结果必须有时间戳地留在面板上。
+_login_check: dict = {}
+
+
+def _load_login_state():
+    global _login_check
+    try:
+        if _LOGIN_STATE_FILE.exists():
+            _login_check = json.loads(_LOGIN_STATE_FILE.read_text("utf-8"))
+    except Exception:
+        _login_check = {}
+
+
+def _save_login_state():
+    try:
+        _LOGIN_STATE_FILE.write_text(
+            json.dumps(_login_check, ensure_ascii=False, indent=1), "utf-8"
+        )
+    except Exception as e:
+        print(f"⚠️ login state 保存失败: {e}")
+
+
+def _record_login_check(platform: str, valid, message: str):
+    with _lock:
+        _login_check[platform] = {
+            "valid": valid,
+            "message": message,
+            "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
+        _save_login_state()
+
 
 
 def _find_latest_qr(platform: str) -> Path | None:
@@ -606,6 +643,7 @@ def _get_platform_status(platform: str) -> dict:
         "cookie_age_days": cookie_age_days,
         "cookie_expired": cookie_expired,
         "login_state": login_state,
+        "check": _login_check.get(platform),  # 最近一次验真结果（含时间戳），None=从未验过
         "qr_available": qr_available,
         "qr_expired": qr_expired,
         "qr_path": str(qr_path) if qr_path else None,
@@ -738,14 +776,16 @@ class LoginHandler(BaseHTTPRequestHandler):
                     )
                     out = (result.stdout + result.stderr).strip()
                     valid = result.returncode == 0
-                    self.send_json({
-                        "valid": valid,
-                        "message": out.split("\n")[-1] if out else ("profile 已就绪" if valid else "未找到 profile"),
-                    })
+                    msg = out.split("\n")[-1] if out else ("profile 已就绪" if valid else "未找到 profile")
+                    _record_login_check(platform, valid, msg)
+                    self.send_json({"valid": valid, "message": msg})
                 except Exception as e:
                     self.send_json({"valid": False, "message": f"检查失败: {e}"})
             else:
                 valid, msg = _run_login_check(platform)
+                # 「cookie 不存在」不是一次验真失败，别给它盖失效戳（会误导成「曾经有效现已失效」）
+                if msg != "cookie 不存在":
+                    _record_login_check(platform, valid, msg)
                 self.send_json({"valid": valid, "message": msg})
         elif path in ("/api/docs/login", "/api/docs/check"):
             platform = query.get("platform", [None])[0] or (body.decode("utf-8") if body else None)
@@ -1115,11 +1155,19 @@ function renderDocs(json) {{
 function render(statuses) {{
     const container = document.getElementById('platforms');
     container.innerHTML = statuses.map(s => {{
-        const isLoggedIn = s.has_cookie && s.cookie_expired !== true && s.login_state !== 'running';
+        // 验真结果优先于「文件在不在」：文件在 ≠ cookie 有效（2026-11-10 实证：
+        // 同样 23.8 天，抖音/小红书有效、快手/视频号已死）。
+        const chk = s.check || null;
+        const checkedInvalid = !!(chk && chk.valid === false);
+        const checkedValid = !!(chk && chk.valid === true);
+        const isLoggedIn = s.has_cookie && s.cookie_expired !== true && !checkedInvalid && s.login_state !== 'running';
         const statusClass = s.login_state === 'running' ? 'status-running'
                           : (isLoggedIn ? 'status-logged-in' : 'status-not-logged-in');
         const statusText = s.login_state === 'running' ? '登录中...'
-                         : (s.has_cookie && s.cookie_expired ? `登录态可能已过期（${{s.cookie_age_days}} 天前）` : (isLoggedIn ? '已登录' : '未登录'));
+                         : (checkedInvalid ? `已失效（${{chk.checked_at}} 验证）`
+                         : (s.has_cookie && s.cookie_expired ? `登录态可能已过期（${{s.cookie_age_days}} 天前）`
+                         : (checkedValid ? `已验证有效（${{chk.checked_at}}）`
+                         : (isLoggedIn ? '已登录（未验真）' : '未登录'))));
 
         let actions = '';
         if (s.platform === 'bilibili') {{
@@ -1182,6 +1230,12 @@ function render(statuses) {{
                 扫码完成后 cookie 会自动更新。<br/>
                 💡 平台二维码通常几分钟内失效，看到后请尽快扫。</div>`;
         }}
+        // 验真说死了：文件还在但平台已不认（最坑的一种，必须最显眼）
+        if (checkedInvalid && s.login_state !== 'running') {{
+            hint = `<div class="hint">⛔ ${{chk.checked_at}} 实测这个登录态已失效（${{chk.message || 'cookie 已失效'}}）。
+                cookie 文件还在，但平台已不认它——发布会被顶回登录页。
+                <b>点下方「${{s.platform === 'youtube' ? '用 Chrome 登录' : '扫码登录'}}」重扫</b>。</div>`;
+        }}
 
         return `
             <div class="platform-card">
@@ -1239,6 +1293,7 @@ def _preflight() -> None:
 
 def main():
     _load_docs_state()
+    _load_login_state()
     print(f"🚀 VAAS 登录管理页已启动：http://localhost:{PORT}")
     _preflight()
     print(f"   Ctrl+C 停止\n")
