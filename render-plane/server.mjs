@@ -49,6 +49,12 @@ const ASSET_DIR = path.join(cfg.workdir, 'assets');
 const JOB_DIR = path.join(cfg.workdir, 'jobs');
 // 引擎日志落盘目录：必须在 jobDir 之外——作业失败会 cleanupDir(jobDir)，
 // 而 DEBT-RENDER-FLAKY-01 的取证正需要「失败那一单的引擎输出」。
+// 引擎子进程的 TMPDIR 必须是**短路径**：chromium 会在 TMPDIR 下建
+// `<TMPDIR>/org.chromium.Chromium.XXXXXX/SingletonSocket`，而 unix socket 的
+// sun_path 上限 108 字节；jobDir 里带长 plan slug（compose-<12hex>）时该路径会
+// 超出 → process_singleton_posix.cc FATAL "Socket path too long" → chromium
+// SIGABRT（DEBT-RENDER-FLAKY-01 实测 110 字节必崩、67 字节正常）。
+const TMP_ROOT = process.env.VAAS_RENDER_TMP_ROOT || '/tmp/vrp';
 const LOG_DIR = path.join(cfg.workdir, 'logs');
 const LOG_KEEP = intEnv('VAAS_RENDER_LOG_KEEP', 50);
 const LOG_MAX_BYTES = intEnv('VAAS_RENDER_LOG_MAX_BYTES', 4 * 1024 * 1024);
@@ -331,7 +337,7 @@ const stats = { active: 0, done: 0, failed: 0, timedOut: 0 };
 let lastChildEnvKeys = null;
 
 // ── 子进程 env 构造 + 断言 ──────────────────────────────────────────────────
-function buildChildEnv(homeDir) {
+function buildChildEnv(homeDir, tmpDir = null) {
   const env = {};
   for (const [k, v] of Object.entries(process.env)) {
     if (ENV_ALLOW_KEYS.has(k) || ENV_ALLOW_PREFIX.some((p) => k.startsWith(p))) {
@@ -339,8 +345,9 @@ function buildChildEnv(homeDir) {
       env[k] = v;
     }
   }
-  // TMPDIR 指到作业目录，避免跨作业共享临时状态
-  env.TMPDIR = path.join(homeDir, 'tmp');
+  // TMPDIR：默认用**短根**下的唯一子目录（见 TMP_ROOT 注释——长路径会让
+  // chromium 的单例 socket 撞 sun_path 上限）；调用方也可显式传入。
+  env.TMPDIR = tmpDir || path.join(TMP_ROOT, shortTmpLabel(homeDir));
   env.HOME = homeDir;
   for (const [k, v] of Object.entries(FORCED_ENGINE_ENV)) {
     if (!(k in env)) env[k] = v;
@@ -437,6 +444,11 @@ function isSafeRelPath(rel) {
   const parts = rel.split(/[\\/]+/).filter(Boolean);
   if (!parts.length) return false;
   return parts.every((p) => p !== '.' && p !== '..');
+}
+
+// 短且唯一的 TMPDIR 名（10 hex）：既能避免并发作业共享，也不占 sun_path 预算。
+function shortTmpLabel(seed) {
+  return crypto.createHash('sha256').update(String(seed)).digest('hex').slice(0, 10);
 }
 
 function safeJobLabel(jobId) {
@@ -920,12 +932,23 @@ async function handleRender(req, res) {
     } catch {
       /* 目录还不存在 */
     }
-    const result = await runEngine(args, {
-      cwd: jobDir,
-      env,
-      timeoutMs: cfg.timeoutS * 1000,
-      logPath: engineLogPath,
-    });
+    const tmpDir = env.TMPDIR; // 短根下的唯一子目录（见 TMP_ROOT）
+    let result;
+    try {
+      result = await runEngine(args, {
+        cwd: jobDir,
+        env,
+        timeoutMs: cfg.timeoutS * 1000,
+        logPath: engineLogPath,
+      });
+    } finally {
+      // 引擎退出即回收短 TMPDIR，避免 /tmp/vrp 下堆积（jobDir 另有 cleanupDir）
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        /* 忽略：可能已被引擎自己清掉 */
+      }
+    }
     const renderMs = nowMs() - startedAt;
 
     if (!result.ok) {
