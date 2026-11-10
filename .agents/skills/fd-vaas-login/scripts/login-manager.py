@@ -224,7 +224,7 @@ def _has_stale_qr(platform: str) -> bool:
 def _run_login(platform: str) -> int:
     """后台运行 sau_adapter.py --login。返回 exit code。"""
     cfg = PLATFORM_REGISTRY[platform]
-    cmd = [PY, str(_SAU_ADAPTER), "--platform", platform, "--login"]
+    cmd = [PY, "-u", str(_SAU_ADAPTER), "--platform", platform, "--login"]
 
     # YouTube 需要代理环境变量
     if platform == "youtube":
@@ -291,7 +291,7 @@ def _run_bilibili_login() -> int:
     """后台运行 bilibili_login.py 打开浏览器供用户手动登录（profile 持久化模式）。"""
     cfg = PLATFORM_REGISTRY["bilibili"]
     profile_dir = cfg["profile_dir"]
-    cmd = [PY, str(_BILIBILI_LOGIN), str(profile_dir)]
+    cmd = [PY, "-u", str(_BILIBILI_LOGIN), str(profile_dir)]
 
     print("▶ 启动 bilibili 登录流程...")
     with _lock:
@@ -347,7 +347,7 @@ def _run_youtube_login() -> int:
     """
     cfg = PLATFORM_REGISTRY["youtube"]
     account_file = cfg["account_file"]
-    cmd = [PY, str(_YOUTUBE_LOGIN), str(account_file)]
+    cmd = [PY, "-u", str(_YOUTUBE_LOGIN), str(account_file)]
 
     # youtube.com 需要代理（patchright 启的 chromium 不吃系统代理）。
     # 用 channel="chrome" 走真 Chrome 时，Chrome 自身读系统代理；这里设 env 保险。
@@ -415,7 +415,7 @@ def _run_login_check(platform: str) -> tuple[bool | None, str]:
     if not account_file or not account_file.exists():
         return False, "cookie 不存在"
 
-    cmd = [PY, str(_SAU_ADAPTER), "--platform", platform, "--login-check"]
+    cmd = [PY, "-u", str(_SAU_ADAPTER), "--platform", platform, "--login-check"]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=str(_ROOT))
     output = result.stdout + result.stderr
 
@@ -430,7 +430,7 @@ def _run_login_check(platform: str) -> tuple[bool | None, str]:
 def _run_docs_action(platform: str, mode: str) -> int:
     """后台跑 docs_login.py --check/--login，结束后把检测结果落盘。"""
     key = f"docs:{platform}"
-    cmd = [PY, str(_DOCS_LOGIN), platform, f"--{mode}"]
+    cmd = [PY, "-u", str(_DOCS_LOGIN), platform, f"--{mode}"]
 
     print(f"▶ 图文[{platform}] {mode} ...")
     with _lock:
@@ -731,7 +731,7 @@ class LoginHandler(BaseHTTPRequestHandler):
                 # bilibili: 跑 bilibili_login.py --check 检查 profile 是否就绪
                 cfg = PLATFORM_REGISTRY[platform]
                 profile_dir = cfg.get("profile_dir")
-                cmd = [PY, str(_BILIBILI_LOGIN), str(profile_dir), "--check"]
+                cmd = [PY, "-u", str(_BILIBILI_LOGIN), str(profile_dir), "--check"]
                 try:
                     result = subprocess.run(
                         cmd, capture_output=True, text=True, timeout=15, cwd=str(_ROOT)

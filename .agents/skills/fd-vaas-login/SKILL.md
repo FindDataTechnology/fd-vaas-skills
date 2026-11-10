@@ -24,11 +24,19 @@ compatibility: Python 3.8+; VAAS root directory
 ## 快速使用
 
 ```bash
-# 1. 启动服务（在 VAAS/ 根目录）
-python3 .agents/skills/fd-vaas-login/scripts/login-manager.py
+# 1. 启动服务（在 VAAS/ 根目录）—— 必须用装了依赖的解释器
+.venv/bin/python -u .agents/skills/fd-vaas-login/scripts/login-manager.py
 
 # 2. 浏览器打开 http://localhost:8766
 ```
+
+> **为什么不是裸 `python3`**：本页只是个 stdlib HTTP server，但它 spawn 出来的
+> `sau_adapter.py --login` 要 import playwright/patchright/cv2/segno/loguru。
+> 系统 python 被 Homebrew 换 major 后这些依赖会整片消失，子进程秒死于
+> `ModuleNotFoundError` → 浏览器不弹、二维码永远不出现，而页面看起来就是
+> 「点了没反应」（2026-11-10 实证）。服务启动时会打印解析到的解释器并逐个
+> 实测依赖，缺谁点名谁；也可用 `VAAS_PYTHON=/path/to/python` 覆盖。
+> 依赖清单见 `fd-vaas-publish-videos/scripts/platforms/requirements.txt`。
 
 页面会自动展示 10 大平台的登录状态，并每 3 秒轮询更新。
 
