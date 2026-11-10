@@ -85,6 +85,71 @@ networks:
 - 3.8GB 内存机：`VAAS_RENDER_MAX_CONCURRENCY=1`
 - 8GB+ 机可设 2-3
 
+## 子进程 TMPDIR 与大坑：chromium 单例 socket 的 108 字节上限
+
+**这条是血的教训（DEBT-RENDER-FLAKY-01，2026-11-11）**，改动 `buildChildEnv` 前务必读完。
+
+### 机制
+
+chromium 会在 `TMPDIR` 下建进程单例：
+
+```
+$TMPDIR/org.chromium.Chromium.XXXXXX/SingletonSocket
+```
+
+这是个 **unix domain socket**，其路径受内核 `sun_path` 上限约束——**108 字节**（含结尾 NUL）。
+超了 chromium 不会降级，而是直接：
+
+```
+FATAL:chrome/browser/process_singleton_posix.cc:315] Socket path too long: <path>
+```
+
+→ chrome `SIGABRT` → puppeteer 报 `Protocol error (Target.setDiscoverTargets): Target closed`
+→ 渲染在 `failedStage="Starting frame capture"` 处失败，响应 `exit_code=1 / signal=null`
+（**看起来像“引擎自崩”，实际是路径太长；和帧数、分辨率、质量档、GPU、字体全都无关**）。
+
+### 事故经过
+
+早期 `buildChildEnv` 把 `TMPDIR` 指到 `<jobDir>/tmp`，而 `jobDir` 是
+`<workdir>/jobs/<safeJobLabel(jobId)>-XXXXXX`，storyboard 的 jobId 是 `compose-<12hex>` 这类长 slug：
+
+```
+/tmp/vaas-render/jobs/e2e-bisect--compose-fdfe1c5e0a1d-9F3HaI/tmp/org.chromium.Chromium.<rand>/SingletonSocket
+└────────────────────────────── 110 字节 ──────────────────────────────────────────────────────────┘
+```
+
+→ 20s 分镜必失败；而手工在 `/tmp/m1` 这类短路径下跑同一份 HTML 却成功。
+排查时因为只看到 `log_tail` 里的 crashpad 噪音（真正的 FATAL 在里面），绕了九轮。
+
+### 现行设计（不要退回）
+
+```js
+const TMP_ROOT = process.env.VAAS_RENDER_TMP_ROOT || '/tmp/vrp';
+// 每个作业一个短且唯一的目录：sha256(homeDir) 前 10 个 hex
+env.TMPDIR = path.join(TMP_ROOT, shortTmpLabel(homeDir));
+```
+
+- 拼接后长度：`/tmp/vrp/<10hex>` (19) + `/org.chromium.Chromium.XXXXXX/SingletonSocket` (45) = **64 字节**，余量 44
+- 引擎退出后 `finally` 里 `rmSync(TMPDIR)`，不随 jobDir 清理路径走（jobDir 的清理分支多，容易漏）
+
+### 运维约束
+
+| 约束 | 说明 |
+|---|---|
+| **`VAAS_RENDER_TMP_ROOT` 必须短** | 它直接吃掉 socket 路径预算：`len(TMP_ROOT) + 1 + 10 + 45 ≤ 108` ⇒ **`TMP_ROOT` 不得超过 52 字节**。默认 `/tmp/vrp` 只占 8 |
+| 不要把它指回 jobDir | jobDir 名字含 plan slug，长度不可控（就是本次事故） |
+| macOS 无此限制 | chromium 在 macOS 用 Mach port/lock 文件，不占 `sun_path`；本条只在 linux 生效（自测里按 `process.platform` 分支断言） |
+| 症状识别 | 见 `Socket path too long` 或 `exit_code=1 && signal=null` 且 `failedStage="Starting frame capture"`，先量路径长度 |
+
+### 自查一行
+
+```bash
+# 在渲染容器内：应 ≤108
+python3 -c "print(len('/tmp/vrp/'+'a'*10+'/org.chromium.Chromium.XXXXXX/SingletonSocket'))"
+# 或对指定 TMP_ROOT 验算
+python3 -c "import sys;r=sys.argv[1];print(len(r)+1+10+45)" /your/tmp/root
+```
+
 ## 已知前提
 
 - 引擎钉版 `hyperframes@0.9.26`（package.json + lockfile）；升级须过双跑确定性门禁

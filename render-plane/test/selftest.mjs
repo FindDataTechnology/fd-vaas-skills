@@ -412,6 +412,107 @@ async function main() {
     const artifactsAfterTimeout = await listDir(path.join(workdirB, 'jobs')).catch(() => []);
     check('超时后无部分产物文件', artifactsAfterTimeout.length === 0, artifactsAfterTimeout);
 
+    // ── TMPDIR 长度上限回归（DEBT-RENDER-FLAKY-01）────────────────────────
+    // 事故：buildChildEnv 曾把 TMPDIR 指到 <jobDir>/tmp，jobDir 含长 plan slug
+    // （compose-<12hex>）→ chromium 在 <TMPDIR>/org.chromium.Chromium.XXXXXX/
+    // SingletonSocket 建进程单例 socket，路径 110B > sun_path 上限 108B →
+    // process_singleton_posix.cc FATAL "Socket path too long" → chrome SIGABRT →
+    // 渲染失败（exit_code=1 / signal=null），且与帧数/分辨率/质量档/GPU 全无关。
+    console.log('\n=== TMPDIR 长度上限回归 ===');
+    const SOCKET_SUFFIX = '/org.chromium.Chromium.XXXXXX/SingletonSocket';
+    const SUN_PATH_MAX = 108;
+    const defaultTmp = '/tmp/vrp/' + 'a'.repeat(10); // 与 shortTmpLabel 同形（10 hex）
+    check(
+      `默认 TMPDIR（/tmp/vrp/<10hex>）下 chromium 单例路径 ≤${SUN_PATH_MAX}B`,
+      (defaultTmp + SOCKET_SUFFIX).length <= SUN_PATH_MAX,
+      `${(defaultTmp + SOCKET_SUFFIX).length}B`,
+    );
+
+    // 正向：长 workdir + 长 jobId 仍必须渲染成功（修复前这里必崩）
+    const longWorkdir = path.join(workRoot, 'w'.repeat(40), 'plane-long');
+    await fsp.mkdir(longWorkdir, { recursive: true });
+    const portLong = await freePort();
+    const planeLong = await startPlane({
+      workdir: longWorkdir,
+      port: portLong,
+      env: { VAAS_RENDER_MAX_CONCURRENCY: '1', VAAS_RENDER_TIMEOUT_S: '300' },
+    });
+    planes.push(planeLong);
+    const longJobId = `compose-${'f'.repeat(12)}--e2e-selftest-longslug`;
+    const longRes = render(portLong, {
+      job_id: longJobId,
+      fps: 8,
+      quality: 'draft',
+      format: 'mp4',
+      composition: { html: compositionOfExample() },
+    });
+    const longOut = await longRes;
+    check(
+      '长 jobId/workdir 下单帧渲染仍成功（TMPDIR 已短化）',
+      longOut.status === 200,
+      { status: longOut.status, jobIdLen: longJobId.length, workdirLen: longWorkdir.length },
+    );
+
+    // 反向：把 TMP_ROOT 顶到会让 socket 路径超 108B 的长度，必须失败且清理
+    const longTmpRoot = '/tmp/' + 'l'.repeat(64); // + /<10hex> + 后缀 → >108B
+    check(
+      '构造的 TMP_ROOT 确实会让 socket 路径超限（自证前提）',
+      (longTmpRoot + '/' + 'a'.repeat(10) + SOCKET_SUFFIX).length > SUN_PATH_MAX,
+      `${(longTmpRoot + '/' + 'a'.repeat(10) + SOCKET_SUFFIX).length}B`,
+    );
+    const longTmpWorkdir = path.join(workRoot, 'plane-longtmp');
+    await fsp.mkdir(longTmpWorkdir, { recursive: true });
+    const portLongTmp = await freePort();
+    const planeLongTmp = await startPlane({
+      workdir: longTmpWorkdir,
+      port: portLongTmp,
+      env: {
+        VAAS_RENDER_TMP_ROOT: longTmpRoot,
+        VAAS_RENDER_MAX_CONCURRENCY: '1',
+        VAAS_RENDER_TIMEOUT_S: '300',
+      },
+    });
+    planes.push(planeLongTmp);
+    const badOut = await render(portLongTmp, {
+      job_id: 'selftest-longtmp-1',
+      fps: 8,
+      quality: 'draft',
+      format: 'mp4',
+      composition: { html: compositionOfExample() },
+    });
+    // 注意：chromium 的进程单例机制随平台不同——linux 用 unix socket（受 sun_path
+    // 108B 限制），macOS 用 Mach port / lock 文件（不占 sun_path）。因此「超长
+    // TMP_ROOT 是否致命」是平台相关的：只在 linux 上预期失败。
+    // 且成功时响应体是 MP4 二进制（ftypisom…），不能无条件 JSON.parse。
+    if (process.platform === 'linux') {
+      let badBody = {};
+      try {
+        badBody = JSON.parse(badOut.buf.toString() || '{}');
+      } catch {
+        badBody = {}; // 非 JSON（例如意外拿到成片字节）→ 交给下面的断言暴露
+      }
+      check(
+        '超长 TMP_ROOT → 渲染失败（chromium 单例 socket 超 108B）',
+        badOut.status >= 500,
+        { status: badOut.status, exit_code: badBody.exit_code, engine_log: badBody.engine_log },
+      );
+      check(
+        '失败响应带 exit_code 与 engine_log（可事后归因）',
+        badBody.exit_code !== undefined && typeof badBody.engine_log === 'string',
+        { exit_code: badBody.exit_code, engine_log: badBody.engine_log },
+      );
+      const leftover = await listDir(longTmpRoot).catch(() => []);
+      check('失败后短 TMPDIR 已被 finally 回收（零残留）', leftover.length === 0, leftover);
+    } else {
+      // 非 linux 上这条不成立（单例不走 unix socket），断言「不致命」以免回归时静默
+      check(
+        '非 linux：超长 TMP_ROOT 不触发 socket 上限，渲染仍成功',
+        badOut.status === 200,
+        { status: badOut.status, platform: process.platform },
+      );
+      console.log('[NOTE] chromium 单例机制随平台不同：linux=unix socket（sun_path 108B 上限）；macOS=Mach/lock 文件');
+    }
+
     console.log('\n=== 产物 ===');
     for (const f of await listDir(outDir)) {
       const p = path.join(outDir, f);
