@@ -1,9 +1,13 @@
 ---
 name: remotion-best-practices
-description: Best practices for Remotion
+description: [legacy] Best practices for Remotion
 metadata:
   tags: remotion, video, react, animation, composition
 ---
+
+> ⚠️ **legacy / 离线参考**：VAAS 出片链已切 HyperFrames，`remotion-app/` 已删除（2026-11-09）。
+> 本文仅作通用 Remotion 知识参考，**不要**按它在本仓跑命令——本仓没有 Remotion 项目可跑。
+> 退役台账：`docs/debt-ledger.md` DEBT-REMOTION-RESIDUE-01。
 
 ## New project setup
 

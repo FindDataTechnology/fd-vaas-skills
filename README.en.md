@@ -84,7 +84,7 @@ Article: topic -> /fd-vaas-brainstorm(article mode) -> article -> /fd-vaas-publi
           ├─► officecli  ──────► .docx/.xlsx    ├─► asset ──► fd-vaas-publish-videos ──► video platforms
           ├─► cap        ──────► .mp4/.gif      │             (Douyin, Kuaishou, Xiaohongshu,
           ├─► fd-cover-image ──► cover image     │              Bilibili, WeChat Channels, YouTube)
-          ├─► remotion   ──────► .mp4           │
+          ├─► remotion*  ──────► .mp4 (legacy)  │
           └─► fd-vaas-video-creator ► .mp4+.srt ┘             ──► fd-vaas-publish-docs ──► article platforms
                                                           (Zhihu, WeChat OA, Xiaohongshu, Douyin,
                                                            Kuaishou, Xueqiu, Eastmoney, Tonghuashun,
@@ -255,7 +255,7 @@ Skills are **checked into this repo** (source in `.agents/skills/`; `.claude/ski
 - `/fd-vaas-publish-docs` - one article -> multi-platform (11 article platforms).
 - `/fd-vaas-login` - login management page (:8766), QR scan login for all video/article platforms, cookie shared.
 - `/dashboard`, `/share-dashboard` - content dashboard and sharing.
-- `/remotion-*` - author Remotion videos (create, markup, captions, render, …).
+- `/remotion-*` - **legacy**: general Remotion knowledge only (this repo has no Remotion project).
 
 > **Convention:** author new Claude Code skills in `VAAS/.agents/skills/` (source of truth), then add a symlink in `.claude/skills/`. Do not put them in the global `~/.claude/skills/`.
 
@@ -281,13 +281,13 @@ Skills are **checked into this repo** (source in `.agents/skills/`; `.claude/ski
 | `fd-vaas-publish-docs` | one article -> 11 article platforms (upstream-first note_adapter + own logic) | repo skill | `/fd-vaas-publish-docs` |
 | `fd-vaas-dashboard` | content dashboard (lists all generated articles + videos) | repo skill | `/dashboard` |
 | `fd-vaas-dashboard-sharing` | share the dashboard (via tunnel) | repo skill | `/share-dashboard` |
-| `remotion-create` | scaffold a new Remotion project/composition | repo skill | `/remotion-create` |
-| `remotion-markup` | Remotion React markup best practices | repo skill | `/remotion-markup` |
-| `remotion-captions` | caption handling (JSON `Caption` type) | repo skill | `/remotion-captions` |
-| `remotion-render` | render video (`npx remotion render`) | repo skill | `/remotion-render` |
-| `remotion-interactivity` | animations for Studio Visual Mode | repo skill | `/remotion-interactivity` |
-| `remotion-best-practices` | Remotion best-practices index | repo skill | `/remotion-best-practices` |
-| `remotion-saas` | build video apps with Remotion (framework/Player/Lambda) | repo skill | `/remotion-saas` |
+| `remotion-create` **(legacy)** | scaffold a new Remotion project/composition (no Remotion project in this repo; reference only) | repo skill | `/remotion-create` |
+| `remotion-markup` **(legacy)** | Remotion React markup best practices (no Remotion project in this repo; reference only) | repo skill | `/remotion-markup` |
+| `remotion-captions` **(legacy)** | caption handling (JSON `Caption` type) (no Remotion project in this repo; reference only) | repo skill | `/remotion-captions` |
+| `remotion-render` **(legacy)** | render video (`npx remotion render`) (no Remotion project in this repo; reference only) | repo skill | `/remotion-render` |
+| `remotion-interactivity` **(legacy)** | animations for Studio Visual Mode (no Remotion project in this repo; reference only) | repo skill | `/remotion-interactivity` |
+| `remotion-best-practices` **(legacy)** | Remotion best-practices index (no Remotion project in this repo; reference only) | repo skill | `/remotion-best-practices` |
+| `remotion-saas` **(legacy)** | build video apps with Remotion (framework/Player/Lambda) (no Remotion project in this repo; reference only) | repo skill | `/remotion-saas` |
 
 External CLIs ship their own help - prefer it over guessing flags: `cap guide` / `cap guide --json`, `officecli help` / `officecli help docx paragraph`.
 

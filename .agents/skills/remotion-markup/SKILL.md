@@ -1,9 +1,13 @@
 ---
 name: remotion-markup
-description: Best practices for writing Remotion React Markup
+description: [legacy] Best practices for writing Remotion React Markup
 metadata:
   tags: remotion, react, markup
 ---
+
+> ⚠️ **legacy / 离线参考**：VAAS 出片链已切 HyperFrames，`remotion-app/` 已删除（2026-11-09）。
+> 本文仅作通用 Remotion 知识参考，**不要**按它在本仓跑命令——本仓没有 Remotion 项目可跑。
+> 退役台账：`docs/debt-ledger.md` DEBT-REMOTION-RESIDUE-01。
 
 This is guidance for writing Remotion React Markup.
 If this is not relevant, load [Remotion Best Practices](../remotion-best-practices/SKILL.md) instead.

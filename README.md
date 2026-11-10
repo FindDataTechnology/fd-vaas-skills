@@ -81,7 +81,7 @@ VAAS 是架在两半之上的一个**编排层**，自身没有应用代码：
         ├─► officecli  ──────► .docx/.xlsx    ├─► 素材文件 ──► fd-vaas-publish-videos ──► 视频平台
         ├─► cap        ──────► .mp4/.gif      │               （抖音、快手、小红书、
         ├─► fd-cover-image ──► 封面图          │                B站、视频号、YouTube）
-        ├─► remotion   ──────► .mp4           │
+        ├─► remotion*  ──────► .mp4 (legacy)  │
         └─► fd-vaas-video-creator ► .mp4+.srt ┘               ──► fd-vaas-publish-docs ──► 图文平台
                                                             （知乎、公众号、小红书、抖音、
                                                              快手、雪球、东财、同花顺、
@@ -170,7 +170,7 @@ VAAS/
 │   │   └── scripts/{publish.mjs, note_adapter.py, platforms/<platform>.py}
 │   ├── _shared/publish/               # 跨技能共享：platform-registry.json（路由+验证状态真相源）、browser_utils.py、publish-common.mjs
 │   ├── fd-vaas-dashboard/  fd-vaas-dashboard-sharing/   # 内容看板 + 分享
-│   └── remotion-*/                     # 7 个 Remotion 创作技能（best-practices、captions、create、
+│   └── remotion-*/                     # 7 个 Remotion 技能（legacy/离线参考；remotion-app 已退役）
 │                                       #   interactivity、markup、render、saas）
 ├── .claude/skills/                     # 指向 .agents/skills/ 子集的软链接（供 /<name> 调用）
 ├── scripts/                            # 多模态媒体桥
@@ -267,7 +267,7 @@ officecli --version
 - `/fd-vaas-publish-docs`--一篇文章 -> 多平台发布（11 个图文平台）。
 - `/fd-vaas-login`--登录管理页（:8766），扫码登录各视频/图文平台，cookie 共享。
 - `/dashboard`、`/share-dashboard`--内容看板与分享。
-- `/remotion-*`--创作 Remotion 视频（create、markup、captions、render 等）。
+- `/remotion-*`--**legacy**：通用 Remotion 知识参考（本仓已无 Remotion 项目可跑）。
 
 > **约定：** 新建 Claude Code 技能放在 `VAAS/.agents/skills/`（真相源），再到 `.claude/skills/` 建软链接，不要放全局 `~/.claude/skills/`。
 
@@ -293,13 +293,13 @@ officecli --version
 | `fd-vaas-publish-docs` | 一篇文章 -> 11 个图文平台（上游优先 note_adapter + 自有逻辑） | 仓库技能 | `/fd-vaas-publish-docs` |
 | `fd-vaas-dashboard` | 内容看板（展示所有生成的文章和视频） | 仓库技能 | `/dashboard` |
 | `fd-vaas-dashboard-sharing` | 分享看板（走隧道） | 仓库技能 | `/share-dashboard` |
-| `remotion-create` | 脚手架新建 Remotion 项目/composition | 仓库技能 | `/remotion-create` |
-| `remotion-markup` | Remotion 的 React markup 最佳实践 | 仓库技能 | `/remotion-markup` |
-| `remotion-captions` | 字幕处理（JSON `Caption` 类型） | 仓库技能 | `/remotion-captions` |
-| `remotion-render` | 渲染视频（`npx remotion render`） | 仓库技能 | `/remotion-render` |
-| `remotion-interactivity` | 适配 Studio 视觉模式的动画 | 仓库技能 | `/remotion-interactivity` |
-| `remotion-best-practices` | Remotion 最佳实践索引 | 仓库技能 | `/remotion-best-practices` |
-| `remotion-saas` | 用 Remotion 构建视频应用（框架/Player/Lambda） | 仓库技能 | `/remotion-saas` |
+| `remotion-create` **(legacy)** | 脚手架新建 Remotion 项目/composition（本仓无 Remotion 项目，仅作知识参考） | 仓库技能 | `/remotion-create` |
+| `remotion-markup` **(legacy)** | Remotion 的 React markup 最佳实践（本仓无 Remotion 项目，仅作知识参考） | 仓库技能 | `/remotion-markup` |
+| `remotion-captions` **(legacy)** | 字幕处理（JSON `Caption` 类型）（本仓无 Remotion 项目，仅作知识参考） | 仓库技能 | `/remotion-captions` |
+| `remotion-render` **(legacy)** | 渲染视频（`npx remotion render`）（本仓无 Remotion 项目，仅作知识参考） | 仓库技能 | `/remotion-render` |
+| `remotion-interactivity` **(legacy)** | 适配 Studio 视觉模式的动画（本仓无 Remotion 项目，仅作知识参考） | 仓库技能 | `/remotion-interactivity` |
+| `remotion-best-practices` **(legacy)** | Remotion 最佳实践索引（本仓无 Remotion 项目，仅作知识参考） | 仓库技能 | `/remotion-best-practices` |
+| `remotion-saas` **(legacy)** | 用 Remotion 构建视频应用（框架/Player/Lambda）（本仓无 Remotion 项目，仅作知识参考） | 仓库技能 | `/remotion-saas` |
 
 外部 CLI 自带帮助系统--优先用它，别猜参数：`cap guide` / `cap guide --json`、`officecli help` / `officecli help docx paragraph`。
 
