@@ -24,11 +24,17 @@ compatibility: Python 3.8+; VAAS root directory
 ## 快速使用
 
 ```bash
-# 1. 启动服务（在 VAAS/ 根目录）—— 必须用装了依赖的解释器
-.venv/bin/python -u .agents/skills/fd-vaas-login/scripts/login-manager.py
+# 启动 / 停止 / 重启 / 看状态（推荐，别手动 nohup）
+bash .agents/skills/fd-vaas-login/scripts/serve.sh start
+bash .agents/skills/fd-vaas-login/scripts/serve.sh status
 
-# 2. 浏览器打开 http://localhost:8766
+# 然后浏览器打开 http://localhost:8766
 ```
+
+`serve.sh` 自己会挑对解释器（VAAS_PYTHON > 仓内 .venv > PATH）、写 pid 文件、
+等到 HTTP 真的 200 才报「就绪」。**判据是「谁在监听 8766」而不是 pid 文件**——
+`$!` 拿到的是包装子 shell 的 pid，实测和真 python 差一位，只信 pid 文件会出现
+「stop 说停了、页面还能打开」。
 
 > **为什么不是裸 `python3`**：本页只是个 stdlib HTTP server，但它 spawn 出来的
 > `sau_adapter.py --login` 要 import playwright/patchright/cv2/segno/loguru。

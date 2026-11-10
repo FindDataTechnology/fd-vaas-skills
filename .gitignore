@@ -72,6 +72,7 @@ tmp/
 temp/
 tmp-*.txt
 *.log
+*.pid
 
 # Python test cache
 .pytest_cache/
