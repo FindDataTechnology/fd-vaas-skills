@@ -152,6 +152,12 @@ def _error_detail(raw: bytes) -> str:
         return text[:500]
     parts = [f"{key}={payload[key]}" for key in ("error", "phase")
              if payload.get(key)]
+    # 进程结局三字段必须透出：只有 log_tail 时无法区分「引擎非零退出」与「被信号杀」，
+    # DEBT-RENDER-FLAKY-01 的调查就卡在这一步（渲染面早已返回 exit_code/signal，
+    # 是本函数把它们丢了）。
+    for key in ("exit_code", "signal", "spawn_error", "timed_out", "rss_peak_mb"):
+        if payload.get(key) is not None:
+            parts.append(f"{key}={payload[key]}")
     if payload.get("log_tail"):
         parts.append("log_tail=" + str(payload["log_tail"])[-400:])
     return ", ".join(parts) or text[:500]

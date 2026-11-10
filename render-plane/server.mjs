@@ -517,6 +517,19 @@ function runEngine(args, { cwd, env, timeoutMs }) {
     }
 
     let timedOut = false;
+    // RSS 峰值采样：失败时区分「内存触顶」与「其他崩溃」（DEBT-RENDER-FLAKY-01）。
+    // 读 /proc/<pid>/status 的 VmHWM（内核记录的高水位），进程退出后仍可在
+    // 采样周期内取到；采样周期 400ms，成本可忽略。
+    let rssPeakKb = 0;
+    const rssTimer = setInterval(() => {
+      try {
+        const st = fs.readFileSync(`/proc/${child.pid}/status`, 'utf8');
+        const m = st.match(/VmHWM:\s+(\d+) kB/);
+        if (m) rssPeakKb = Math.max(rssPeakKb, Number(m[1]));
+      } catch {
+        /* 进程已退出或无该文件 */
+      }
+    }, 400);
     const timer =
       timeoutMs > 0
         ? setTimeout(() => {
@@ -530,6 +543,7 @@ function runEngine(args, { cwd, env, timeoutMs }) {
 
     const finish = (code, signal, spawnError) => {
       if (timer) clearTimeout(timer);
+      clearInterval(rssTimer);
       // 主进程已退出也要兜一次进程组，确保 Chrome 子进程不残留。
       killGroup(child.pid, 'SIGKILL');
       resolve({
@@ -539,6 +553,7 @@ function runEngine(args, { cwd, env, timeoutMs }) {
         signal,
         log: tail.text(),
         spawnError: spawnError || null,
+        rssPeakMb: rssPeakKb ? Math.round(rssPeakKb / 1024) : null,
       });
     };
 
@@ -854,6 +869,10 @@ async function handleRender(req, res) {
           phase: 'timeout',
           job_id: jobId,
           engine: `${ENGINE_PKG}@${engine.version}`,
+          exit_code: result.code,
+          signal: result.signal,
+          timed_out: true,
+          rss_peak_mb: result.rssPeakMb ?? null,
           log_tail: result.log,
         });
       } else {
@@ -865,7 +884,9 @@ async function handleRender(req, res) {
           engine: `${ENGINE_PKG}@${engine.version}`,
           exit_code: result.code,
           signal: result.signal,
+          timed_out: result.timedOut,
           spawn_error: result.spawnError,
+          rss_peak_mb: result.rssPeakMb ?? null,
           log_tail: result.log,
         });
       }
