@@ -70,6 +70,21 @@ bash .agents/skills/fd-vaas-login/scripts/serve.sh status
 - ✅ Cookie 有效 → 绿色提示
 - ❌ Cookie 失效 → 红色提示，建议重新扫码
 
+**判据纪律**：cookie 有效性**只能**由真实会话探测得出，**不得**用「文件存在」或「文件年龄 < 30 天」
+推导。实测反例（2026-11-10）：同一批 cookie、同样 27 天，`douyin`/`xiaohongshu` 仍有效，
+`kuaishou`/`weixin` 已失效。按存在性判 = 假绿灯，代价是发布当天才发现掉线。
+
+**真值源与落盘分工**：
+
+| 位置 | 内容 | 性质 |
+|---|---|---|
+| `.login_state.json`（gitignored） | 进程侧验真结果 `{valid, message, checked_at}` | 运行态 |
+| `platform-registry.json` 的 `cookieCheck` | `{valid, method, checkedAt, detail}` | 半静态快照，面板与 CI 共用 |
+| `platform-registry.json` 的 `lastVerified` | 选择器验证日期（`probe.py` 写） | **不是** cookie 结论，两者不可互换 |
+
+`check-registry-consistency.py` 交叉校验两者：运行态有记录而 registry 无快照，或快照超过 14 天，
+一律非零退出。回填方式：按 `.login_state.json` 写 `cookieCheck` 后重跑该检查。
+
 ### 特殊平台处理
 
 | 平台 | 登录方式 | UI 行为 |

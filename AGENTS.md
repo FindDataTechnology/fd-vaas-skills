@@ -90,7 +90,7 @@ via its built-in uploaders under `scripts/platforms/` (thin adapter `sau_adapter
 | `fd-vaas-publish-docs` | one article -> 11 图文 platforms (upstream-note + own-logic; ego-browser or `--runtime patchright`) | repo skill | `/fd-vaas-publish-docs` |
 | `fd-vaas-dashboard` | content dashboard: lists generated articles + videos | repo skill | `/dashboard` |
 | `fd-vaas-dashboard-sharing` | share the dashboard (tunnel) | repo skill | `/share-dashboard` |
-| `fd-vaas-login` | QR scan-login portal: 10 video platforms status overview + live QR display | repo skill | `/login` · `.agents/skills/fd-vaas-login/` |
+| `fd-vaas-login` | QR scan-login portal: 10 video platforms status overview + live QR display。**登录态真值源**：`platform-registry.json` 的 `cookieCheck {valid, method, checkedAt}`（半静态快照）+ 运行态 `.login_state.json`，两者由 `check-registry-consistency.py` 交叉校验（缺失或超 14 天即 CI 红）。`lastVerified` 是选择器戳，**不可**用来表示 cookie 有效性 | repo skill | `/login` · `.agents/skills/fd-vaas-login/` |
 | `remotion-*` (7) | **legacy/离线**：scaffold / compose / caption Remotion 项目（VAAS 出片链已不用；`remotion-app/` 已删，这些技能仅作通用 Remotion 知识参考） | repo skills | `.agents/skills/remotion-*` |
 
 Each skill's `SKILL.md` is the authoritative contract - read it before driving the tool. `officecli`
