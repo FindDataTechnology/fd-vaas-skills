@@ -1,6 +1,6 @@
 {
   "kind": "lane-health",
-  "updated": "2026-11-06",
+  "updated": "2026-11-11",
   "note": "机读车道健康台账（deliver-hosted-surface W3；spec ciyuan-lane-providers「车道缺陷记录与规避」+ generation-registry「方式可发现性」）。health ∈ active|degraded|down。发现面（models_voices / registry_list_generators）注入此表；down 车道的工具调用按 lane_down 分类拒绝（C1 错误分类层）。字段：reason_class ∈ upstream_blocked|unconfigured|upstream_degraded|none；last_verified=实调证据日期。销账必须附实调 E2E 证据（探针或真产物），不许只翻状态。",
   "lanes": {
     "voice.ciyuan": {
@@ -24,8 +24,8 @@
     "image.ciyuan": {
       "health": "down",
       "reason_class": "upstream_blocked",
-      "reason": "组9 唯一上游 acct 40 (openai-next) 被 403 site owner blocked → router 503。2026-11-10 直连复验（绕开执行闸、用 vault 池 key 实打 gpt-image-2）：仍 HTTP 200 + 站点 HTML（3648B，非 JSON）→ 软封锁未解除；同期 sub2api usage_logs 显示 acct 40 最近 32 次调用 image_output_size 全为 NULL（11-06 起无成功记录）。解封/换号后实调销账（DEBT-LANE-9-01）",
-      "last_verified": "2026-11-10"
+      "reason": "组9 唯一上游 acct 40 (openai-next) 被 403 site owner blocked。**2026-11-11 复验**（vault 池 key 经 router 实打 `/v1/images/generations`）：HTTP **502** + `{\"message\":\"Upstream access forbidden, please contact administrator\",\"type\":\"upstream_error\"}`；vault 登记的 gemini-3-pro-image（10-16 白名单内当时唯一可用）与 gpt-image-2 **同型失败** → 封锁在账号级而非模型级。同期 sub2api usage_logs 显示 acct 40 最近 32 次调用 image_output_size 全为 NULL（11-06 起无成功记录）。**失败形态较 11-10 改善**：11-10 为 HTTP 200 + 站点 HTML（3648B，每次计费 $0.134 零产物）的软封锁，现为 router 侧 fail-closed 502，不再产生空计费。解封/换号后实调销账（DEBT-LANE-9-01）",
+      "last_verified": "2026-11-11"
     },
     "image.volcengine": {
       "health": "down",
@@ -36,8 +36,8 @@
     "video.ciyuan": {
       "health": "down",
       "reason_class": "upstream_blocked",
-      "reason": "同 image.ciyuan：组9 acct 40 封禁 → No eligible Seedance accounts（DEBT-LANE-9-01）。2026-11-10 直连复验（绕开执行闸、用 vault 池 key 实打 gpt-image-2）：仍 HTTP 200 + 站点 HTML（3648B，非 JSON）→ 软封锁未解除；同期 sub2api usage_logs 显示 acct 40 最近 32 次调用 image_output_size 全为 NULL（11-06 起无成功记录）。解封/换号后实调销账（DEBT-LANE-9-01）",
-      "last_verified": "2026-11-10"
+      "reason": "同 image.ciyuan：组9 acct 40 封禁（此前报 No eligible Seedance accounts）。**2026-11-11 复验**（vault 池 key 经 router 实打 `/v1/images/generations`）：HTTP **502** + `{\"message\":\"Upstream access forbidden, please contact administrator\",\"type\":\"upstream_error\"}`，与 image 车道逐项同型，模型级差异已排除。**失败形态较 11-10 改善**：11-10 为 HTTP 200 + 站点 HTML（3648B，每次计费 $0.134 零产物）的软封锁，现为 router 侧 fail-closed 502，不再产生空计费。解封/换号后实调销账（DEBT-LANE-9-01）",
+      "last_verified": "2026-11-11"
     },
     "video.volcengine": {
       "health": "down",
