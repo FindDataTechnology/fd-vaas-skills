@@ -982,6 +982,9 @@ async function handleRender(req, res) {
           timed_out: result.timedOut,
           spawn_error: result.spawnError,
           rss_peak_mb: result.rssPeakMb ?? null,
+          // 与 504 分支对齐：500 同样是「需要事后归因」的失败。此前只在超时分支给
+          // engine_log，于是 socket 超长这类引擎自崩（exit_code=1）拿不到日志路径。
+          engine_log: engineLogPath,
           log_tail: result.log,
         });
       }

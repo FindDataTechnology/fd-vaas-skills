@@ -270,9 +270,27 @@ async function main() {
 
     const out1 = path.join(outDir, 'minimal-a1.mp4');
     await fsp.writeFile(out1, r1.buf);
+    // 容器镜像（debian slim）里没有 file(1)，只有 ffprobe。缺 file 时退用 ffprobe 读
+    // 容器格式——仍是真断言（证明产物是 mp4），不是放宽成跳过。
     const fileOut = spawnSync('file', ['-b', out1], { encoding: 'utf8' });
-    console.log(`\n$ file -b ${out1}\n${(fileOut.stdout || '').trim()}`);
-    check('file(1) 识别为 ISO Media / MP4', /ISO Media|MP4/i.test(fileOut.stdout || ''), (fileOut.stdout || '').trim());
+    const fileMissing = Boolean(fileOut.error && fileOut.error.code === 'ENOENT');
+    let mediaDesc;
+    let mediaOk;
+    if (fileMissing) {
+      const probed = spawnSync(
+        'ffprobe',
+        ['-v', 'error', '-show_entries', 'format=format_name', '-of', 'default=nw=1:nk=1', out1],
+        { encoding: 'utf8' },
+      );
+      mediaDesc = `ffprobe:${(probed.stdout || '').trim() || (probed.stderr || '').trim()}`;
+      mediaOk = /\bmp4\b|\bmov\b|m4a/i.test(probed.stdout || '');
+      console.log(`\n[NOTE] 本机无 file(1)，改用 ffprobe 判容器格式\n$ ffprobe format_name ${out1}\n${mediaDesc}`);
+    } else {
+      mediaDesc = (fileOut.stdout || '').trim();
+      mediaOk = /ISO Media|MP4/i.test(mediaDesc);
+      console.log(`\n$ file -b ${out1}\n${mediaDesc}`);
+    }
+    check('产物容器格式识别为 ISO Media / MP4（无 file(1) 时用 ffprobe）', mediaOk, mediaDesc);
 
     // ── 幂等：同 job_id 同内容 → 命中缓存且字节一致 ──────────────────────
     const r2 = await render(portA, baseJob);
