@@ -131,6 +131,27 @@ PLATFORM_REGISTRY = {
 }
 
 
+def account_path(platform: str):
+    """解析平台的 cookie 文件路径，含迁移兼容（与 sau_adapter._account_path 同口径）。
+
+    为什么不能直接读 REGISTRY[p]["account_file"]：快手 2026-11 从
+    `cookies/kuaishou_creator.json`（平铺）迁到 `cookies/kuaishou_creator/account.json`
+    （与其它平台同构），但**迁完没搬文件**。发布侧 sau_adapter 有回退，读得到旧文件；
+    面板没有回退，于是报「无 cookie」——假阴性，用户会以为掉登录而白扫一次码
+    （2026-11-11 实证：面板显示无、磁盘上 4020B 真在）。
+    故这里补齐同一套回退，保证「面板看到的」与「发布时用的」是同一个文件。
+    """
+    cfg = PLATFORM_REGISTRY.get(platform) or {}
+    path = cfg.get("account_file")
+    if path is None:
+        return None
+    if not path.exists() and platform == "kuaishou":
+        legacy = _ROOT / ".agents" / "skills" / "fd-vaas-publish-videos" / "scripts" / "upstream" / "cookies" / "kuaishou_creator.json"
+        if legacy.exists():
+            return legacy
+    return path
+
+
 # ─── 图文平台注册表（fd-vaas-publish-docs 自有逻辑平台）────────────────────
 # 登录态在 patchright 持久 profile（$VAAS/.profiles/<name>）里，无 cookie 文件；
 # 检测/登录由 docs_login.py 驱动，结果落盘 _DOCS_STATE_FILE。
@@ -450,7 +471,7 @@ def _run_login_check(platform: str) -> tuple[bool | None, str]:
     提示人工复核),MUST NOT 当作「有效」假绿。
     """
     cfg = PLATFORM_REGISTRY[platform]
-    account_file = cfg["account_file"]
+    account_file = account_path(platform)
 
     if not account_file or not account_file.exists():
         return False, "cookie 不存在"
@@ -610,7 +631,7 @@ def _get_docs_status(platform: str) -> dict:
 def _get_platform_status(platform: str) -> dict:
     """获取单个平台的完整状态。"""
     cfg = PLATFORM_REGISTRY[platform]
-    account_file = cfg["account_file"]
+    account_file = account_path(platform)
 
     has_cookie = False
     cookie_mtime = None
