@@ -121,7 +121,10 @@ def _detect(platform: str, page) -> tuple[bool, str]:
     elif platform == "baijiahao":
         ok = (not re.search(r"login", url, re.I)) and ("passport" not in url)
     elif platform == "weibo":
-        ok = not re.search(r"/(login|signin|passport)", url, re.I)
+        # 微博登录页 URL 就是 https://weibo.com/newlogin?url=…：旧的 `/(login|…)`
+        # 锚定斜杠，匹配不到 `newlogin`，于是登录页被判成「已登录」（假绿，
+        # 2026-11-11 实证：面板绿、.docs_state.json 的 url 却是 newlogin）。
+        ok = not re.search(r"(new)?login|signin|passport", url, re.I)
     else:
         ok = False
     return bool(ok), url

@@ -23,7 +23,9 @@ HOME = "https://weibo.com/"
 
 
 def logged_in(b):
-    return not re.search(r"/(login|signin|passport)", b.page.url, re.I)
+    # /newlogin 与 /login 同义（微博登录页 URL 即 weibo.com/newlogin?url=…）。
+    # 旧判据锚定斜杠，漏掉 newlogin ⇒ 登录页被判「已登录」；发布时才炸。
+    return not re.search(r"(new)?login|signin|passport", b.page.url, re.I)
 
 
 ap = argparse.ArgumentParser(description="微博 (patchright)")
