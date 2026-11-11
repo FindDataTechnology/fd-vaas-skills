@@ -23,9 +23,20 @@ HOME = "https://weibo.com/"
 
 
 def logged_in(b):
-    # /newlogin 与 /login 同义（微博登录页 URL 即 weibo.com/newlogin?url=…）。
-    # 旧判据锚定斜杠，漏掉 newlogin ⇒ 登录页被判「已登录」；发布时才炸。
-    return not re.search(r"(new)?login|signin|passport", b.page.url, re.I)
+    # 微博的 URL 不可靠：已登录时仍停在 https://weibo.com/newlogin?…&url=weibo.com/，
+    # 但页面渲染的是已登录 feed（2026-11-11 实测 avatar=24、body 含「热搜/关注」）。
+    # 判据改看页面用户态（与 upstream/uploader/weibo_uploader 同口径），
+    # 拿不到 DOM 才退回 URL 判据（newlogin 也必须在拒绝列表里）。
+    sel = ('[class*="Nav_avatar"],[class*="woo-avatar"],'
+           'textarea[placeholder*="新鲜事"],textarea[placeholder*="分享"]')
+    try:
+        n = b.page.evaluate("() => document.querySelectorAll(%r).length" % sel)
+    except Exception:
+        n = 0
+    url = b.page.url
+    if isinstance(n, int) and n > 0 and "passport.weibo.com" not in url:
+        return True
+    return not re.search(r"(new)?login|signin|passport", url, re.I)
 
 
 ap = argparse.ArgumentParser(description="微博 (patchright)")

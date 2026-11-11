@@ -89,7 +89,10 @@ def _profile_dir(platform: str) -> Path:
 # 故凡 _detect 里用 page.evaluate 读 innerText 的平台，一律强制有头。
 # 新增平台时：判据只读 URL 才可加进本集合（有守卫测试钉住这条）。
 HEADLESS_SAFE_CHECK = {
-    "zhihu", "weixin_mp", "eastmoney", "tonghuashun", "toutiao", "baijiahao", "weibo",
+    "zhihu", "weixin_mp", "eastmoney", "tonghuashun", "toutiao", "baijiahao",
+    # weibo 已移出：它的 URL 不可靠（已登录时仍停在 /newlogin?…&url=），判据改读 DOM
+    # 用户态（avatar/发帖框）。按本集合的守卫规则，凡 _detect 用 page.evaluate 的
+    # 平台一律强制有头，故微博的 check 会开窗（检测完自动关）。
 }
 
 
@@ -121,10 +124,22 @@ def _detect(platform: str, page) -> tuple[bool, str]:
     elif platform == "baijiahao":
         ok = (not re.search(r"login", url, re.I)) and ("passport" not in url)
     elif platform == "weibo":
-        # 微博登录页 URL 就是 https://weibo.com/newlogin?url=…：旧的 `/(login|…)`
-        # 锚定斜杠，匹配不到 `newlogin`，于是登录页被判成「已登录」（假绿，
-        # 2026-11-11 实证：面板绿、.docs_state.json 的 url 却是 newlogin）。
-        ok = not re.search(r"(new)?login|signin|passport", url, re.I)
+        # 微博的 URL 本身不可靠：**已登录**时它照样把 URL 停在
+        # https://weibo.com/newlogin?…&url=https://weibo.com/，页面却渲染已登录 feed。
+        # 2026-11-11 实测（同 profile、同 URL，只差 headless）：两种模式均 avatar=24、
+        # body 含「热搜/关注」、SUB 在场 —— 故 headless 不是变量，URL 才是。
+        # 判据改成看页面用户态（与 upstream/uploader/weibo_uploader/main.py 同口径）；
+        # 及其拿不到 DOM（evaluate 失败/为 0）才退回 URL 判据。
+        _sel = ('[class*="Nav_avatar"],[class*="woo-avatar"],'
+                'textarea[placeholder*="新鲜事"],textarea[placeholder*="分享"]')
+        try:
+            n_user = page.evaluate("() => document.querySelectorAll(%r).length" % _sel)
+        except Exception:
+            n_user = 0
+        if isinstance(n_user, int) and n_user > 0 and "passport.weibo.com" not in url:
+            ok = True
+        else:
+            ok = not re.search(r"(new)?login|signin|passport", url, re.I)
     else:
         ok = False
     return bool(ok), url
